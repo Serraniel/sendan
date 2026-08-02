@@ -51,6 +51,11 @@ var ErrAtRestKey = errors.New("blob: invalid at-rest key")
 //
 // This layer is therefore not a security boundary. Its only job is to make a
 // deleted key mean deleted data.
+//
+// The at-rest key is generated here but persisted by the metadata store, which
+// stores it in the clear. Issue #73 proposes wrapping it under an
+// operator-held master key so that a leaked backup or snapshot yields nothing;
+// that belongs in the store layer rather than here.
 type Shredder struct {
 	inner Store
 }
