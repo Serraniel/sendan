@@ -10,13 +10,6 @@ linters:
     - revive
     - unconvert
 
-  settings:
-    gosec:
-      excludes:
-        # Sendan is a cryptography project; the "uses crypto primitive"
-        # heuristics fire on nearly every line here and drown real findings.
-        - G407 # hardcoded IV/nonce - nonces are spec-defined and covered by tests
-
   exclusions:
     rules:
       - path: _test\.go$

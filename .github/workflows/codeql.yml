@@ -41,7 +41,7 @@ jobs:
       - if: steps.guard.outputs.present == 'true'
         uses: github/codeql-action/init@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
         with:
-          language: ${{ matrix.language }}
+          languages: ${{ matrix.language }}
           queries: security-extended
 
       - if: steps.guard.outputs.present == 'true'
