@@ -17,6 +17,14 @@ import (
 // disclosure of filename length through ciphertext length.
 const metadataPadBlock = 256
 
+// MaxMetadataSize is the largest representable upload size, 2^53 - 1.
+//
+// Go encodes any int64 faithfully, but JavaScript numbers are IEEE-754 doubles
+// and silently round anything larger: 9007199254740993 parses back as
+// 9007199254740992. Bounding the value here means the two implementations
+// cannot disagree about a size, at the cost of a ceiling of 8 PiB.
+const MaxMetadataSize int64 = 1<<53 - 1
+
 // ErrMetadata reports a malformed or unopenable metadata envelope.
 var ErrMetadata = errors.New("crypto: invalid metadata")
 
@@ -69,7 +77,9 @@ func OpenMetadata(metadataKey, nonce, envelope []byte) (Metadata, error) {
 	if err := dec.Decode(&m); err != nil {
 		return Metadata{}, ErrMetadata
 	}
-	if m.Size < 0 {
+	// Reject on the way out as well as on the way in: an envelope may have been
+	// produced by a different implementation, or by an older version of this one.
+	if m.Size < 0 || m.Size > MaxMetadataSize {
 		return Metadata{}, ErrMetadata
 	}
 	return m, nil
@@ -85,8 +95,8 @@ func (m Metadata) encode() ([]byte, error) {
 	if !utf8.ValidString(m.Name) || !utf8.ValidString(m.Type) {
 		return nil, fmt.Errorf("%w: name and type must be valid UTF-8", ErrMetadata)
 	}
-	if m.Size < 0 {
-		return nil, fmt.Errorf("%w: size must not be negative", ErrMetadata)
+	if m.Size < 0 || m.Size > MaxMetadataSize {
+		return nil, fmt.Errorf("%w: size must be between 0 and %d", ErrMetadata, MaxMetadataSize)
 	}
 
 	var b strings.Builder

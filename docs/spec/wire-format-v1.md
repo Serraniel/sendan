@@ -171,7 +171,15 @@ invalid UTF-8 rejects the metadata rather than substituting replacement
 characters, which would differ between implementations.
 
 `size` is a non-negative decimal integer with no sign, leading zeros, decimal
-point, or exponent.
+point, or exponent, and **must not exceed 2^53 − 1** (9007199254740991).
+
+> [!WARNING]
+> The upper bound is not arbitrary. JavaScript numbers are IEEE-754 doubles, so
+> a larger value parses back rounded rather than failing: `9007199254740993`
+> becomes `9007199254740992`. Without the bound, an envelope written by one
+> implementation would be read with a different size by the other, silently.
+> Implementations reject an out-of-range size both when encoding and when
+> decoding, since an envelope may originate elsewhere.
 
 ### 7.1 String escaping
 

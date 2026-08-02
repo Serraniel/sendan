@@ -127,6 +127,8 @@ func TestSealMetadataRejectsInvalidInput(t *testing.T) {
 		{"invalid utf-8 name", Metadata{Name: string([]byte{0xFF, 0xFE}), Type: "text/plain"}},
 		{"invalid utf-8 type", Metadata{Name: "a", Type: string([]byte{0xFF})}},
 		{"negative size", Metadata{Name: "a", Type: "text/plain", Size: -1}},
+		{"size above 2^53-1", Metadata{Name: "a", Type: "text/plain", Size: MaxMetadataSize + 1}},
+		{"max int64 size", Metadata{Name: "a", Type: "text/plain", Size: 1<<63 - 1}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, _, err := SealMetadata(metadataKey(), tc.m); !errors.Is(err, ErrMetadata) {
@@ -190,6 +192,43 @@ func TestDeterministicJSONEncoding(t *testing.T) {
 				t.Fatalf("got  %s\nwant %s", got, tc.want)
 			}
 		})
+	}
+}
+
+// A size above 2^53-1 is representable in Go but not in a JavaScript number,
+// where it would silently round rather than fail. Rejecting it in both
+// directions keeps the two implementations from disagreeing about a size.
+func TestSizeIsBoundedToJavaScriptSafeIntegers(t *testing.T) {
+	if MaxMetadataSize != 9007199254740991 {
+		t.Fatalf("MaxMetadataSize is %d, want Number.MAX_SAFE_INTEGER", MaxMetadataSize)
+	}
+
+	nonce, envelope, err := SealMetadata(metadataKey(), Metadata{Name: "big.bin", Type: "", Size: MaxMetadataSize})
+	if err != nil {
+		t.Fatalf("the maximum safe size must be accepted: %v", err)
+	}
+	got, err := OpenMetadata(metadataKey(), nonce, envelope)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	if got.Size != MaxMetadataSize {
+		t.Fatalf("size round-tripped as %d, want %d", got.Size, MaxMetadataSize)
+	}
+
+	// An envelope from another implementation could carry an out-of-range size,
+	// so decoding must reject it rather than trust the producer.
+	oversized := []byte(`{"name":"a","type":"","size":9007199254740993}`)
+	aead, err := newAEAD(metadataKey())
+	if err != nil {
+		t.Fatalf("aead: %v", err)
+	}
+	badNonce, err := randomBytes(NonceSize)
+	if err != nil {
+		t.Fatalf("nonce: %v", err)
+	}
+	forged := aead.Seal(nil, badNonce, pad(oversized), []byte(aadMetadata))
+	if _, err := OpenMetadata(metadataKey(), badNonce, forged); !errors.Is(err, ErrMetadata) {
+		t.Fatalf("got %v, want ErrMetadata for an out-of-range size", err)
 	}
 }
 
