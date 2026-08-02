@@ -96,26 +96,37 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: guard
         run: |
-          if [ -d testdata/vectors ]; then echo "present=true" >> "$GITHUB_OUTPUT"
-          else echo "present=false" >> "$GITHUB_OUTPUT"
-               echo "::notice::No testdata/vectors yet - skipping. Remove this guard with the vector generator."
+          if [ -f web/package.json ]; then echo "web=true" >> "$GITHUB_OUTPUT"
+          else echo "web=false" >> "$GITHUB_OUTPUT"
+               echo "::notice::No web/package.json yet - the TypeScript side of the vectors is not checked."
           fi
-      - if: steps.guard.outputs.present == 'true'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      - if: steps.guard.outputs.present == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       # This is the check that stops the CLI and the browser disagreeing about
       # what a file means. It must never be made non-blocking.
       - name: Verify Go implementation against shared vectors
-        if: steps.guard.outputs.present == 'true'
         run: go test ./internal/crypto/... -run TestVectors -v
+
+      # The vectors must match what was committed. A change to the encoder that
+      # also regenerates its own fixture would otherwise pass silently, which
+      # would defeat the entire point of a cross-language fixture.
+      - name: Assert committed vectors are reproducible
+        run: |
+          set -euo pipefail
+          node testdata/vectors/generate-json-encoding.mjs
+          if ! git diff --exit-code --stat testdata/vectors/; then
+            echo "::error::Committed vectors do not match freshly generated output."
+            echo "::error::If this is intentional it is a wire format change and needs a new spec version."
+            exit 1
+          fi
+
       - name: Verify TypeScript implementation against shared vectors
-        if: steps.guard.outputs.present == 'true'
+        if: steps.guard.outputs.web == 'true'
         working-directory: web
         run: |
           npm ci
