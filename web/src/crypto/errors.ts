@@ -31,3 +31,11 @@ export class MetadataError extends Error {
     this.name = "MetadataError";
   }
 }
+
+/** A malformed, truncated, or tampered content stream. Mirrors Go's ErrContent. */
+export class ContentError extends Error {
+  constructor(message: string) {
+    super(`crypto: ${message}`);
+    this.name = "ContentError";
+  }
+}
