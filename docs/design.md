@@ -19,6 +19,24 @@ command line client are produced from a single Go module.
 | Blobs | Local filesystem default, S3-compatible optional | |
 | Cache | None | An additional service would carry operational cost without purpose. |
 
+### 1.1 Repository layout
+
+| Path | Contents |
+|---|---|
+| `cmd/sendan` | Server entrypoint |
+| `internal/crypto` | The Go half of the cryptographic scheme (spec §4–§7) |
+| `internal/store` | Upload metadata: SQLite and PostgreSQL, plus a conformance suite |
+| `internal/blob` | Upload ciphertext: filesystem and S3, plus crypto-shredding and a conformance suite |
+| `internal/upload` | Lifecycle: expiry policy, revocation, reaping |
+| `internal/config` | Environment configuration and validation |
+| `internal/logging` | Structured logging with identifier redaction |
+| `internal/ratelimit` | Structural abuse controls |
+| `web/src/crypto` | The TypeScript half of the cryptographic scheme |
+| `testdata/vectors` | Shared cross-language test vectors |
+
+Each backend pair is held to a single conformance suite — `store/storetest` and
+`blob/blobtest` — so a second backend is not a second set of assumptions.
+
 There are exactly **two** cryptographic implementations, Go and TypeScript,
 cross-validated against shared JSON test vectors in continuous integration. A
 third language would mean a third implementation to keep synchronised.
@@ -183,8 +201,15 @@ revocation**. Whichever is reached first applies.
     are load-bearing: removing either leaves the upload identifier and its
     at-rest key recoverable from disk, in the log file and the database file
     respectively.
-  - On PostgreSQL, deleted rows persist until autovacuum. This must be
-    documented for operators.
+  - On PostgreSQL, measured against version 17: a deleted row remains in the
+    heap file until `VACUUM`, which Sendan runs after reaping and which does
+    remove it. What persists is the write-ahead log, which retains the row until
+    its segment is recycled and which PostgreSQL offers no way to truncate on
+    demand. A recovered row yields the at-rest key, and so the ability to
+    decrypt a blob that also survived its own deletion — the end-to-end
+    ciphertext, not the content. Deletion is therefore weaker on PostgreSQL
+    than on SQLite, and this is documented for operators in
+    `docs/configuration.md`.
 
 ## 4. Transfer
 
