@@ -14,13 +14,19 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
+	"github.com/Serraniel/sendan/internal/blob"
 	"github.com/Serraniel/sendan/internal/config"
 	"github.com/Serraniel/sendan/internal/logging"
+	"github.com/Serraniel/sendan/internal/ratelimit"
+	"github.com/Serraniel/sendan/internal/store"
+	"github.com/Serraniel/sendan/internal/upload"
 )
 
 // version is set at build time by the release tooling. It is reported at
@@ -30,7 +36,15 @@ var (
 	commit  = "unknown"
 )
 
-const shutdownGrace = 30 * time.Second
+const (
+	shutdownGrace = 30 * time.Second
+
+	// The reaper is a backstop, not the mechanism: expiry is enforced on every
+	// read, so this interval governs how promptly disk is reclaimed rather than
+	// whether a dead upload is reachable.
+	reapInterval = 5 * time.Minute
+	reapBatch    = 500
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -69,6 +83,44 @@ func run() error {
 		log.Warn("unlimited retention is permitted; uploads may never expire")
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Storage is opened before the listener, so a misconfigured backend is a
+	// startup failure rather than an error the first visitor discovers.
+	metadata, err := store.Open(ctx, cfg.Database)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err := metadata.Close(); err != nil {
+			log.Error("closing the metadata store", "error", err)
+		}
+	}()
+	log.Info("metadata store ready", "location", redactCredentials(cfg.Database))
+
+	blobs, err := blob.Open(ctx, cfg.Storage)
+	if err != nil {
+		return err
+	}
+	log.Info("blob store ready", "location", redactCredentials(cfg.Storage))
+
+	attempts := ratelimit.NewPasswordAttempts()
+	uploads := upload.New(metadata, blob.NewShredder(blobs), upload.Policy{
+		DefaultTTL:          cfg.DefaultTTL,
+		MaxTTL:              cfg.MaxTTL,
+		AllowInfiniteTTL:    cfg.AllowInfiniteTTL,
+		DefaultMaxDownloads: cfg.DefaultMaxDownloads,
+	}, log).WithPasswordAttempts(attempts)
+
+	var reaper sync.WaitGroup
+	reaper.Add(1)
+	go func() {
+		defer reaper.Done()
+		uploads.RunReaper(ctx, reapInterval, reapBatch)
+	}()
+	defer reaper.Wait()
+
 	// Routes arrive with the API (M3). Until then the server exists so that
 	// configuration, logging and shutdown are exercised rather than assumed.
 	mux := http.NewServeMux()
@@ -85,9 +137,6 @@ func run() error {
 		// and a deadline here would truncate large transfers.
 		IdleTimeout: 2 * time.Minute,
 	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 
 	errc := make(chan error, 1)
 	go func() {
@@ -116,4 +165,17 @@ func run() error {
 	}
 	log.Info("stopped")
 	return <-errc
+}
+
+// redactCredentials removes any userinfo from a location before it is logged.
+//
+// Database and storage locations carry passwords, and a startup line naming the
+// backend is useful while a startup line naming its password is a disclosure.
+func redactCredentials(location string) string {
+	u, err := url.Parse(location)
+	if err != nil || u.User == nil {
+		return location
+	}
+	u.User = url.User(u.User.Username())
+	return u.String()
 }
