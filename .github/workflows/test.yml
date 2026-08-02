@@ -53,12 +53,27 @@ jobs:
 
     env:
       SENDAN_TEST_POSTGRES: postgres://postgres:sendan@127.0.0.1:5432/sendan?sslmode=disable
+      SENDAN_TEST_S3: s3://sendan:sendansecret@127.0.0.1:9000/sendan?ssl=false
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
+
+      # MinIO is started here rather than as a service container: services
+      # cannot pass a command, and the image needs "server /data".
+      - name: Start the object store
+        run: |
+          docker run -d --name minio -p 9000:9000             -e MINIO_ROOT_USER=sendan             -e MINIO_ROOT_PASSWORD=sendansecret             quay.io/minio/minio:latest server /data
+          curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc -o "$RUNNER_TEMP/mc"
+          chmod +x "$RUNNER_TEMP/mc"
+          for _ in $(seq 1 30); do
+            "$RUNNER_TEMP/mc" alias set ci http://127.0.0.1:9000 sendan sendansecret >/dev/null 2>&1 && break
+            sleep 2
+          done
+          "$RUNNER_TEMP/mc" mb --ignore-existing ci/sendan
+
       - name: go vet
         run: go vet ./...
       - name: go test (race detector, coverage)

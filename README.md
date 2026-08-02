@@ -11,10 +11,18 @@ number of downloads, or on demand.
 The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 
 > [!WARNING]
-> **Status: pre-alpha. No functionality has been implemented.**
-> This repository currently contains design documentation and a planned
-> roadmap. Nothing has been built, nothing has been audited, and nothing here
-> should be relied upon.
+> **Status: pre-alpha. There is no usable server yet, and nothing has been
+> audited.** Do not use Sendan to protect anything that matters.
+>
+> **Built and tested:** the cryptographic scheme in Go and TypeScript, verified
+> against each other by shared test vectors; metadata storage on SQLite and
+> PostgreSQL; blob storage on the filesystem and S3-compatible object stores,
+> with encryption at rest; the expiry, revocation and reaping lifecycle;
+> configuration, structured logging and abuse controls.
+>
+> **Not built:** the HTTP API, the web client, and the command line client. The
+> binary currently starts, reads its configuration and serves a health endpoint.
+> It cannot yet accept or serve a file.
 
 ## Features
 

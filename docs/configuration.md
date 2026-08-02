@@ -8,6 +8,22 @@ that will not run.
 All problems are reported together, so fixing a misconfiguration does not
 require restarting repeatedly to discover the next fault.
 
+> [!WARNING]
+> **Not every variable is honoured yet.** All of them are parsed and validated,
+> so an invalid value fails at startup, but the server does not yet act on all
+> of them.
+>
+> | Variable | Effect today |
+> |---|---|
+> | `SENDAN_LISTEN`, `SENDAN_LOG_*` | applied |
+> | `SENDAN_DATABASE`, `SENDAN_STORAGE` | **validated only** — no backend is opened yet (#79) |
+> | `SENDAN_*_TTL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | enforced by the lifecycle layer, which nothing calls yet |
+> | `SENDAN_SERVE_UI` | no effect; there is no web client yet |
+> | `SENDAN_SEND_COMPAT` | no effect; the compatibility endpoints are M7 |
+>
+> This page describes the intended behaviour of each setting. Where the two
+> differ, the table above is what is true.
+
 ## Server
 
 | Variable | Default | Meaning |
@@ -47,7 +63,23 @@ Sizes accept a plain byte count or a binary suffix: `1024`, `500MiB`, `2GiB`,
 | Variable | Default | Meaning |
 |---|---|---|
 | `SENDAN_DATABASE` | `sqlite:data/sendan.db` | Metadata store location. `sqlite:<path>` or a `postgres://` URL |
-| `SENDAN_STORAGE` | `file:data/blobs` | Blob store location |
+| `SENDAN_STORAGE` | `file:data/blobs` | Blob store location. `file:<path>` or an `s3://` URL |
+
+The S3 form is `s3://key:secret@endpoint/bucket/prefix`, where the prefix is
+optional and lets one bucket hold several instances. TLS is used unless
+`?ssl=false` is given, so forgetting the parameter yields the safe behaviour
+rather than a plaintext connection. A `?region=` parameter is accepted for
+providers that require one.
+
+The bucket must already exist. Sendan does not create it, because doing so
+silently would hide a typo behind a working but wrong deployment.
+
+> [!NOTE]
+> Objects are written by the same crypto-shredding layer as local files, so an
+> object store operator sees ciphertext whose key lives in the metadata
+> database. Deleting the database row makes the object unreadable regardless of
+> the object store's own retention, versioning or backup behaviour — which is
+> worth knowing, since object stores often keep more than you asked them to.
 
 > [!IMPORTANT]
 > **Deletion is stronger on SQLite than on PostgreSQL.** SQLite is configured
