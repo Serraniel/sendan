@@ -48,7 +48,14 @@ func NewPasswordParams() (PasswordParams, error) {
 	}, nil
 }
 
-func (p PasswordParams) validate() error {
+func (p PasswordParams) validate(password string) error {
+	// An empty password is rejected, per spec §4. It denotes a meaningless
+	// state - an upload marked password-protected that any link holder can
+	// open - and the browser's Argon2id implementation refuses it outright, so
+	// accepting it here would make the two implementations disagree.
+	if password == "" {
+		return fmt.Errorf("%w: password must not be empty", ErrKeyMaterial)
+	}
 	if len(p.Salt) != PasswordSaltSize {
 		return fmt.Errorf("%w: password salt is %d bytes, want %d", ErrKeyMaterial, len(p.Salt), PasswordSaltSize)
 	}

@@ -85,6 +85,20 @@ from caller-supplied input.
 The Argon2id parameters are stored per upload (§7) so they may be raised later
 without invalidating existing links.
 
+> [!IMPORTANT]
+> A password **must not be empty**. An upload marked password-protected whose
+> password is the empty string is a meaningless state: any holder of the link
+> could open it while the interface claimed otherwise. Implementations reject it
+> rather than deriving from it.
+>
+> This is also a practical necessity. The browser's Argon2id implementation
+> refuses an empty password outright, so permitting one would make the two
+> implementations disagree about whether an upload could be created at all.
+
+The password is taken as its UTF-8 encoding with **no normalisation**.
+Normalising would silently change which passwords open which files, and would do
+so differently in each implementation.
+
 ## 5. Content encoding
 
 Content uses the framing of RFC 8188 with a 256-bit key.

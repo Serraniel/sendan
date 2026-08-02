@@ -120,17 +120,13 @@ func TestPasswordChangesTheWrappingKey(t *testing.T) {
 	}
 }
 
-func TestEmptyPasswordDiffersFromNoPassword(t *testing.T) {
-	none, err := DeriveKeys(fixedFileID(), fixedLinkSecret())
-	if err != nil {
-		t.Fatalf("derive without password: %v", err)
-	}
-	empty, err := DeriveKeysWithPassword(fixedFileID(), fixedLinkSecret(), "", fixedPasswordParams())
-	if err != nil {
-		t.Fatalf("derive with empty password: %v", err)
-	}
-	if bytes.Equal(none.Wrapping, empty.Wrapping) {
-		t.Fatal("an empty password is not the same as no password and must not derive the same key")
+// An empty password denotes a meaningless state: an upload marked
+// password-protected that any link holder can open. The browser's Argon2id
+// implementation refuses it outright, so both implementations reject it and the
+// state cannot arise at all.
+func TestEmptyPasswordIsRejected(t *testing.T) {
+	if _, err := DeriveKeysWithPassword(fixedFileID(), fixedLinkSecret(), "", fixedPasswordParams()); !errors.Is(err, ErrKeyMaterial) {
+		t.Fatalf("got %v, want ErrKeyMaterial", err)
 	}
 }
 
