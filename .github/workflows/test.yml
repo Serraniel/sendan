@@ -25,42 +25,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: guard
-        run: |
-          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
-          else echo "present=false" >> "$GITHUB_OUTPUT"
-               echo "::notice::No go.mod yet - skipping. Remove this guard with the Go scaffold."
-          fi
-      - if: steps.guard.outputs.present == 'true'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      - if: steps.guard.outputs.present == 'true'
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+      - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
 
   test-go:
     name: Unit and integration tests (Go)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: guard
-        run: |
-          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
-          else echo "present=false" >> "$GITHUB_OUTPUT"
-               echo "::notice::No go.mod yet - skipping. Remove this guard with the Go scaffold."
-          fi
-      - if: steps.guard.outputs.present == 'true'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: go vet
-        if: steps.guard.outputs.present == 'true'
         run: go vet ./...
       - name: go test (race detector, coverage)
-        if: steps.guard.outputs.present == 'true'
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
       - name: Upload coverage
-        if: steps.guard.outputs.present == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-go
@@ -116,7 +98,7 @@ jobs:
         run: |
           if [ -d testdata/vectors ]; then echo "present=true" >> "$GITHUB_OUTPUT"
           else echo "present=false" >> "$GITHUB_OUTPUT"
-               echo "::notice::No testdata/vectors yet - skipping. Remove this guard with the crypto core."
+               echo "::notice::No testdata/vectors yet - skipping. Remove this guard with the vector generator."
           fi
       - if: steps.guard.outputs.present == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -145,22 +127,13 @@ jobs:
     needs: [test-go, test-web]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - id: guard
-        run: |
-          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
-          else echo "present=false" >> "$GITHUB_OUTPUT"
-               echo "::notice::No go.mod yet - skipping. Remove this guard with the Go scaffold."
-          fi
-      - if: steps.guard.outputs.present == 'true'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      - if: steps.guard.outputs.present == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Build web client, then the binary with assets embedded
-        if: steps.guard.outputs.present == 'true'
         run: |
           if [ -f web/package.json ]; then
             (cd web && npm ci && npm run build)
