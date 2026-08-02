@@ -23,18 +23,28 @@ const uniqueViolation = "23505"
 //
 // # Deletion is weaker here than on SQLite
 //
-// SQLite is configured with secure_delete, which zeroes a deleted row's content
-// rather than merely marking its page free. PostgreSQL has no equivalent: a
-// deleted row remains as a dead tuple until vacuumed, and even then the pages
-// are marked reusable rather than overwritten.
+// SQLite is configured with secure_delete, which zeroes a deleted row's content,
+// and its write-ahead log is truncated after reaping. PostgreSQL offers neither
+// control directly.
 //
-// Checkpoint therefore runs VACUUM, which is the strongest reclamation
-// available without an exclusive lock, but it cannot promise that the bytes are
-// gone from the disk. An operator who needs the stronger guarantee should use
-// SQLite, or use issue #73's master key so that a recovered at-rest key is
-// useless without a secret held outside the database.
+// Measured behaviour, verified against PostgreSQL 17:
 //
-// This is documented rather than hidden because the difference is real.
+//   - After DELETE the row remains in the heap file as a dead tuple.
+//   - After VACUUM it is gone from the heap. Checkpoint therefore runs VACUUM,
+//     which is why it is part of the deletion path rather than a maintenance
+//     nicety.
+//   - The row remains in the write-ahead log until that segment is recycled,
+//     and PostgreSQL offers no equivalent of truncating it on demand. This is
+//     the residual exposure.
+//
+// What a recovered row yields is the at-rest key, and therefore the ability to
+// decrypt a blob that also survived its own deletion. That is the end-to-end
+// ciphertext, not the content: reading it still requires the link secret, which
+// never reaches this process.
+//
+// An operator who wants the stronger guarantee should use SQLite, encrypt the
+// database volume, or use issue #73's master key so that a recovered at-rest key
+// is useless without a secret held outside the database.
 type Postgres struct {
 	db *sql.DB
 }

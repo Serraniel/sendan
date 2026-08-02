@@ -55,14 +55,20 @@ Sizes accept a plain byte count or a binary suffix: `1024`, `500MiB`, `2GiB`,
 > marking its page free, and Sendan checkpoints the write-ahead log after
 > reaping so removed rows do not survive in it.
 >
-> PostgreSQL has no equivalent. A deleted row remains as a dead tuple until
-> vacuumed, and vacuuming marks pages reusable rather than overwriting them.
-> Sendan runs `VACUUM` after reaping, which is the strongest reclamation
-> available without an exclusive lock, but it cannot promise the bytes are gone
-> from disk.
+> PostgreSQL offers neither control directly. Measured against PostgreSQL 17: a
+> deleted row remains in the heap file until `VACUUM`, which Sendan runs after
+> reaping, and that does remove it. What persists is the **write-ahead log**,
+> which retains the row until its segment is recycled, and PostgreSQL has no
+> equivalent of truncating it on demand.
 >
-> Choose SQLite if that guarantee matters to you. Both backends pass the same
-> conformance suite, so they behave identically in every other respect.
+> A recovered row yields the at-rest key, and so the ability to decrypt a blob
+> that also survived its own deletion. That is the end-to-end ciphertext, **not
+> the content** — reading it still requires the link secret, which never reaches
+> the server.
+>
+> Choose SQLite if the stronger guarantee matters, or encrypt the database
+> volume. Both backends pass the same conformance suite, so they behave
+> identically in every other respect.
 
 ## Compatibility
 
