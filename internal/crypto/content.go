@@ -92,6 +92,34 @@ func recordNonce(base [12]byte, seq uint64) []byte {
 	return n[:]
 }
 
+// recordSealer owns the record counter and is the only way to encrypt a record.
+//
+// This exists to make nonce reuse structurally impossible rather than merely
+// discouraged. AES-GCM nonce reuse under one key discloses the authentication
+// key, not merely one message, so the invariant is worth enforcing in the type
+// system rather than in a comment: the nonce cannot be supplied by a caller,
+// and every call to seal advances the counter before returning.
+//
+// Decryption deliberately has no equivalent. Reusing a nonce to *open* a record
+// is not a hazard, and the decryptor must be able to reject an out-of-order
+// record rather than silently advance past it.
+type recordSealer struct {
+	aead      cipher.AEAD
+	nonceBase [12]byte
+	seq       uint64
+}
+
+func (s *recordSealer) seal(plaintext []byte) ([]byte, error) {
+	if s.seq >= maxSequence {
+		return nil, fmt.Errorf("%w: record sequence exhausted", ErrContent)
+	}
+	// The counter advances unconditionally, including on the path where Seal
+	// would panic, so no sequence value can ever be issued twice.
+	seq := s.seq
+	s.seq++
+	return s.aead.Seal(nil, recordNonce(s.nonceBase, seq), plaintext, nil), nil
+}
+
 // Encryptor encrypts a byte stream into the Sendan content encoding.
 //
 // Close must be called and its error checked: the final record carries the
@@ -99,10 +127,8 @@ func recordNonce(base [12]byte, seq uint64) []byte {
 // as truncated.
 type Encryptor struct {
 	w             io.Writer
-	aead          cipher.AEAD
+	sealer        *recordSealer
 	pendingHeader []byte
-	nonceBase     [12]byte
-	seq           uint64
 	buf           []byte
 	n             int
 	headerWritten bool
@@ -140,9 +166,8 @@ func newEncryptorWithSalt(w io.Writer, fileKey, contentSalt []byte) (*Encryptor,
 
 	return &Encryptor{
 		w:             w,
-		aead:          aead,
+		sealer:        &recordSealer{aead: aead, nonceBase: nonceBase},
 		pendingHeader: header,
-		nonceBase:     nonceBase,
 		buf:           make([]byte, maxRecordPlaintext),
 	}, nil
 }
@@ -211,9 +236,6 @@ func (e *Encryptor) flush(final bool) error {
 	if err := e.writeHeader(); err != nil {
 		return err
 	}
-	if e.seq >= maxSequence {
-		return fmt.Errorf("%w: record sequence exhausted", ErrContent)
-	}
 
 	delimiter := byte(delimiterNonFinal)
 	if final {
@@ -224,11 +246,13 @@ func (e *Encryptor) flush(final bool) error {
 	copy(plaintext, e.buf[:e.n])
 	plaintext[e.n] = delimiter
 
-	record := e.aead.Seal(nil, recordNonce(e.nonceBase, e.seq), plaintext, nil)
+	record, err := e.sealer.seal(plaintext)
+	if err != nil {
+		return err
+	}
 	if _, err := e.w.Write(record); err != nil {
 		return fmt.Errorf("crypto: write record: %w", err)
 	}
-	e.seq++
 	e.n = 0
 	return nil
 }

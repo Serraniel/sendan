@@ -10,6 +10,7 @@ describing what it is for, when it runs, and what a failure means.
 | [e2e-test](e2e-test.md) | pull request, nightly | No |
 | [interop-test](interop-test.md) | pull request (compat paths), weekly | No |
 | [security-scan](security-scan.md) | pull request, daily | Yes |
+| [fuzz](fuzz.md) | nightly, manual | No |
 | [codeql](codeql.md) | pull request, push to `main`, weekly | No |
 | [release-please](release-please.md) | push to `main` | n/a |
 | [release](release.md) | tag `v*` | n/a |

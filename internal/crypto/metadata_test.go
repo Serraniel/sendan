@@ -268,3 +268,48 @@ func TestUnpadRejectsMalformedPadding(t *testing.T) {
 		})
 	}
 }
+
+// Fuzzing the metadata path complements the content fuzzers: the padding and
+// the hand-written encoder are both places where a malformed input could
+// plausibly be accepted rather than rejected.
+
+func FuzzMetadataRoundTrip(f *testing.F) {
+	f.Add("report.pdf", "application/pdf", int64(1024))
+	f.Add("", "", int64(0))
+	f.Add("日本語", "text/plain", int64(1))
+
+	f.Fuzz(func(t *testing.T, name, mediaType string, size int64) {
+		m := Metadata{Name: name, Type: mediaType, Size: size}
+		nonce, envelope, err := SealMetadata(metadataKey(), m)
+		if err != nil {
+			// Rejected inputs are fine; silently mangled ones are not.
+			if !errors.Is(err, ErrMetadata) {
+				t.Fatalf("unexpected error type: %v", err)
+			}
+			return
+		}
+		got, err := OpenMetadata(metadataKey(), nonce, envelope)
+		if err != nil {
+			t.Fatalf("sealed metadata failed to open: %v", err)
+		}
+		if got != m {
+			t.Fatalf("round trip changed the metadata\n got  %+v\n want %+v", got, m)
+		}
+	})
+}
+
+func FuzzUnpadRejectsGarbage(f *testing.F) {
+	f.Add([]byte{})
+	f.Add(make([]byte, metadataPadBlock))
+
+	f.Fuzz(func(t *testing.T, padded []byte) {
+		out, err := unpad(padded)
+		if err != nil {
+			return
+		}
+		// Anything unpad accepts must re-pad to exactly the input.
+		if !bytes.Equal(pad(out), padded) {
+			t.Fatalf("unpad accepted %d bytes that do not re-pad to the same value", len(padded))
+		}
+	})
+}
