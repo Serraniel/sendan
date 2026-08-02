@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# See docs/workflows/dependabot.md
+version: 2
+
+updates:
+  # Keeps the SHA pins in .github/workflows current. Without this, pinning
+  # would mean never receiving upstream fixes to the actions themselves.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "ci"
+    labels: ["area:infra", "type:chore"]
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: gomod
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "build"
+    labels: ["area:server", "type:chore"]
+    groups:
+      # Routine dependencies may be grouped; cryptographic ones may not.
+      # A grouped bump hides an individual change inside a larger diff, and
+      # every cryptographic dependency must be reviewed on its own.
+      go-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "golang.org/x/crypto"
+          - "filippo.io/*"
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "build"
+    labels: ["area:web", "type:chore"]
+    groups:
+      npm-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "hash-wasm"
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    commit-message:
+      prefix: "build"
+    labels: ["area:infra", "type:chore"]

@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Maintains the standing release pull request. See docs/workflows/release-please.md
+name: Release please
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    name: Update release pull request
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # Accumulates Conventional Commits into a pull request that bumps the
+      # version and updates CHANGELOG.md. Merging that pull request creates the
+      # tag, which is what triggers release.yml. A human approves every release.
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          release-type: simple
+          package-name: sendan

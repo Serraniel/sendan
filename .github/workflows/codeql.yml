@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Static analysis. See docs/workflows/codeql.md
+name: CodeQL
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  analyse:
+    name: Analyse (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: guard
+        run: |
+          case "${{ matrix.language }}" in
+            go) [ -f go.mod ] && p=true || p=false ;;
+            *)  [ -f web/package.json ] && p=true || p=false ;;
+          esac
+          echo "present=$p" >> "$GITHUB_OUTPUT"
+          [ "$p" = "false" ] && echo "::notice::No sources for ${{ matrix.language }} yet - skipping."
+          exit 0
+
+      - if: steps.guard.outputs.present == 'true'
+        uses: github/codeql-action/init@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
+        with:
+          language: ${{ matrix.language }}
+          queries: security-extended
+
+      - if: steps.guard.outputs.present == 'true'
+        uses: github/codeql-action/autobuild@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
+
+      - if: steps.guard.outputs.present == 'true'
+        uses: github/codeql-action/analyze@18420e3271f74589575af831a523c833acda327f # codeql-bundle-v2.26.2
+        with:
+          category: "/language:${{ matrix.language }}"

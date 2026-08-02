@@ -1,0 +1,80 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Third-party client interoperability. See docs/workflows/interop-test.md
+name: Interop test
+
+on:
+  pull_request:
+    paths:
+      - "internal/compat/**"
+      - "internal/api/**"
+      - ".github/workflows/interop-test.yml"
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ffsend:
+    name: ffsend round-trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - id: guard
+        run: |
+          if [ -d internal/compat ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"
+               echo "::notice::No compatibility layer yet - skipping."
+          fi
+
+      - if: steps.guard.outputs.present == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25"
+
+      - name: Install ffsend
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          url=$(gh api repos/timvisee/ffsend/releases/latest \
+                --jq '.assets[] | select(.name | test("linux-x64-static$")) | .browser_download_url')
+          if [ -z "$url" ]; then
+            echo "::warning::No suitable ffsend release asset found - upstream may have changed its naming"
+            exit 1
+          fi
+          curl -sSL "$url" -o /usr/local/bin/ffsend
+          chmod +x /usr/local/bin/ffsend
+          ffsend --version
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Start Sendan with compatibility mode enabled
+        if: steps.guard.outputs.present == 'true'
+        env:
+          SENDAN_SEND_COMPAT: "true"
+          SENDAN_SERVE_UI: "false"
+        run: |
+          go build -o /tmp/sendan ./cmd/sendan
+          /tmp/sendan &
+          for _ in $(seq 1 30); do
+            curl -sf http://localhost:8080/api/source >/dev/null && break
+            sleep 1
+          done
+
+      - name: Upload and download through ffsend
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          head -c 5242880 /dev/urandom > /tmp/original.bin
+          url=$(ffsend upload --host http://localhost:8080 /tmp/original.bin --quiet)
+          ffsend download "$url" --output /tmp/roundtrip.bin --force --quiet
+          cmp /tmp/original.bin /tmp/roundtrip.bin
+          echo "Round-trip byte-identical."

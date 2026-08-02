@@ -37,6 +37,37 @@ right to submit it under the project's licence.
 > is intentional: no single party, including the maintainer, can unilaterally
 > move Sendan away from the AGPL.
 
+## Commit messages
+
+Commit subjects must follow
+[Conventional Commits](https://www.conventionalcommits.org/):
+
+```
+<type>[(scope)][!]: <description>
+```
+
+Permitted types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`,
+`build`, `ci`, `chore`, `revert`. An exclamation mark, or a `BREAKING CHANGE:`
+footer, marks a breaking change.
+
+```
+feat(cli): add --expire flag for download limits
+fix(crypto): reject records reordered within a stream
+feat(crypto)!: change the key derivation labels to v2
+```
+
+This is enforced on every commit, not merely on the pull request title, because
+squash merging is disabled and each commit enters `main` as written.
+
+> [!IMPORTANT]
+> Release tooling derives the version number and the changelog directly from
+> these subjects. A `fix:` produces a patch release and a `feat:` a minor one, so
+> a mislabelled commit produces an incorrect version and misleading release
+> notes. Write the subject for the person reading the changelog.
+
+The body should explain the reasoning rather than restate the diff, and must
+carry the `Signed-off-by` line described above.
+
 ## Licensing of contributions
 
 Contributions are licensed under **AGPL-3.0-or-later**, matching the project.

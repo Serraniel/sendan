@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Known-vulnerability scanning. See docs/workflows/security-scan.md
+name: Security scan
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  govulncheck:
+    name: govulncheck (Go)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: guard
+        run: |
+          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"
+               echo "::notice::No go.mod yet - skipping."
+          fi
+      - if: steps.guard.outputs.present == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25"
+      # govulncheck reports only vulnerabilities actually reachable from this
+      # code, so its findings are high signal and worth failing on.
+      - name: Run govulncheck
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
+  npm-audit:
+    name: npm audit (TypeScript)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: guard
+        run: |
+          if [ -f web/package.json ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"
+               echo "::notice::No web/package.json yet - skipping."
+          fi
+      - if: steps.guard.outputs.present == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+      - name: Run npm audit
+        if: steps.guard.outputs.present == 'true'
+        working-directory: web
+        run: npm audit --audit-level=high

@@ -1,0 +1,178 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Publishes signed, versioned artefacts. See docs/workflows/release.md
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION: "1.25"
+  NODE_VERSION: "22"
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  # The CLI is the project's trust anchor, so reproducibility is verified at the
+  # moment it matters rather than assumed. Two independent builds of the same
+  # source must be byte-identical.
+  verify-reproducible:
+    name: Verify reproducible build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: guard
+        run: |
+          if [ -f go.mod ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"
+               echo "::notice::No go.mod yet - skipping."
+          fi
+      - if: steps.guard.outputs.present == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Build twice and compare
+        if: steps.guard.outputs.present == 'true'
+        env:
+          CGO_ENABLED: "0"
+          SOURCE_DATE_EPOCH: "0"
+        run: |
+          set -euo pipefail
+          flags="-trimpath -ldflags=-buildid= -buildvcs=false"
+          # shellcheck disable=SC2086
+          go build $flags -o /tmp/build-a ./cmd/sendan-cli
+          go clean -cache
+          # shellcheck disable=SC2086
+          go build $flags -o /tmp/build-b ./cmd/sendan-cli
+          a=$(sha256sum /tmp/build-a | cut -d' ' -f1)
+          b=$(sha256sum /tmp/build-b | cut -d' ' -f1)
+          echo "build A: $a"
+          echo "build B: $b"
+          if [ "$a" != "$b" ]; then
+            echo "::error::Build is not reproducible - users cannot verify the released binary"
+            exit 1
+          fi
+          echo "Reproducible."
+
+  binaries:
+    name: Publish binaries
+    runs-on: ubuntu-latest
+    needs: [verify-reproducible]
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: guard
+        run: |
+          if [ -f .goreleaser.yaml ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"
+               echo "::notice::No .goreleaser.yaml yet - skipping."
+          fi
+      - if: steps.guard.outputs.present == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - if: steps.guard.outputs.present == 'true'
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build web client for embedding
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          if [ -f web/package.json ]; then (cd web && npm ci && npm run build); fi
+      - if: steps.guard.outputs.present == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      # TODO(#60): add a post-quantum signature (SPHINCS+ preferred) alongside
+      # the Sigstore signature once tooling supports it. Sigstore is currently
+      # ECDSA-based and therefore exposed to Shor's algorithm.
+      - if: steps.guard.outputs.present == 'true'
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  container:
+    name: Publish container image
+    runs-on: ubuntu-latest
+    needs: [verify-reproducible]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: guard
+        run: |
+          if [ -f Dockerfile ]; then echo "present=true" >> "$GITHUB_OUTPUT"
+          else echo "present=false" >> "$GITHUB_OUTPUT"
+               echo "::notice::No Dockerfile yet - skipping."
+          fi
+
+      - if: steps.guard.outputs.present == 'true'
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - if: steps.guard.outputs.present == 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Tagging scheme:
+      #   post-1.0   :1.4.2  :1.4  :1  :latest  :sha-abc1234
+      #   pre-1.0    :0.1.0  :0.1        :latest  :sha-abc1234
+      # The bare major tag is suppressed below v1 because under SemVer a 0.x
+      # minor bump is permitted to break compatibility, so a moving :0 tag
+      # would silently break operators.
+      - id: meta
+        if: steps.guard.outputs.present == 'true'
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          flavor: latest=auto
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=sha,prefix=sha-,format=short
+          labels: |
+            org.opencontainers.image.title=Sendan
+            org.opencontainers.image.description=Self-hosted, end-to-end encrypted file sharing
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - id: build
+        if: steps.guard.outputs.present == 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: mode=max
+          sbom: true
+
+      - if: steps.guard.outputs.present == 'true'
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          upload-artifact: true
+
+      - if: steps.guard.outputs.present == 'true'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign the image
+        if: steps.guard.outputs.present == 'true'
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          DIGEST: ${{ steps.build.outputs.digest }}
