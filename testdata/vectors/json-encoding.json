@@ -1,0 +1,106 @@
+{
+  "description": "Reference output of the spec section 7.1 deterministic JSON encoding, produced by JavaScript JSON.stringify.",
+  "spec": "docs/spec/wire-format-v1.md section 7.1",
+  "generator": "node testdata/vectors/generate-json-encoding.mjs",
+  "cases": [
+    {
+      "name": "ordinary",
+      "input": {
+        "name": "report.pdf",
+        "type": "application/pdf",
+        "size": 1048576
+      },
+      "expected": "{\"name\":\"report.pdf\",\"type\":\"application/pdf\",\"size\":1048576}"
+    },
+    {
+      "name": "all empty",
+      "input": {
+        "name": "",
+        "type": "",
+        "size": 0
+      },
+      "expected": "{\"name\":\"\",\"type\":\"\",\"size\":0}"
+    },
+    {
+      "name": "non-ascii name",
+      "input": {
+        "name": "日本語.txt",
+        "type": "text/plain",
+        "size": 42
+      },
+      "expected": "{\"name\":\"日本語.txt\",\"type\":\"text/plain\",\"size\":42}"
+    },
+    {
+      "name": "quote and backslash",
+      "input": {
+        "name": "quote\" backslash\\ slash/",
+        "type": "text/plain",
+        "size": 1
+      },
+      "expected": "{\"name\":\"quote\\\" backslash\\\\ slash/\",\"type\":\"text/plain\",\"size\":1}"
+    },
+    {
+      "name": "astral plane emoji",
+      "input": {
+        "name": "emoji 🔐.bin",
+        "type": "application/octet-stream",
+        "size": 7
+      },
+      "expected": "{\"name\":\"emoji 🔐.bin\",\"type\":\"application/octet-stream\",\"size\":7}"
+    },
+    {
+      "name": "max safe size",
+      "input": {
+        "name": "big.bin",
+        "type": "application/octet-stream",
+        "size": 9007199254740991
+      },
+      "expected": "{\"name\":\"big.bin\",\"type\":\"application/octet-stream\",\"size\":9007199254740991}"
+    },
+    {
+      "name": "html significant characters",
+      "input": {
+        "name": "a<b>&c\"d",
+        "type": "text/plain",
+        "size": 1
+      },
+      "expected": "{\"name\":\"a<b>&c\\\"d\",\"type\":\"text/plain\",\"size\":1}"
+    },
+    {
+      "name": "line and paragraph separators",
+      "input": {
+        "name": "a b c",
+        "type": "",
+        "size": 0
+      },
+      "expected": "{\"name\":\"a b c\",\"type\":\"\",\"size\":0}"
+    },
+    {
+      "name": "short control escapes",
+      "input": {
+        "name": "a\nb\tc\rd\be\ff",
+        "type": "",
+        "size": 0
+      },
+      "expected": "{\"name\":\"a\\nb\\tc\\rd\\be\\ff\",\"type\":\"\",\"size\":0}"
+    },
+    {
+      "name": "numeric control escapes",
+      "input": {
+        "name": "a\u0001b\u001fc\u0000d",
+        "type": "",
+        "size": 0
+      },
+      "expected": "{\"name\":\"a\\u0001b\\u001fc\\u0000d\",\"type\":\"\",\"size\":0}"
+    },
+    {
+      "name": "delete character is literal",
+      "input": {
+        "name": "ab",
+        "type": "",
+        "size": 0
+      },
+      "expected": "{\"name\":\"ab\",\"type\":\"\",\"size\":0}"
+    }
+  ]
+}

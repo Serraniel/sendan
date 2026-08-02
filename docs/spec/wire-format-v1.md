@@ -166,6 +166,44 @@ The metadata plaintext is a UTF-8 JSON object:
 Members appear in exactly that order, with no insignificant whitespace, so the
 encoding is deterministic across implementations.
 
+`name` and `type` **must** be valid UTF-8. An implementation encountering
+invalid UTF-8 rejects the metadata rather than substituting replacement
+characters, which would differ between implementations.
+
+`size` is a non-negative decimal integer with no sign, leading zeros, decimal
+point, or exponent, and **must not exceed 2^53 − 1** (9007199254740991).
+
+> [!WARNING]
+> The upper bound is not arbitrary. JavaScript numbers are IEEE-754 doubles, so
+> a larger value parses back rounded rather than failing: `9007199254740993`
+> becomes `9007199254740992`. Without the bound, an envelope written by one
+> implementation would be read with a different size by the other, silently.
+> Implementations reject an out-of-range size both when encoding and when
+> decoding, since an envelope may originate elsewhere.
+
+### 7.1 String escaping
+
+Exactly these escapes are produced, and no others:
+
+| Input | Output |
+|---|---|
+| `"` | `\"` |
+| `\` | `\\` |
+| U+0008, U+000C, U+000A, U+000D, U+0009 | `\b`, `\f`, `\n`, `\r`, `\t` |
+| Any other character below U+0020 | `\u00xx`, lowercase hexadecimal |
+| Everything else | emitted literally as UTF-8 |
+
+> [!WARNING]
+> The general-purpose JSON encoders of both languages are **unsuitable** here
+> and must not be used for this envelope. Go's `encoding/json` escapes U+2028
+> and U+2029 unconditionally, and HTML-significant characters by default;
+> JavaScript's `JSON.stringify` does neither. A filename containing any of `<`,
+> `>`, `&`, U+2028, or U+2029 would then produce different ciphertext in each
+> implementation, and the shared vectors would diverge for reasons unrelated to
+> the cryptography. Each implementation writes this encoding directly.
+>
+> Decoding may use a general-purpose JSON parser, since parsing is unambiguous.
+
 The plaintext is padded to a multiple of **256 bytes** using ISO/IEC 7816-4
 padding: a single `0x80` octet followed by `0x00` octets. Padding blunts the
 disclosure of filename length through ciphertext length.
