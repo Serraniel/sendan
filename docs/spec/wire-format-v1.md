@@ -136,6 +136,27 @@ record **must** raise an error and **must not** return the partial plaintext.
 Records are authenticated in sequence, so reordering and replay are rejected by
 the nonce derivation.
 
+### 5.4 Strictness
+
+Sendan's profile is deliberately narrower than RFC 8188 permits. A decryptor
+**must** reject a stream in each of these cases:
+
+| Condition | Reason |
+|---|---|
+| `rs` is not 65536, or `idlen` is not 0 | Honouring a value taken from the stream would make it a negotiated parameter, which §11 forbids |
+| A record's plaintext ends in anything other than `0x01` or `0x02` | RFC 8188 permits zero padding after the delimiter; accepting it would make two distinct encodings of one plaintext valid |
+| A non-final record is shorter than `rs` | Otherwise a truncated stream could be presented as a complete one |
+| Any data follows the final record | Trailing bytes are unauthenticated |
+| A record's plaintext is empty | There is no delimiter to inspect |
+
+> [!NOTE]
+> Rejecting the optional padding of RFC 8188 costs nothing — this profile never
+> produces it — and removes a source of malleability. Two encodings of the same
+> content should never both be valid.
+
+The record sequence number is bounded at 2^48, far below the point at which the
+96-bit nonce space could wrap. Exceeding it is an error rather than a wrap.
+
 ## 6. File key wrapping
 
 ```

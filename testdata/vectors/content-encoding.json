@@ -1,0 +1,74 @@
+{
+  "description": "Reference output of the spec section 5 content encoding, produced by the Go implementation.",
+  "spec": "docs/spec/wire-format-v1.md section 5",
+  "generator": "go test ./internal/crypto/ -run TestVectorsContentEncoding -update-vectors",
+  "cases": [
+    {
+      "name": "empty",
+      "fileKeyHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "contentSaltHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "plaintextLength": 0,
+      "plaintextPattern": "zero",
+      "streamSha256": "69e8d731a207b39565b642a2c32cac1924657c15e203226afda4896618c6b466",
+      "streamHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0001000000433d7cd33d83b5f6ed93794616bec57706"
+    },
+    {
+      "name": "single byte",
+      "fileKeyHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "contentSaltHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "plaintextLength": 1,
+      "plaintextPattern": "counter",
+      "streamSha256": "4f8e9a9a3eb77e57dc7d6f5b3124106a28b5ba4a2079cd748966799effad05c7",
+      "streamHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a000100000041746b0c9d60f65b875ac740c72a28e451a6"
+    },
+    {
+      "name": "short",
+      "fileKeyHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "contentSaltHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "plaintextLength": 100,
+      "plaintextPattern": "counter",
+      "streamSha256": "b08c38e394c6fc2d48a7e87b3fd1118df31742b4ae22bc4b958734b628bd8250",
+      "streamHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a0001000000417703c82707e8a134386b3fec2b4d7fc3250c904c38c65fd65b07496cfecfad2286c517e7957d6f13a3d29a5c13ea237c222f6f73f0f9023e004aaf832cb5af1ec4cb151cbf0d70fabf68b55c326c3d6839a8de66e4c9ae3882624527f052957ce0df471702848fef703293da72e357c14dbac87e"
+    },
+    {
+      "name": "one byte below a full record",
+      "fileKeyHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "contentSaltHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "plaintextLength": 65518,
+      "plaintextPattern": "counter",
+      "streamSha256": "55213d09855ee0d9edccd00c6e912ca3689b8f85ddd27aa308c6b7e2d68ac13d"
+    },
+    {
+      "name": "exactly one full record",
+      "fileKeyHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "contentSaltHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "plaintextLength": 65519,
+      "plaintextPattern": "counter",
+      "streamSha256": "56145eeb0a9b0548daec41662c432f05e20f199390ed810c8683b9fe397e95f8"
+    },
+    {
+      "name": "one byte above a full record",
+      "fileKeyHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "contentSaltHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "plaintextLength": 65520,
+      "plaintextPattern": "counter",
+      "streamSha256": "19d95095690f59677830094e43460fbd9db295bc171582ee9d5756fa3657ff66"
+    },
+    {
+      "name": "two full records",
+      "fileKeyHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "contentSaltHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "plaintextLength": 131038,
+      "plaintextPattern": "counter",
+      "streamSha256": "c2909eefab5fa6f45c3e9517e43557471dccdc5b23bd126eeac417a1871f48fc"
+    },
+    {
+      "name": "three records, last partial",
+      "fileKeyHex": "a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5",
+      "contentSaltHex": "5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a",
+      "plaintextLength": 143383,
+      "plaintextPattern": "counter",
+      "streamSha256": "b7469c672891d55d164e04209dd54c922ffc5dddc8df2176124c3d48eab6be0a"
+    }
+  ]
+}

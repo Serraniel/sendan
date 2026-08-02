@@ -119,7 +119,11 @@ jobs:
         run: |
           set -euo pipefail
           node testdata/vectors/generate-json-encoding.mjs
-          if ! git diff --exit-code --stat testdata/vectors/; then
+          go test ./internal/crypto/ -run TestVectorsContentEncoding -update-vectors
+          # git status rather than git diff, so a newly generated but
+          # uncommitted vector file is caught as well as a modified one.
+          if [ -n "$(git status --porcelain testdata/vectors/)" ]; then
+            git status --porcelain testdata/vectors/
             echo "::error::Committed vectors do not match freshly generated output."
             echo "::error::If this is intentional it is a wire format change and needs a new spec version."
             exit 1
