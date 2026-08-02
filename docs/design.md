@@ -28,6 +28,12 @@ backend-only instance from the same binary rather than a second deployable.
 
 ## 2. Cryptographic design
 
+> [!NOTE]
+> This section gives the reasoning. The normative definition — labels, sizes,
+> padding rules, and record framing — is
+> [`docs/spec/wire-format-v1.md`](spec/wire-format-v1.md). Where the two
+> disagree, the specification governs.
+
 ### 2.1 Scheme
 
 Upload:
