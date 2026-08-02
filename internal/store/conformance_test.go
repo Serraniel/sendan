@@ -31,9 +31,18 @@ func TestSQLiteConformance(t *testing.T) {
 // PostgreSQL service container. Locally the suite skips unless a developer
 // points it at their own database, so a missing PostgreSQL never blocks work on
 // unrelated code.
+//
+// In continuous integration it must not skip. A skipped test is
+// indistinguishable from a passing one in the summary, so a misconfigured
+// service container would silently leave this backend untested while the job
+// stayed green. There the absence of the variable is a failure.
 func TestPostgresConformance(t *testing.T) {
 	dsn := os.Getenv("SENDAN_TEST_POSTGRES")
 	if dsn == "" {
+		if os.Getenv("CI") != "" {
+			t.Fatal("SENDAN_TEST_POSTGRES is unset in CI: the PostgreSQL service container is missing or misconfigured, " +
+				"and skipping here would leave the backend untested behind a green check")
+		}
 		t.Skip("SENDAN_TEST_POSTGRES is not set; skipping the PostgreSQL conformance suite")
 	}
 
