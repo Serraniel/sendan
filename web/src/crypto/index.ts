@@ -9,6 +9,7 @@
  * document, verified against shared test vectors on every pull request.
  * Neither may be changed without the other.
  */
+export * from "./content.js";
 export * from "./errors.js";
 export * from "./keys.js";
 export * from "./metadata.js";
