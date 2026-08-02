@@ -4,14 +4,18 @@
 
 **Please report privately. Do not open a public issue.**
 
-Use GitHub's private vulnerability reporting:
-[**Report a vulnerability**](https://github.com/Serraniel/sendan/security/advisories/new).
+Either channel is acceptable:
 
-<!-- TODO: add a direct email address and PGP key as an alternative channel for
-     researchers who prefer not to use GitHub. -->
+- **GitHub private vulnerability reporting** —
+  [report a vulnerability](https://github.com/Serraniel/sendan/security/advisories/new).
+- **Email** — <mail@serraniel.dev>, for researchers who prefer not to use GitHub.
 
-Please include enough detail to reproduce: affected version or commit, the
-component (server, web UI, CLI), and a proof of concept if you have one.
+<!-- TODO: publish the PGP fingerprint here once the key at
+     B5890C679CA166FEB2EC94AB3690B4E7364525D3 has been renewed. It expired on
+     2025-06-15, so encrypting to it currently fails. -->
+
+Please include enough detail to reproduce: the affected version or commit, the
+component (server, web client, or CLI), and a proof of concept where available.
 
 Reports are acknowledged within **7 days**. Sendan is maintained by a single
 person outside of working hours; remediation timelines will reflect that. If no
