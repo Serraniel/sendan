@@ -19,6 +19,7 @@ import (
 
 	"github.com/Serraniel/sendan/internal/blob"
 	"github.com/Serraniel/sendan/internal/logging"
+	"github.com/Serraniel/sendan/internal/ratelimit"
 	"github.com/Serraniel/sendan/internal/store"
 )
 
@@ -346,4 +347,29 @@ func (failingStore) Delete(context.Context, string) error {
 
 func readAll(path string) ([]byte, error) {
 	return os.ReadFile(path) //nolint:gosec // walking a temporary directory in a test
+}
+
+// Attempt state is keyed by upload identifier, so it is state about the upload.
+// A deleted upload must leave nothing behind, including in memory.
+func TestDeleteClearsPasswordAttemptState(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	attempts := ratelimit.NewPasswordAttempts()
+	h.svc = h.svc.WithPasswordAttempts(attempts)
+
+	const id = "ATTEMPTSAAAAAAAAAAAAAA"
+	h.put(t, id, "content", h.clock.Add(time.Hour), 0)
+
+	if !attempts.Allow(id) {
+		t.Fatal("the first attempt was refused")
+	}
+	if attempts.Len() != 1 {
+		t.Fatalf("holding %d entries, want 1", attempts.Len())
+	}
+
+	if err := h.svc.Delete(t.Context(), id); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if attempts.Len() != 0 {
+		t.Fatalf("attempt state for a deleted upload survives: %d entries", attempts.Len())
+	}
 }
