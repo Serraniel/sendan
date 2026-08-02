@@ -46,8 +46,23 @@ Sizes accept a plain byte count or a binary suffix: `1024`, `500MiB`, `2GiB`,
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SENDAN_DATABASE` | `sqlite:data/sendan.db` | Metadata store location |
+| `SENDAN_DATABASE` | `sqlite:data/sendan.db` | Metadata store location. `sqlite:<path>` or a `postgres://` URL |
 | `SENDAN_STORAGE` | `file:data/blobs` | Blob store location |
+
+> [!IMPORTANT]
+> **Deletion is stronger on SQLite than on PostgreSQL.** SQLite is configured
+> with `secure_delete`, which zeroes a deleted row's content rather than merely
+> marking its page free, and Sendan checkpoints the write-ahead log after
+> reaping so removed rows do not survive in it.
+>
+> PostgreSQL has no equivalent. A deleted row remains as a dead tuple until
+> vacuumed, and vacuuming marks pages reusable rather than overwriting them.
+> Sendan runs `VACUUM` after reaping, which is the strongest reclamation
+> available without an exclusive lock, but it cannot promise the bytes are gone
+> from disk.
+>
+> Choose SQLite if that guarantee matters to you. Both backends pass the same
+> conformance suite, so they behave identically in every other respect.
 
 ## Compatibility
 
