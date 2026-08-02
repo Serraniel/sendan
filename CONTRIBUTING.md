@@ -44,7 +44,12 @@ New source files must carry an SPDX header:
 
 ```go
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Serraniel and the Sendan contributors
 ```
+
+Contributors retain copyright in their own contributions; the collective notice
+identifies the licensor without transferring anything. Do not add individual
+copyright lines to existing files — authorship is recorded in the git history.
 
 ## Testing requirements
 

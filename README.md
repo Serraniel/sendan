@@ -83,7 +83,9 @@ completed and verified before anything is built on top of them.
 
 ## License
 
-[AGPL-3.0-or-later](LICENSE).
+Copyright © 2026 Serraniel and the Sendan contributors.
+
+Licensed under [AGPL-3.0-or-later](LICENSE).
 
 The network copyleft provision is deliberate. Operating a modified instance as a
 hosted service obliges the operator to offer users the corresponding source,

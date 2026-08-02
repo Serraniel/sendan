@@ -222,7 +222,7 @@ expiry rules in force, and whether the upload used native or compatibility
 endpoints.
 
 > [!NOTE]
-> This report reflects what the delivered client code states it did. It is an
+> This report reflects what the delivered client code states it did. It is a
 > transparency measure for well-behaved instances, not a defence against a
 > hostile one, and must be worded so as not to imply otherwise.
 
