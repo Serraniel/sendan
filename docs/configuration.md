@@ -10,14 +10,15 @@ require restarting repeatedly to discover the next fault.
 
 > [!WARNING]
 > **Not every variable is honoured yet.** All of them are parsed and validated,
-> so an invalid value fails at startup, but the server does not yet act on all
-> of them.
+> so an invalid value fails at startup, and storage now opens for real — but the
+> server has no HTTP API, so nothing can be uploaded or downloaded regardless of
+> configuration.
 >
 > | Variable | Effect today |
 > |---|---|
 > | `SENDAN_LISTEN`, `SENDAN_LOG_*` | applied |
-> | `SENDAN_DATABASE`, `SENDAN_STORAGE` | **validated only** — no backend is opened yet (#79) |
-> | `SENDAN_*_TTL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | enforced by the lifecycle layer, which nothing calls yet |
+> | `SENDAN_DATABASE`, `SENDAN_STORAGE` | applied — the backend is opened at startup and the reaper runs |
+> | `SENDAN_*_TTL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | applied to expiry and reaping; not yet enforced on upload, since there is no upload endpoint |
 > | `SENDAN_SERVE_UI` | no effect; there is no web client yet |
 > | `SENDAN_SEND_COMPAT` | no effect; the compatibility endpoints are M7 |
 >
@@ -73,6 +74,13 @@ providers that require one.
 
 The bucket must already exist. Sendan does not create it, because doing so
 silently would hide a typo behind a working but wrong deployment.
+
+An unrecognised location is a **startup failure** naming the accepted forms,
+never a silent fallback to the default. A server that quietly stores uploads
+somewhere other than where you asked is worse than one that refuses to run.
+
+Credentials embedded in a location are removed before it is logged, so the
+startup line names the backend without disclosing its password.
 
 > [!NOTE]
 > Objects are written by the same crypto-shredding layer as local files, so an
