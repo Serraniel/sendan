@@ -1,0 +1,50 @@
+# Binaries
+/sendan
+/sendan-cli
+/dist/
+/bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Go
+*.test
+*.out
+/vendor/
+go.work
+go.work.sum
+
+# Embedded frontend build output (generated)
+/internal/web/dist/
+
+# Node / SvelteKit
+node_modules/
+/web/build/
+/web/.svelte-kit/
+/web/dist/
+.pnpm-store/
+*.tsbuildinfo
+
+# Local runtime data — must never be committed
+/data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+!**/testdata/**/*.key
+
+# Tooling
+.idea/
+.vscode/
+*.swp
+.DS_Store
+coverage.*

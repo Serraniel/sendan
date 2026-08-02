@@ -1,0 +1,88 @@
+# Security Policy
+
+## Reporting a vulnerability
+
+**Please report privately. Do not open a public issue.**
+
+Use GitHub's private vulnerability reporting:
+[**Report a vulnerability**](https://github.com/Serraniel/sendan/security/advisories/new).
+
+<!-- TODO: add a direct email address and PGP key as an alternative channel for
+     researchers who prefer not to use GitHub. -->
+
+Please include enough detail to reproduce: affected version or commit, the
+component (server, web UI, CLI), and a proof of concept if you have one.
+
+Reports are acknowledged within **7 days**. Sendan is maintained by a single
+person outside of working hours; remediation timelines will reflect that. If no
+acknowledgement is received within 7 days, please escalate by contacting the
+maintainer publicly **without disclosing details**.
+
+Reporters are free to publish on their own timeline. A 90-day disclosure period
+is considered reasonable and will not be contested. There is no bug bounty
+programme. Reporters are credited in the resulting advisory unless they request
+otherwise.
+
+## Supported versions
+
+> [!WARNING]
+> **Sendan is pre-alpha and nothing here has been implemented or audited yet.**
+> No version is currently supported, and Sendan should not be used to protect
+> anything real.
+
+## Threat model
+
+Understanding what Sendan does and does not defend against matters more than any
+individual bug report.
+
+### What Sendan is designed to resist
+
+- **A server operator reading your files.** Content, filename, MIME type, and
+  size are encrypted client-side. The server sees ciphertext and an opaque
+  metadata envelope.
+- **A database or storage compromise.** The same holds for anyone who steals the
+  disk or the database — the decryption key never reaches the server.
+- **Link secrets appearing in logs.** The secret lives in the URL fragment,
+  which browsers never send to the server, combined with
+  `Referrer-Policy: no-referrer`.
+- **Someone holding the link but not the password.** A password contributes to
+  the key-wrapping key, so it is enforced cryptographically rather than by
+  server-side policy. Even the operator cannot bypass it.
+- **Data surviving expiry.** Expired uploads are hard-deleted, with no
+  soft-delete rows, no tombstones, and no identifiers retained in logs.
+
+### What Sendan cannot protect you from
+
+> [!IMPORTANT]
+> **A malicious operator can deliver modified client code.** This is not a defect
+> in Sendan; it is a structural property of every browser-delivered end-to-end
+> encrypted application. The server delivers the code that performs the
+> encryption, so an operator seeking the key can extract it from the page before
+> encryption occurs.
+>
+> The mitigation is the **command line client**: a fixed, reproducibly built
+> binary obtained independently of any instance. Where the adversary includes the
+> operator of the instance, use the CLI and verify its checksum.
+
+Also out of scope:
+
+- **Anyone you gave the link to.** The link *is* the credential. Sendan has no
+  way to distinguish an intended recipient from someone who read over their
+  shoulder.
+- **A compromised endpoint.** Malware on the sender's or recipient's machine
+  defeats client-side encryption entirely.
+- **Traffic analysis.** Sendan does not hide file sizes, upload times, or the
+  fact that you are using it. Padding is not currently implemented.
+- **Third-party client compatibility mode**, when enabled, uses that protocol's
+  weaker server-enforced password model for interoperability. Uploads made
+  through those endpoints are **less secure** than native ones, and the interface
+  states so.
+
+## Cryptographic design
+
+The full scheme, including the reasoning for using AES-256-GCM and for **not**
+adding a post-quantum layer, is documented in [`docs/design.md`](docs/design.md).
+
+If you believe the design itself is wrong — as opposed to the implementation —
+that is a very welcome report, and the design document is the right thing to
+critique.
