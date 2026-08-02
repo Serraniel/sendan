@@ -13,7 +13,8 @@ Nightly at 02:00 UTC, and on demand with a configurable per-target duration
 
 ## What it does
 
-Runs each Go fuzz target as a separate job:
+Runs each Go fuzz target as a separate job. `go test -fuzz` accepts exactly one
+package, so the matrix pairs each target with its own:
 
 | Target | Property |
 |---|---|
@@ -21,6 +22,7 @@ Runs each Go fuzz target as a separate job:
 | `FuzzContentBitFlipIsRejected` | no single-bit change to a stream ever decrypts |
 | `FuzzMetadataRoundTrip` | metadata is either rejected or round trips unchanged, never silently mangled |
 | `FuzzUnpadRejectsGarbage` | anything unpadding accepts must re-pad to the identical bytes |
+| `FuzzShredderSeekRoundTrip` | a blob read back at any offset decrypts to the same plaintext, which fails if writing and reading derive different keystreams |
 
 ## Why this is not a merge gate
 
@@ -35,7 +37,7 @@ five minutes.
 most valuable output this repository produces, and it must not be discarded.
 
 1. Download the `fuzz-crashers-*` artifact from the failed run.
-2. Commit the crasher under `internal/crypto/testdata/fuzz/<Target>/`. Go
+2. Commit the crasher under `internal/<package>/testdata/fuzz/<Target>/`. Go
    replays committed crashers as ordinary unit tests, so it becomes a permanent
    regression case that runs on every pull request.
 3. Fix the defect. The crasher test must fail before the fix and pass after it.

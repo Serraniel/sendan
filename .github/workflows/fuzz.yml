@@ -24,11 +24,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target:
-          - FuzzContentRoundTrip
-          - FuzzContentBitFlipIsRejected
-          - FuzzMetadataRoundTrip
-          - FuzzUnpadRejectsGarbage
+        # go test -fuzz accepts exactly one package, so each target names its
+        # own.
+        include:
+          - { package: ./internal/crypto/, target: FuzzContentRoundTrip }
+          - { package: ./internal/crypto/, target: FuzzContentBitFlipIsRejected }
+          - { package: ./internal/crypto/, target: FuzzMetadataRoundTrip }
+          - { package: ./internal/crypto/, target: FuzzUnpadRejectsGarbage }
+          - { package: ./internal/blob/, target: FuzzShredderSeekRoundTrip }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -40,7 +43,7 @@ jobs:
       # the input space beyond the cases someone thought to write down.
       - name: Fuzz ${{ matrix.target }}
         run: |
-          go test ./internal/crypto/ \
+          go test ${{ matrix.package }} \
             -run '^$' \
             -fuzz '^${{ matrix.target }}$' \
             -fuzztime "${DURATION}s"
@@ -56,7 +59,7 @@ jobs:
         with:
           name: fuzz-crashers-${{ matrix.target }}
           path: |
-            internal/crypto/testdata/fuzz/**
+            internal/*/testdata/fuzz/**
             $HOME/.cache/go-build/fuzz/**
           if-no-files-found: warn
           retention-days: 30
