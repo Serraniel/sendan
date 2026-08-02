@@ -47,4 +47,8 @@ node_modules/
 .vscode/
 *.swp
 .DS_Store
-coverage.*
+# Anchored and specific: an unanchored coverage.* also matched
+# scripts/coverage.sh, which silently excluded a source file from the repository.
+/coverage.out
+/coverage.html
+web/coverage/
