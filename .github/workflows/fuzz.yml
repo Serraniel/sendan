@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Scheduled fuzzing. See docs/workflows/fuzz.md
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: "Seconds to run each target"
+        required: false
+        default: "300"
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - FuzzContentRoundTrip
+          - FuzzContentBitFlipIsRejected
+          - FuzzMetadataRoundTrip
+          - FuzzUnpadRejectsGarbage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.25"
+
+      # Fuzzing is unbounded work, so it runs on a schedule rather than as a
+      # merge gate. A pull request cannot wait on it, but nothing else explores
+      # the input space beyond the cases someone thought to write down.
+      - name: Fuzz ${{ matrix.target }}
+        run: |
+          go test ./internal/crypto/ \
+            -run '^$' \
+            -fuzz '^${{ matrix.target }}$' \
+            -fuzztime "${DURATION}s"
+        env:
+          DURATION: ${{ inputs.duration || '300' }}
+
+      # A crasher is a reproducible failing input. It must be committed to
+      # testdata/fuzz/ so it becomes a permanent regression case, which is why
+      # it is uploaded rather than discarded with the runner.
+      - name: Upload crashers
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: fuzz-crashers-${{ matrix.target }}
+          path: |
+            internal/crypto/testdata/fuzz/**
+            $HOME/.cache/go-build/fuzz/**
+          if-no-files-found: warn
+          retention-days: 30
