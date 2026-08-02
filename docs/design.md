@@ -174,8 +174,17 @@ revocation**. Whichever is reached first applies.
 - Each blob carries a per-file server-side key stored in its database row, so
   deleting the row cryptographically shreds any block that survives on a
   copy-on-write filesystem or SSD, where overwriting is not meaningful.
-- On PostgreSQL, deleted rows persist until autovacuum. This must be documented
-  for operators.
+- **Deleting a row is not the same as removing its bytes.** Two database
+  behaviours defeat the guarantee unless handled explicitly:
+  - On SQLite, a deleted row survives verbatim in the write-ahead log until a
+    checkpoint retires it, and in the database file until its page is reused.
+    Sendan therefore enables `secure_delete`, which zeroes freed content, and
+    runs `wal_checkpoint(TRUNCATE)` after reaping and after a revocation. Both
+    are load-bearing: removing either leaves the upload identifier and its
+    at-rest key recoverable from disk, in the log file and the database file
+    respectively.
+  - On PostgreSQL, deleted rows persist until autovacuum. This must be
+    documented for operators.
 
 ## 4. Transfer
 

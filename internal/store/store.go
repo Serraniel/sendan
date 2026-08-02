@@ -140,6 +140,11 @@ type Store interface {
 	// exhausted at now, for the reaper to remove. At most limit are returned.
 	ListDead(ctx context.Context, now time.Time, limit int) ([]string, error)
 
+	// Checkpoint retires any write-ahead log, so that deleted rows do not
+	// survive on disk in pages the log still holds. Implementations without a
+	// write-ahead log may make this a no-op.
+	Checkpoint(ctx context.Context) error
+
 	// Close releases the underlying resources.
 	Close() error
 }

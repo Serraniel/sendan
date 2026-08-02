@@ -47,7 +47,16 @@ func OpenSQLite(ctx context.Context, path string) (*SQLite, error) {
 		// WAL keeps readers from blocking the writer, which matters because a
 		// download holds its transaction only briefly but arrives concurrently.
 		// busy_timeout prevents a concurrent writer from failing outright.
-		dsn = path + "?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)"
+		// secure_delete overwrites the content of a deleted row with zeroes
+		// rather than merely marking its page free. Without it the row survives
+		// verbatim in the database file until the page is reused, and that row
+		// holds the blob's at-rest key: an attacker recovering it could decrypt
+		// a blob that outlived its unlink. It costs write amplification that
+		// this workload will not notice.
+		dsn = path + "?_pragma=journal_mode(WAL)" +
+			"&_pragma=busy_timeout(5000)" +
+			"&_pragma=foreign_keys(1)" +
+			"&_pragma=secure_delete(ON)"
 	}
 
 	db, err := sql.Open("sqlite", dsn)
@@ -285,6 +294,21 @@ func (s *SQLite) ListDead(ctx context.Context, now time.Time, limit int) ([]stri
 		return nil, fmt.Errorf("store: iterate: %w", err)
 	}
 	return ids, nil
+}
+
+// Checkpoint flushes the write-ahead log into the database file and truncates
+// it.
+//
+// This is part of the deletion guarantee rather than a performance measure.
+// Deleting a row removes it from the database file, but the pre-deletion pages
+// remain in the write-ahead log until a checkpoint retires them, so an upload's
+// metadata — including the at-rest key that makes its blob readable — would
+// otherwise survive on disk after the upload was deleted.
+func (s *SQLite) Checkpoint(ctx context.Context) error {
+	if _, err := s.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
+		return fmt.Errorf("store: checkpoint: %w", err)
+	}
+	return nil
 }
 
 // Close releases the database handle.
