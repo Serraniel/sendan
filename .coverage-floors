@@ -21,7 +21,7 @@
 internal/crypto      85.0
 internal/store       78.0
 internal/blob        81.0
-internal/upload      74.0
+internal/upload      78.0
 internal/config      93.0
 internal/logging     98.0
 internal/ratelimit   96.0
