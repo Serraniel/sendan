@@ -111,6 +111,25 @@ Continuous integration enforces these checks, including the cross-language
 vector comparison. A failing pipeline blocks merge, and no check may be marked
 `continue-on-error`.
 
+### Coverage floors
+
+Go coverage is held to a per-package floor in `.coverage-floors`; TypeScript
+coverage to thresholds in `web/vitest.config.ts`.
+
+These are a **ratchet, not a target**. Each sits just below the coverage
+actually achieved, so a change that reduces coverage fails rather than being
+noticed later. **When your change raises coverage, raise the floor in the same
+pull request** — that is what keeps it a ratchet rather than a line everyone
+eventually forgets.
+
+The check also rejects a package with no floor, and a floor for a package that
+no longer exists, so the file cannot drift out of step with the code.
+
+> [!IMPORTANT]
+> Coverage is a floor, not a goal. A high percentage over code that never
+> exercises a failure path is worthless. The area-specific requirements above
+> are what actually matter; the floors exist to stop them eroding silently.
+
 ## Cryptographic code
 
 Changes affecting cryptography are held to a stricter standard, and review will

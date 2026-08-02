@@ -78,6 +78,14 @@ jobs:
         run: go vet ./...
       - name: go test (race detector, coverage)
         run: go test -race -covermode=atomic -coverprofile=coverage.out ./...
+
+      # A floor per package, ratcheted just below what is achieved, so a change
+      # that reduces coverage fails rather than being noticed later. It also
+      # rejects a package with no floor and a floor for a package that is gone,
+      # which is what stops the file drifting into decoration.
+      - name: Enforce coverage floors
+        run: ./scripts/coverage.sh
+
       - name: Upload coverage
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -108,7 +116,7 @@ jobs:
           npm ci
           npm run lint
           npm run check
-          npm run test
+          npm run test:coverage
           npm run build
 
       # A single external origin in the built output breaks the strict CSP and
