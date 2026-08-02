@@ -6,12 +6,10 @@ package store
 import (
 	"context"
 	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -21,9 +19,6 @@ import (
 	// reproducible builds, all of which cgo would forfeit.
 	_ "modernc.org/sqlite"
 )
-
-//go:embed migrations/*.sql
-var migrationFS embed.FS
 
 // SQLite is a [Store] backed by a single SQLite database file.
 type SQLite struct {
@@ -73,74 +68,11 @@ func OpenSQLite(ctx context.Context, path string) (*SQLite, error) {
 	}
 
 	s := &SQLite{db: db}
-	if err := s.migrate(ctx); err != nil {
+	if err := migrate(ctx, db, "sqlite", identity); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return s, nil
-}
-
-// migrate applies every embedded migration that has not already run.
-//
-// Migrations are applied in filename order and recorded by name, so adding one
-// is a matter of dropping a file in. There is deliberately no down migration:
-// reversing a schema change on a store whose whole purpose is to forget things
-// is not a operation worth offering.
-func (s *SQLite) migrate(ctx context.Context) error {
-	if _, err := s.db.ExecContext(ctx,
-		`CREATE TABLE IF NOT EXISTS schema_migrations (
-			name       TEXT PRIMARY KEY NOT NULL,
-			applied_at INTEGER NOT NULL
-		)`); err != nil {
-		return fmt.Errorf("store: create migration table: %w", err)
-	}
-
-	entries, err := migrationFS.ReadDir("migrations")
-	if err != nil {
-		return fmt.Errorf("store: read migrations: %w", err)
-	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
-
-	for _, name := range names {
-		var applied int
-		if err := s.db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM schema_migrations WHERE name = ?`, name).Scan(&applied); err != nil {
-			return fmt.Errorf("store: check migration %s: %w", name, err)
-		}
-		if applied > 0 {
-			continue
-		}
-
-		body, err := migrationFS.ReadFile("migrations/" + name)
-		if err != nil {
-			return fmt.Errorf("store: read migration %s: %w", name, err)
-		}
-
-		tx, err := s.db.BeginTx(ctx, nil)
-		if err != nil {
-			return fmt.Errorf("store: begin migration %s: %w", name, err)
-		}
-		if _, err := tx.ExecContext(ctx, string(body)); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("store: apply migration %s: %w", name, err)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`,
-			name, time.Now().Unix()); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("store: record migration %s: %w", name, err)
-		}
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("store: commit migration %s: %w", name, err)
-		}
-	}
-	return nil
 }
 
 // Create stores a new upload, returning ErrConflict if the identifier is
@@ -150,22 +82,9 @@ func (s *SQLite) Create(ctx context.Context, u *Upload) error {
 		return err
 	}
 
-	var salt []byte
-	var memory, iterations, parallelism any
-	if u.Password != nil {
-		salt = u.Password.Salt
-		memory = int64(u.Password.MemoryKiB)
-		iterations = int64(u.Password.Iterations)
-		parallelism = int64(u.Password.Parallelism)
-	}
+	salt, memory, iterations, parallelism := passwordColumns(u)
 
-	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO uploads (
-			id, wrapped_file_key, wrap_nonce, metadata_envelope, metadata_nonce,
-			auth_token_hash, owner_token_hash, at_rest_key,
-			password_salt, argon2_memory_kib, argon2_iterations, argon2_parallelism,
-			size, created_at, expires_at, max_downloads, download_count
-		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	_, err := s.db.ExecContext(ctx, insertUpload,
 		u.ID, u.WrappedFileKey, u.WrapNonce, u.MetadataEnvelope, u.MetadataNonce,
 		u.AuthTokenHash, u.OwnerTokenHash, u.AtRestKey,
 		salt, memory, iterations, parallelism,
@@ -180,19 +99,10 @@ func (s *SQLite) Create(ctx context.Context, u *Upload) error {
 	return nil
 }
 
-const selectColumns = `
-	id, wrapped_file_key, wrap_nonce, metadata_envelope, metadata_nonce,
-	auth_token_hash, owner_token_hash, at_rest_key,
-	password_salt, argon2_memory_kib, argon2_iterations, argon2_parallelism,
-	size, created_at, expires_at, max_downloads, download_count`
-
 // Get returns a live upload, or ErrNotFound if it has expired or is
 // exhausted at now.
 func (s *SQLite) Get(ctx context.Context, id string, now time.Time) (*Upload, error) {
-	row := s.db.QueryRowContext(ctx,
-		`SELECT`+selectColumns+` FROM uploads WHERE id = ?`, id)
-
-	u, err := scanUpload(row)
+	u, err := scanUpload(s.db.QueryRowContext(ctx, selectUpload, id))
 	if err != nil {
 		return nil, err
 	}
@@ -217,13 +127,7 @@ func (s *SQLite) ClaimDownload(ctx context.Context, id string, now time.Time) (*
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	res, err := tx.ExecContext(ctx,
-		`UPDATE uploads
-		    SET download_count = download_count + 1
-		  WHERE id = ?
-		    AND (expires_at IS NULL OR expires_at > ?)
-		    AND (max_downloads = 0 OR download_count < max_downloads)`,
-		id, now.Unix())
+	res, err := tx.ExecContext(ctx, claimDownload, id, now.Unix())
 	if err != nil {
 		return nil, fmt.Errorf("store: claim: %w", err)
 	}
@@ -235,8 +139,7 @@ func (s *SQLite) ClaimDownload(ctx context.Context, id string, now time.Time) (*
 	if affected == 0 {
 		// Distinguish "no such upload" from "limit reached" only for the
 		// caller's logging; both are reported to a client as not found.
-		u, err := scanUpload(tx.QueryRowContext(ctx,
-			`SELECT`+selectColumns+` FROM uploads WHERE id = ?`, id))
+		u, err := scanUpload(tx.QueryRowContext(ctx, selectUpload, id))
 		if err != nil {
 			return nil, err
 		}
@@ -246,8 +149,7 @@ func (s *SQLite) ClaimDownload(ctx context.Context, id string, now time.Time) (*
 		return nil, ErrNotFound
 	}
 
-	u, err := scanUpload(tx.QueryRowContext(ctx,
-		`SELECT`+selectColumns+` FROM uploads WHERE id = ?`, id))
+	u, err := scanUpload(tx.QueryRowContext(ctx, selectUpload, id))
 	if err != nil {
 		return nil, err
 	}
@@ -260,7 +162,7 @@ func (s *SQLite) ClaimDownload(ctx context.Context, id string, now time.Time) (*
 // Delete removes the row outright. There is no soft delete: the row is the only
 // copy of the at-rest key, so removing it is what destroys the content.
 func (s *SQLite) Delete(ctx context.Context, id string) error {
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM uploads WHERE id = ?`, id); err != nil {
+	if _, err := s.db.ExecContext(ctx, deleteUpload, id); err != nil {
 		return fmt.Errorf("store: delete: %w", err)
 	}
 	return nil
@@ -272,28 +174,12 @@ func (s *SQLite) ListDead(ctx context.Context, now time.Time, limit int) ([]stri
 	if limit <= 0 {
 		return nil, nil
 	}
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id FROM uploads
-		  WHERE (expires_at IS NOT NULL AND expires_at <= ?)
-		     OR (max_downloads > 0 AND download_count >= max_downloads)
-		  LIMIT ?`, now.Unix(), limit)
+	rows, err := s.db.QueryContext(ctx, selectDead, now.Unix(), limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: list dead: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("store: scan: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("store: iterate: %w", err)
-	}
-	return ids, nil
+	return scanIDs(rows)
 }
 
 // Checkpoint flushes the write-ahead log into the database file and truncates
@@ -317,10 +203,6 @@ func (s *SQLite) Close() error {
 		return fmt.Errorf("store: close: %w", err)
 	}
 	return nil
-}
-
-type scannable interface {
-	Scan(dest ...any) error
 }
 
 func scanUpload(row scannable) (*Upload, error) {

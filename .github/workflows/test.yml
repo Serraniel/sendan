@@ -33,6 +33,27 @@ jobs:
   test-go:
     name: Unit and integration tests (Go)
     runs-on: ubuntu-latest
+
+    # The store conformance suite runs against every backend, so PostgreSQL has
+    # to be real. Without this the PostgreSQL cases would skip, and a backend
+    # whose tests never run is a backend nobody is testing.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: sendan
+          POSTGRES_DB: sendan
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      SENDAN_TEST_POSTGRES: postgres://postgres:sendan@127.0.0.1:5432/sendan?sslmode=disable
+
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0

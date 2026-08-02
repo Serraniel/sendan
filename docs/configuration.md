@@ -46,8 +46,29 @@ Sizes accept a plain byte count or a binary suffix: `1024`, `500MiB`, `2GiB`,
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SENDAN_DATABASE` | `sqlite:data/sendan.db` | Metadata store location |
+| `SENDAN_DATABASE` | `sqlite:data/sendan.db` | Metadata store location. `sqlite:<path>` or a `postgres://` URL |
 | `SENDAN_STORAGE` | `file:data/blobs` | Blob store location |
+
+> [!IMPORTANT]
+> **Deletion is stronger on SQLite than on PostgreSQL.** SQLite is configured
+> with `secure_delete`, which zeroes a deleted row's content rather than merely
+> marking its page free, and Sendan checkpoints the write-ahead log after
+> reaping so removed rows do not survive in it.
+>
+> PostgreSQL offers neither control directly. Measured against PostgreSQL 17: a
+> deleted row remains in the heap file until `VACUUM`, which Sendan runs after
+> reaping, and that does remove it. What persists is the **write-ahead log**,
+> which retains the row until its segment is recycled, and PostgreSQL has no
+> equivalent of truncating it on demand.
+>
+> A recovered row yields the at-rest key, and so the ability to decrypt a blob
+> that also survived its own deletion. That is the end-to-end ciphertext, **not
+> the content** — reading it still requires the link secret, which never reaches
+> the server.
+>
+> Choose SQLite if the stronger guarantee matters, or encrypt the database
+> volume. Both backends pass the same conformance suite, so they behave
+> identically in every other respect.
 
 ## Compatibility
 
