@@ -69,7 +69,7 @@ func DeriveKeys(fileID, linkSecret []byte) (*Keys, error) {
 // itself. A link without its password therefore decrypts nothing, which is a
 // cryptographic property rather than a server-side policy.
 func DeriveKeysWithPassword(fileID, linkSecret []byte, password string, p PasswordParams) (*Keys, error) {
-	if err := p.validate(); err != nil {
+	if err := p.validate(password); err != nil {
 		return nil, err
 	}
 	return deriveKeys(fileID, linkSecret, p.hash(password))

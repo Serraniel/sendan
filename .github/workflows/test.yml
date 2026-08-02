@@ -119,7 +119,7 @@ jobs:
         run: |
           set -euo pipefail
           node testdata/vectors/generate-json-encoding.mjs
-          go test ./internal/crypto/ -run TestVectorsContentEncoding -update-vectors
+          go test ./internal/crypto/ -run TestVectors -update-vectors
           # git status rather than git diff, so a newly generated but
           # uncommitted vector file is caught as well as a modified one.
           if [ -n "$(git status --porcelain testdata/vectors/)" ]; then

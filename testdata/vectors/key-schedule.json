@@ -1,0 +1,109 @@
+{
+  "description": "Reference output of the spec section 4 key schedule and Argon2id, produced by the Go implementation.",
+  "spec": "docs/spec/wire-format-v1.md section 4",
+  "generator": "go test ./internal/crypto/ -run TestVectorsKeySchedule -update-vectors",
+  "cases": [
+    {
+      "name": "no password",
+      "fileIdHex": "000102030405060708090a0b0c0d0e0f",
+      "linkSecretHex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "wrappingHex": "ba95aef3f24571a258bb333e976bb73be9cc365a26f98c0ba413300e050ba4c9",
+      "metadataHex": "8b305294be7ed0681033e18c1444b040fa0aa16c79e7338fa082fb508b35746d",
+      "authTokenHex": "37c49b03df188ad67ec34ee8bfd411fe91000a5a7027c9a6001fb55e39da2e36"
+    },
+    {
+      "name": "ascii password",
+      "fileIdHex": "000102030405060708090a0b0c0d0e0f",
+      "linkSecretHex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "password": "correct horse battery staple",
+      "saltHex": "404142434445464748494a4b4c4d4e4f",
+      "memoryKiB": 64,
+      "iterations": 1,
+      "parallelism": 1,
+      "wrappingHex": "646e84bea8a289ba9c3ca5428fa68d5a28817cc971a1157393192cd32e759057",
+      "metadataHex": "25f33e73204731f4e2a5200e4d60618a89318d4fca3c8739fc492e336531c921",
+      "authTokenHex": "1d6601f6fc99e34a66702d5141ebf15e01b14976871a4ea6f7208fb8f42d6414"
+    },
+    {
+      "name": "unicode password",
+      "fileIdHex": "000102030405060708090a0b0c0d0e0f",
+      "linkSecretHex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "password": "パスワード🔐",
+      "saltHex": "404142434445464748494a4b4c4d4e4f",
+      "memoryKiB": 64,
+      "iterations": 1,
+      "parallelism": 1,
+      "wrappingHex": "1e69eb44db0205f0d1e02f8422a58ca0eaa5d4009fd00e464cb3e3d54d1b1577",
+      "metadataHex": "339ea852997ba0d56a55dfaca80ed469a22e325bc6ae81ec35e34b3d5c3ae753",
+      "authTokenHex": "c6f9ceb076c0b0771265a0fca956f22ec0beb30b36b03f7db3cda0d2e1c7b2d7"
+    },
+    {
+      "name": "single character password",
+      "fileIdHex": "000102030405060708090a0b0c0d0e0f",
+      "linkSecretHex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "password": "x",
+      "saltHex": "404142434445464748494a4b4c4d4e4f",
+      "memoryKiB": 64,
+      "iterations": 1,
+      "parallelism": 1,
+      "wrappingHex": "cf335b45edd7533862cc4d219ff47b61e97623b3e2b7b0fa5195f7be6cddf638",
+      "metadataHex": "97f83ec73fd5594125cdeb567d43304df2e8f3b3fc9ccf76162f96c518d29c77",
+      "authTokenHex": "062ba6c940749e84cdacecc6b4e98cc2b94b3e55e61ffda6a8057df42d9f08dd"
+    },
+    {
+      "name": "long password",
+      "fileIdHex": "000102030405060708090a0b0c0d0e0f",
+      "linkSecretHex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "password": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "saltHex": "404142434445464748494a4b4c4d4e4f",
+      "memoryKiB": 64,
+      "iterations": 1,
+      "parallelism": 1,
+      "wrappingHex": "125a967e38b84ea3ff3ed973e0c02ff9e94ef0e62733b32da779957cc05c2b2f",
+      "metadataHex": "db5924cd97f5939912b3092af207c5c5d5eee25fab660853819bb844fe3371dc",
+      "authTokenHex": "9cf603877318f3695939780f240872e96f80b7afe8e05d2dde73efe4b524bfc5"
+    },
+    {
+      "name": "specification default parameters",
+      "fileIdHex": "000102030405060708090a0b0c0d0e0f",
+      "linkSecretHex": "fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0efeeedecebeae9e8e7e6e5e4e3e2e1e0",
+      "password": "correct horse battery staple",
+      "saltHex": "404142434445464748494a4b4c4d4e4f",
+      "memoryKiB": 65536,
+      "iterations": 3,
+      "parallelism": 1,
+      "wrappingHex": "5c762bb7cf1f87e1941dbf4b32cf436d0e8d63f9904cecabb1ed3774a83925a1",
+      "metadataHex": "56b050a111a138129dea28a85b9077f13ed485e6791f4e2239e03eb4d18ab28d",
+      "authTokenHex": "25e000a4387b40653d1b250b874a5b66e36eacf163666d4d49c8957fa5d408fd"
+    }
+  ],
+  "argon2id": [
+    {
+      "name": "ascii, cheap parameters",
+      "password": "password",
+      "saltHex": "404142434445464748494a4b4c4d4e4f",
+      "memoryKiB": 64,
+      "iterations": 1,
+      "parallelism": 1,
+      "hashHex": "5a4c97d5135380b31f1803cba9cc6699a5cf3bae78c429fc33df4028ab421e8a"
+    },
+    {
+      "name": "unicode, cheap parameters",
+      "password": "パスワード🔐",
+      "saltHex": "404142434445464748494a4b4c4d4e4f",
+      "memoryKiB": 64,
+      "iterations": 1,
+      "parallelism": 1,
+      "hashHex": "d4d4bdf15d4044352dca472d576ccc7c8a9943046753f8b7d887b2f9d974f520"
+    },
+    {
+      "name": "ascii, specification defaults",
+      "password": "password",
+      "saltHex": "404142434445464748494a4b4c4d4e4f",
+      "memoryKiB": 65536,
+      "iterations": 3,
+      "parallelism": 1,
+      "hashHex": "b1092a52277ab55ba7239ea3e56e6fdffff5e917ee611c5a7f4ac98c207cdc89"
+    }
+  ]
+}
