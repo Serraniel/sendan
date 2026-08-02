@@ -74,6 +74,7 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 | [`docs/design.md`](docs/design.md) | Architecture, cryptographic scheme, and the reasoning behind each decision |
 | [`docs/spec/wire-format-v1.md`](docs/spec/wire-format-v1.md) | Normative wire format and key schedule |
 | [`docs/workflows/`](docs/workflows/README.md) | What each CI workflow does, and what a failure means |
+| [`docs/configuration.md`](docs/configuration.md) | Every environment variable and its default |
 | [`SECURITY.md`](SECURITY.md) | Threat model and vulnerability disclosure policy |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution process, DCO, and testing requirements |
 
