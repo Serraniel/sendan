@@ -19,6 +19,7 @@ import (
 
 	"github.com/Serraniel/sendan/internal/blob"
 	"github.com/Serraniel/sendan/internal/logging"
+	"github.com/Serraniel/sendan/internal/ratelimit"
 	"github.com/Serraniel/sendan/internal/store"
 )
 
@@ -51,6 +52,11 @@ type Service struct {
 	policy Policy
 	log    *slog.Logger
 
+	// attempts is optional. When present, deletion clears an upload's
+	// password-attempt state, so that state about a deleted upload does not
+	// outlive it in memory.
+	attempts *ratelimit.PasswordAttempts
+
 	// now is injectable so tests can control expiry without sleeping.
 	now func() time.Time
 }
@@ -58,6 +64,13 @@ type Service struct {
 // New returns a Service.
 func New(s store.Store, blobs *blob.Shredder, policy Policy, log *slog.Logger) *Service {
 	return &Service{store: s, blobs: blobs, policy: policy, log: log, now: time.Now}
+}
+
+// WithPasswordAttempts attaches a password attempt limiter whose state is
+// cleared when an upload is deleted.
+func (s *Service) WithPasswordAttempts(a *ratelimit.PasswordAttempts) *Service {
+	s.attempts = a
+	return s
 }
 
 // ResolveExpiry turns a requested lifetime into a deadline, applying the
@@ -135,6 +148,12 @@ func (s *Service) Revoke(ctx context.Context, id string, ownerToken []byte) erro
 func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.store.Delete(ctx, id); err != nil {
 		return fmt.Errorf("upload: delete metadata: %w", err)
+	}
+	// Attempt state is keyed by upload identifier, so it is state about the
+	// upload. Leaving it behind would keep a record of a deleted upload in
+	// memory, which the deletion guarantee does not permit.
+	if s.attempts != nil {
+		s.attempts.Forget(id)
 	}
 	if err := s.blobs.Delete(ctx, id); err != nil {
 		// The content is already unrecoverable, so this is a housekeeping
