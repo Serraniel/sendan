@@ -321,13 +321,73 @@ worth stating rather than presenting a link that appears authoritative.
 >   them could catch them.
 >
 > Nothing an instance serves about itself can be a defence against that
-> instance. The command line client remains the only trust anchor — see
-> [SECURITY.md](../SECURITY.md).
+> instance. Verification has to come from outside it: see §7.1.
 
 > [!NOTE]
 > The endpoint is the machine-readable half. The prominent offer AGPL §13 asks
 > for is the client footer, [#41](https://github.com/Serraniel/sendan/issues/41),
 > which is not built yet.
+
+### 7.1 Verifying an instance
+
+A user must be able to answer "is this instance running what it claims?" without
+taking the instance's word for it.
+
+**No endpoint can answer it.** Any credential an instance serves about itself can
+be copied from an honest instance and replayed by a dishonest one, and the
+operator compiles the binary that would produce it. This is not a matter of
+choosing a better attestation format; it is what "the party under examination
+controls the examination" means.
+
+The question is nevertheless tractable, because of what is actually at stake:
+
+> **The client bundle is the trust boundary.** The server holds ciphertext and
+> a wrapped key it cannot unwrap; it could be entirely hostile and still learn
+> nothing. What decides whether a file is safe is the JavaScript the instance
+> delivered to the browser. Verifying an instance therefore reduces to verifying
+> what it served — and bytes served can be fetched and hashed by anyone.
+
+So the verifier is a program the user already trusts, obtained independently of
+the instance, comparing what the instance serves against a statement published
+independently of the operator:
+
+| Piece | Where it comes from | Issue |
+|---|---|---|
+| A digest manifest of every asset in the published client | the release, built by the project's pipeline | [#102](https://github.com/Serraniel/sendan/issues/102) |
+| A signature over that manifest | the release, signed with cosign | [#104](https://github.com/Serraniel/sendan/issues/104) |
+| `sendan verify <url>`, which fetches the instance's assets and compares | the command line client, obtained once and reused | [#103](https://github.com/Serraniel/sendan/issues/103) |
+
+The instance is given no part in it beyond serving the bytes it would serve any
+visitor. It is not asked, and its answers are not relied on.
+
+#### What this establishes
+
+| Claim | Status |
+|---|---|
+| The instance serves the published client | **verified**, for the response this verifier received |
+| The client was modified | **detected** |
+| `/api/source` misreports the version | **detected** — digests will not match the version claimed |
+| A backdoored bundle is served to a chosen victim and a clean one to verifiers | **not detected** |
+| Server-side code | not covered, and does not need to be |
+
+The last two rows are the honest limits. Targeted serving is inherent to
+verifying from a different client than the victim uses; what narrows it is that
+anyone may run the check, from anywhere, at any time, so an attack broad enough
+to matter is observable, and one narrow enough to hide has to identify its
+victim in advance.
+
+#### Considered and not planned
+
+- **A browser extension** verifying what the browser itself received would close
+  the targeted-serving gap for whoever installs it. It is the only mechanism
+  that verifies the exact bytes the victim ran. It is not planned: a second
+  distribution channel, per-browser review processes, and an extension with
+  read access to page contents is itself a security surface.
+- **Hardware remote attestation** (SEV-SNP, TDX) is the only technology that
+  proves what code a remote machine is executing. It is rejected for this
+  project: it requires specific hardware, contradicts the goal that anyone can
+  self-host anywhere, and substitutes trust in a CPU vendor for trust in an
+  operator.
 
 ## 8. Abuse mitigation
 

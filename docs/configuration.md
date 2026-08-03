@@ -46,7 +46,8 @@ require restarting repeatedly to discover the next fault.
 > `/api/source` also reports whether the binary was built from a modified tree,
 > which catches the common case of forgetting to set this. It is not a check on
 > a dishonest operator: the instance compiles and serves that endpoint, so its
-> answers are claims, not evidence.
+> answers are claims, not evidence. Checking an instance rather than believing
+> it is `sendan verify`, described in [`docs/design.md`](design.md) §7.1.
 
 ## Retention
 
