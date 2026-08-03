@@ -102,9 +102,9 @@ Licensed under [AGPL-3.0-or-later](LICENSE).
 The network copyleft provision is deliberate. Operating a modified instance as a
 hosted service obliges the operator to offer users the corresponding source,
 which means a weakened build cannot avoid disclosure by never distributing a
-binary. Every instance will report the version and commit it is running at
-`/api/source` and in the web client footer; neither exists yet, and both are
-required before the first release.
+binary. Every instance reports the version and commit it is running at
+`/api/source`, along with where its corresponding source can be obtained. The
+web client footer that presents this prominently is not built yet.
 
 Contributions are accepted under the [Developer Certificate of
 Origin](https://developercertificate.org/). There is no contributor licence

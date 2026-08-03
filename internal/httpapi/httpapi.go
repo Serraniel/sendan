@@ -20,6 +20,16 @@ type Options struct {
 	// from a forwarded header the client could write.
 	BaseURL *url.URL
 
+	// SourceURL is where this instance's corresponding source can be obtained.
+	// It is the operator's to set, because on a modified instance the upstream
+	// repository is the wrong answer.
+	SourceURL *url.URL
+
+	// Version and Commit are stamped by the release tooling. Where they are
+	// not, the build information Go embeds is used instead.
+	Version string
+	Commit  string
+
 	Log *slog.Logger
 }
 
@@ -38,6 +48,16 @@ func New(opts Options) http.Handler {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok\n"))
 	})
+
+	// The source report is what makes the AGPL's network provision effective:
+	// without it a user has no way to learn what an instance is running, and
+	// the obligation is one nobody can check.
+	source := ""
+	if opts.SourceURL != nil {
+		source = opts.SourceURL.String()
+	}
+	mux.HandleFunc("GET /api/source", handleSource(
+		currentBuild(opts.Version, opts.Commit, source)))
 
 	https := opts.BaseURL != nil && opts.BaseURL.Scheme == "https"
 	return secureHeaders(https, mux)

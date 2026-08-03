@@ -27,6 +27,7 @@ const (
 	DefaultMaxTTL        = 7 * 24 * time.Hour
 	DefaultMaxUploadSize = 1 << 30 // 1 GiB
 	DefaultMaxDownloads  = 0       // unlimited unless the uploader sets one
+	DefaultSourceURL     = "https://github.com/Serraniel/sendan"
 	DefaultDatabase      = "sqlite:data/sendan.db"
 	DefaultStorage       = "file:data/blobs"
 )
@@ -37,6 +38,16 @@ type Config struct {
 	Listen string
 	// BaseURL is the externally visible origin, used to build download links.
 	BaseURL *url.URL
+
+	// SourceURL is where this instance's corresponding source can be obtained,
+	// reported at /api/source.
+	//
+	// It defaults to the upstream repository, which is correct only for an
+	// unmodified build. An operator running modified code must point this at
+	// their own source: AGPL §13 obliges them to offer the source of the
+	// version actually running, and a link to upstream would name code that is
+	// not what the user is talking to.
+	SourceURL *url.URL
 
 	// ServeUI serves the embedded web client. Disabling it yields a
 	// backend-only instance from the same binary.
@@ -103,6 +114,7 @@ func Load(getenv Getenv) (*Config, error) {
 		LogFormat: l.enum("SENDAN_LOG_FORMAT", "json", "json", "text"),
 	}
 	cfg.BaseURL = l.url("SENDAN_BASE_URL", DefaultBaseURL)
+	cfg.SourceURL = l.url("SENDAN_SOURCE_URL", DefaultSourceURL)
 
 	l.validate(cfg)
 

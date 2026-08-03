@@ -272,12 +272,122 @@ Every instance additionally reports its running version and commit at
 `/api/source` and in the client footer, satisfying AGPL §13 and making a fork
 that removes the link conspicuous.
 
+The report names the version, the revision, whether the binary was built from a
+modified tree, where the corresponding source can be obtained, and the licence:
+
+```json
+{
+  "version": "0.1.0",
+  "commit": "e98f80ced3ab68f139a39fb6e62cf90867b28268",
+  "modified": false,
+  "source": "https://github.com/Serraniel/sendan",
+  "license": "AGPL-3.0-or-later"
+}
+```
+
+> [!IMPORTANT]
+> **`source` is configurable, and must be, for §13 to mean anything.** The
+> obligation falls on the operator of a *modified* instance, so an endpoint
+> hardcoded to upstream would satisfy it for nobody it applies to, while naming
+> code that is not what the user is talking to. `SENDAN_SOURCE_URL` defaults to
+> upstream because that is correct for an unmodified build; an operator running
+> modified code is obliged to change it.
+
+`commit` falls back to the revision Go embeds at build time, so a binary built
+with `go build` rather than the release tooling still reports something true
+instead of `unknown`. A stamped value always wins: the linker knows which
+revision was released, whereas the embedded value describes the tree the binary
+was built from, which for a rebuild of an old release is a different thing.
+
+`modified` reports that the working tree was dirty at build time. Such a build
+has no commit that corresponds to it, so no source link can be exact — which is
+worth stating rather than presenting a link that appears authoritative.
+
 > [!WARNING]
-> **Not implemented.** The binary serves only `/healthz` today; the version and
-> commit are compiled in but not exposed. The endpoint is [#32](https://github.com/Serraniel/sendan/issues/32)
-> and the footer [#41](https://github.com/Serraniel/sendan/issues/41). Until both
-> land, an instance discloses nothing about what it is running, and the §13
-> obligation above is a design commitment rather than a property of the code.
+> **This report is a claim, not evidence.** The caveat above applies here as
+> much as to the per-file report: the instance compiles and serves this
+> endpoint, so an operator who has modified the code can return whatever it
+> says. Committing their changes yields a clean tree and `"modified": false`;
+> editing the handler yields any version, commit and source they choose, with
+> nothing to contradict it.
+>
+> What the endpoint achieves is therefore narrower than it looks:
+>
+> - **Honest operators** get a correct answer and an effortless way to meet
+>   §13.
+> - **Careless operators** are caught, because a dirty build reports
+>   `"modified": true` beside a source link that cannot correspond to it.
+> - **Dishonest operators** are not caught at all, and no endpoint served by
+>   them could catch them.
+>
+> Nothing an instance serves about itself can be a defence against that
+> instance. Verification has to come from outside it: see §7.1.
+
+> [!NOTE]
+> The endpoint is the machine-readable half. The prominent offer AGPL §13 asks
+> for is the client footer, [#41](https://github.com/Serraniel/sendan/issues/41),
+> which is not built yet.
+
+### 7.1 Verifying an instance
+
+A user must be able to answer "is this instance running what it claims?" without
+taking the instance's word for it.
+
+**No endpoint can answer it.** Any credential an instance serves about itself can
+be copied from an honest instance and replayed by a dishonest one, and the
+operator compiles the binary that would produce it. This is not a matter of
+choosing a better attestation format; it is what "the party under examination
+controls the examination" means.
+
+The question is nevertheless tractable, because of what is actually at stake:
+
+> **The client bundle is the trust boundary.** The server holds ciphertext and
+> a wrapped key it cannot unwrap; it could be entirely hostile and still learn
+> nothing. What decides whether a file is safe is the JavaScript the instance
+> delivered to the browser. Verifying an instance therefore reduces to verifying
+> what it served — and bytes served can be fetched and hashed by anyone.
+
+So the verifier is a program the user already trusts, obtained independently of
+the instance, comparing what the instance serves against a statement published
+independently of the operator:
+
+| Piece | Where it comes from | Issue |
+|---|---|---|
+| A digest manifest of every asset in the published client | the release, built by the project's pipeline | [#102](https://github.com/Serraniel/sendan/issues/102) |
+| A signature over that manifest | the release, signed with cosign | [#104](https://github.com/Serraniel/sendan/issues/104) |
+| `sendan verify <url>`, which fetches the instance's assets and compares | the command line client, obtained once and reused | [#103](https://github.com/Serraniel/sendan/issues/103) |
+
+The instance is given no part in it beyond serving the bytes it would serve any
+visitor. It is not asked, and its answers are not relied on.
+
+#### What this establishes
+
+| Claim | Status |
+|---|---|
+| The instance serves the published client | **verified**, for the response this verifier received |
+| The client was modified | **detected** |
+| `/api/source` misreports the version | **detected** — digests will not match the version claimed |
+| A backdoored bundle is served to a chosen victim and a clean one to verifiers | **not detected** |
+| Server-side code | not covered, and does not need to be |
+
+The last two rows are the honest limits. Targeted serving is inherent to
+verifying from a different client than the victim uses; what narrows it is that
+anyone may run the check, from anywhere, at any time, so an attack broad enough
+to matter is observable, and one narrow enough to hide has to identify its
+victim in advance.
+
+#### Considered and not planned
+
+- **A browser extension** verifying what the browser itself received would close
+  the targeted-serving gap for whoever installs it. It is the only mechanism
+  that verifies the exact bytes the victim ran. It is not planned: a second
+  distribution channel, per-browser review processes, and an extension with
+  read access to page contents is itself a security surface.
+- **Hardware remote attestation** (SEV-SNP, TDX) is the only technology that
+  proves what code a remote machine is executing. It is rejected for this
+  project: it requires specific hardware, contradicts the goal that anyone can
+  self-host anywhere, and substitutes trust in a CPU vendor for trust in an
+  operator.
 
 ## 8. Abuse mitigation
 

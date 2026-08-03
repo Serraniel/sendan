@@ -11,14 +11,15 @@ require restarting repeatedly to discover the next fault.
 > [!WARNING]
 > **Not every variable is honoured yet.** All of them are parsed and validated,
 > so an invalid value fails at startup, and storage now opens for real — but the
-> server has no HTTP API, so nothing can be uploaded or downloaded regardless of
-> configuration.
+> server serves only `/healthz` and `/api/source`, so nothing can be uploaded or
+> downloaded regardless of configuration.
 >
 > | Variable | Effect today |
 > |---|---|
 > | `SENDAN_LISTEN`, `SENDAN_LOG_*` | applied |
 > | `SENDAN_DATABASE`, `SENDAN_STORAGE` | applied — the backend is opened at startup and the reaper sweeps it |
 > | `SENDAN_*_TTL`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | given to the lifecycle service, so they govern expiry and reaping — but nothing can be uploaded, so nothing yet reaches them |
+> | `SENDAN_SOURCE_URL` | applied — reported at `/api/source` |
 > | `SENDAN_BASE_URL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_SERVE_UI` | validated and logged only. Nothing builds links, measures an upload, or serves a client yet |
 > | `SENDAN_SEND_COMPAT` | no endpoints; the compatibility layer is M7. It does log a warning at startup when enabled |
 >
@@ -32,6 +33,21 @@ require restarting repeatedly to discover the next fault.
 | `SENDAN_LISTEN` | `:8080` | Address the HTTP server binds to |
 | `SENDAN_BASE_URL` | `http://localhost:8080` | Externally visible origin, used to build download links. Must be absolute `http` or `https` |
 | `SENDAN_SERVE_UI` | `true` | Serve the embedded web client. `false` gives a backend-only instance from the same binary |
+| `SENDAN_SOURCE_URL` | the upstream repository | Where this instance's corresponding source can be obtained, reported at `/api/source` |
+
+> [!IMPORTANT]
+> **If you run modified code, you must set `SENDAN_SOURCE_URL`.** AGPL §13
+> obliges the operator of a modified instance to offer its users the source of
+> the version they are actually talking to. The default names the upstream
+> repository, which is correct only for an unmodified build; leaving it in place
+> on a modified instance both fails the obligation and points users at code that
+> is not running.
+>
+> `/api/source` also reports whether the binary was built from a modified tree,
+> which catches the common case of forgetting to set this. It is not a check on
+> a dishonest operator: the instance compiles and serves that endpoint, so its
+> answers are claims, not evidence. Checking an instance rather than believing
+> it is `sendan verify`, described in [`docs/design.md`](design.md) §7.1.
 
 ## Retention
 
