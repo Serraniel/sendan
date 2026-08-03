@@ -439,7 +439,44 @@ structural: size caps, per-address rate limits, a short default retention period
 `X-Robots-Tag: noindex`, and optional upload authentication (token, later OIDC)
 for instances that require it.
 
-### 8.1 Response headers
+### 8.1 Rate limiting
+
+Every request except `/healthz` passes a per-address token bucket
+(`internal/ratelimit`, applied in `internal/httpapi`). The limit is per client
+rather than global: a global one turns a single abusive caller into an outage
+for everyone, which is a denial of service delivered by the defence.
+
+Two decisions in choosing the key are worth recording, because both are places
+where a plausible implementation is worthless.
+
+**`X-Forwarded-For` is read only when a proxy is configured to exist.** The
+header is written by whoever spoke last; on an instance with nothing in front
+of it, that is the caller. Reading it unconditionally would let a caller pick a
+fresh bucket per request and never meet a limit. `SENDAN_TRUSTED_PROXIES`
+defaults to zero, and with *N* proxies the client is the *N*th entry from the
+right — each proxy appends the address it observed, so the rightmost was written
+by the nearest proxy and entries a caller forges can only pad the left.
+
+Misconfiguring the count too high charges several clients to one bucket:
+stricter than intended, never weaker. The dangerous direction is claiming a
+proxy that does not exist.
+
+**IPv6 is keyed on the /64, not the address.** A residential allocation is
+commonly a /64 or larger, so keying on the full 128-bit address would let one
+subscriber present billions of distinct addresses and never meet a limit —
+which is not a limit. Clients sharing a /64 share a bucket, which is the
+intended trade: a limit that can be evaded is worth nothing, whereas one that is
+occasionally shared is merely stricter than necessary.
+
+A refused request receives `429` with `Retry-After`, rounded up so a client is
+never told to return at a moment it is certain to be refused again.
+
+> [!NOTE]
+> This is the request-rate limit. Password guessing is limited separately and
+> per upload, by `ratelimit.PasswordAttempts`, because an attacker with many
+> addresses would otherwise get many attempts at one file.
+
+### 8.2 Response headers
 
 Every response carries the same header set, applied as one middleware around the
 router rather than per route, so an endpoint added later inherits it. See

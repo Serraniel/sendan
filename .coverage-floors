@@ -25,7 +25,7 @@ internal/upload      79.0
 # internal/httpapi cannot reach 100: debug.ReadBuildInfo reporting failure and a
 # marshal error on a struct of strings and a bool are both unreachable from a
 # test.
-internal/httpapi     95.0
+internal/httpapi     96.0
 internal/config      93.0
 internal/logging     98.0
 internal/ratelimit   96.0

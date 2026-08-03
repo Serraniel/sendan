@@ -214,3 +214,49 @@ func TestWhitespaceIsTolerated(t *testing.T) {
 		t.Errorf("whitespace was not trimmed: %q %s", cfg.Listen, cfg.DefaultTTL)
 	}
 }
+
+// A rate limit with no burst refuses every request, including the first. That
+// is indistinguishable from an outage at the point of use, so it is rejected at
+// startup where the cause is still visible.
+func TestRateLimitRequiresABurst(t *testing.T) {
+	_, err := Load(env(map[string]string{
+		"SENDAN_RATE_LIMIT": "120",
+		"SENDAN_RATE_BURST": "0",
+	}))
+	if err == nil {
+		t.Fatal("a limit with no burst must be rejected")
+	}
+	if !strings.Contains(err.Error(), "SENDAN_RATE_BURST") {
+		t.Fatalf("the error does not name the setting at fault: %v", err)
+	}
+}
+
+// Disabling the limit entirely is a legitimate choice, and must not be confused
+// with the misconfiguration above.
+func TestRateLimitMayBeDisabled(t *testing.T) {
+	cfg, err := Load(env(map[string]string{
+		"SENDAN_RATE_LIMIT": "0",
+		"SENDAN_RATE_BURST": "0",
+	}))
+	if err != nil {
+		t.Fatalf("disabling the limit was rejected: %v", err)
+	}
+	if cfg.RateLimit != 0 {
+		t.Errorf("rate limit %d, want 0", cfg.RateLimit)
+	}
+}
+
+func TestTrustedProxiesDefaultsToNone(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	// Anything else would mean an out-of-the-box instance reads a header the
+	// caller writes, and so has no effective rate limit.
+	if cfg.TrustedProxies != 0 {
+		t.Errorf("trusted proxies %d, want 0", cfg.TrustedProxies)
+	}
+	if cfg.RateLimit <= 0 {
+		t.Errorf("rate limit %d: an instance is unmetered by default", cfg.RateLimit)
+	}
+}
