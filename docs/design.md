@@ -272,12 +272,41 @@ Every instance additionally reports its running version and commit at
 `/api/source` and in the client footer, satisfying AGPL §13 and making a fork
 that removes the link conspicuous.
 
-> [!WARNING]
-> **Not implemented.** The binary serves only `/healthz` today; the version and
-> commit are compiled in but not exposed. The endpoint is [#32](https://github.com/Serraniel/sendan/issues/32)
-> and the footer [#41](https://github.com/Serraniel/sendan/issues/41). Until both
-> land, an instance discloses nothing about what it is running, and the §13
-> obligation above is a design commitment rather than a property of the code.
+The report names the version, the revision, whether the binary was built from a
+modified tree, where the corresponding source can be obtained, and the licence:
+
+```json
+{
+  "version": "0.1.0",
+  "commit": "e98f80ced3ab68f139a39fb6e62cf90867b28268",
+  "modified": false,
+  "source": "https://github.com/Serraniel/sendan",
+  "license": "AGPL-3.0-or-later"
+}
+```
+
+> [!IMPORTANT]
+> **`source` is configurable, and must be, for §13 to mean anything.** The
+> obligation falls on the operator of a *modified* instance, so an endpoint
+> hardcoded to upstream would satisfy it for nobody it applies to, while naming
+> code that is not what the user is talking to. `SENDAN_SOURCE_URL` defaults to
+> upstream because that is correct for an unmodified build; an operator running
+> modified code is obliged to change it.
+
+`commit` falls back to the revision Go embeds at build time, so a binary built
+with `go build` rather than the release tooling still reports something true
+instead of `unknown`. A stamped value always wins: the linker knows which
+revision was released, whereas the embedded value describes the tree the binary
+was built from, which for a rebuild of an old release is a different thing.
+
+`modified` reports that the working tree was dirty at build time. Such a build
+has no commit that corresponds to it, so no source link can be exact — which is
+worth stating rather than presenting a link that appears authoritative.
+
+> [!NOTE]
+> The endpoint is the machine-readable half. The prominent offer AGPL §13 asks
+> for is the client footer, [#41](https://github.com/Serraniel/sendan/issues/41),
+> which is not built yet.
 
 ## 8. Abuse mitigation
 

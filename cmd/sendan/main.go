@@ -30,10 +30,10 @@ import (
 	"github.com/Serraniel/sendan/internal/upload"
 )
 
-// version is set at build time by the release tooling. It will be reported at
-// /api/source, which is how an instance discloses what it is running; that
-// endpoint is not built yet (#32), so these are currently compiled in and
-// unused.
+// version is set at build time by the release tooling and reported at
+// /api/source, which is how an instance discloses what it is running. An
+// unstamped build falls back to the revision Go embeds, so a binary built
+// without the release tooling still reports something true.
 var (
 	version = "dev"
 	commit  = "unknown"
@@ -72,6 +72,7 @@ func run() error {
 		"commit", commit,
 		"listen", cfg.Listen,
 		"base_url", cfg.BaseURL.String(),
+		"source_url", cfg.SourceURL.String(),
 		"serve_ui", cfg.ServeUI,
 		"send_compat", cfg.SendCompat,
 		"default_ttl", cfg.DefaultTTL.String(),
@@ -125,8 +126,11 @@ func run() error {
 	defer reaper.Wait()
 
 	handler := httpapi.New(httpapi.Options{
-		BaseURL: cfg.BaseURL,
-		Log:     log,
+		BaseURL:   cfg.BaseURL,
+		SourceURL: cfg.SourceURL,
+		Version:   version,
+		Commit:    commit,
+		Log:       log,
 	})
 
 	srv := &http.Server{
