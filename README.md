@@ -20,9 +20,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > with encryption at rest; the expiry, revocation and reaping lifecycle;
 > configuration, structured logging and abuse controls.
 >
-> **Not built:** the HTTP API, the web client, and the command line client. The
-> binary currently starts, reads its configuration and serves a health endpoint.
-> It cannot yet accept or serve a file.
+> **Not built:** the HTTP API, the web client, the command line client, and the
+> container image. The binary currently starts, reads its configuration, opens
+> its storage backends, runs the reaper and serves `/healthz`. It cannot yet
+> accept or serve a file.
 
 ## Features
 
@@ -101,8 +102,9 @@ Licensed under [AGPL-3.0-or-later](LICENSE).
 The network copyleft provision is deliberate. Operating a modified instance as a
 hosted service obliges the operator to offer users the corresponding source,
 which means a weakened build cannot avoid disclosure by never distributing a
-binary. Every instance reports the version and commit it is running at
-`/api/source` and in the web client footer.
+binary. Every instance will report the version and commit it is running at
+`/api/source` and in the web client footer; neither exists yet, and both are
+required before the first release.
 
 Contributions are accepted under the [Developer Certificate of
 Origin](https://developercertificate.org/). There is no contributor licence

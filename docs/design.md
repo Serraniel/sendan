@@ -33,6 +33,7 @@ command line client are produced from a single Go module.
 | `internal/ratelimit` | Structural abuse controls |
 | `web/src/crypto` | The TypeScript half of the cryptographic scheme |
 | `testdata/vectors` | Shared cross-language test vectors |
+| `scripts` | Checks continuous integration runs and contributors can run directly, currently the coverage gate |
 
 Each backend pair is held to a single conformance suite — `store/storetest` and
 `blob/blobtest` — so a second backend is not a second set of assumptions.
@@ -269,6 +270,13 @@ endpoints.
 Every instance additionally reports its running version and commit at
 `/api/source` and in the client footer, satisfying AGPL §13 and making a fork
 that removes the link conspicuous.
+
+> [!WARNING]
+> **Not implemented.** The binary serves only `/healthz` today; the version and
+> commit are compiled in but not exposed. The endpoint is [#32](https://github.com/Serraniel/sendan/issues/32)
+> and the footer [#41](https://github.com/Serraniel/sendan/issues/41). Until both
+> land, an instance discloses nothing about what it is running, and the §13
+> obligation above is a design commitment rather than a property of the code.
 
 ## 8. Abuse mitigation
 
