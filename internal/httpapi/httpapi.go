@@ -11,6 +11,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+
+	"github.com/Serraniel/sendan/internal/upload"
 )
 
 // Options configures the handler.
@@ -29,6 +31,11 @@ type Options struct {
 	// not, the build information Go embeds is used instead.
 	Version string
 	Commit  string
+
+	// Uploads owns the upload lifecycle. Routes that need it are registered
+	// only when it is present, so a handler can never be reached with a nil
+	// service.
+	Uploads *upload.Service
 
 	Log *slog.Logger
 }
@@ -58,6 +65,10 @@ func New(opts Options) http.Handler {
 	}
 	mux.HandleFunc("GET /api/source", handleSource(
 		currentBuild(opts.Version, opts.Commit, source)))
+
+	if opts.Uploads != nil {
+		mux.HandleFunc("GET /api/uploads/{id}/metadata", handleMetadata(opts.Uploads))
+	}
 
 	https := opts.BaseURL != nil && opts.BaseURL.Scheme == "https"
 	return secureHeaders(https, mux)

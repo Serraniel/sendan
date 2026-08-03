@@ -130,6 +130,7 @@ func run() error {
 		SourceURL: cfg.SourceURL,
 		Version:   version,
 		Commit:    commit,
+		Uploads:   uploads,
 		Log:       log,
 	})
 

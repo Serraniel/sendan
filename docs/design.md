@@ -229,6 +229,49 @@ exhausts tab memory:
 - otherwise a **service worker** decrypting records into the response stream,
   which remains the only portable approach.
 
+
+### 4.1 Metadata
+
+`GET /api/uploads/{id}/metadata` returns what a client needs before deciding
+whether to download: the wrapped file key, the encrypted metadata envelope,
+their nonces, whether a password is required and with which Argon2id
+parameters, and the remaining lifetime.
+
+It is **unauthenticated**, and must be. The download token derives from the same
+key schedule as everything else, so producing one requires the password
+(spec §4) — while this endpoint is where a client learns whether a password is
+needed and which parameters to derive it with. Requiring the token would make
+the response unobtainable by precisely the clients that need it.
+
+Nothing is disclosed by that. The wrapped key and the envelope are AES-256-GCM
+ciphertext under keys derived from the link secret, which never reaches the
+server; the identifier is 16 random bytes, so responses cannot be reached by
+enumeration; and the Argon2id parameters permit no offline attack, because the
+password hash is only ever combined with that same link secret.
+
+> [!IMPORTANT]
+> **The response must never carry the stored size.** The server knows the
+> ciphertext length, and reporting it would hand a file's size to anyone holding
+> an identifier — undoing the padding the metadata envelope applies for exactly
+> that reason (spec §7). The size a client learns comes from decrypting the
+> envelope, which requires the link secret.
+
+Reading metadata does **not** consume the download allowance. A chat client
+generating a link preview, or a recipient checking a filename, would otherwise
+exhaust a limited upload before anyone fetched the content. Only the content
+endpoint claims a download.
+
+Expired, exhausted, revoked and never-existed are one answer, byte for byte. Any
+difference between them would report on an upload the caller is not entitled to
+know about — including confirming that a link which has since expired once
+existed.
+
+> [!NOTE]
+> `downloadsRemaining` lets a holder of the identifier observe when a recipient
+> downloads, by polling. That is accepted: the recipient's own interface needs
+> the count, and an identifier holder can already observe availability by
+> attempting a download.
+
 ## 5. Third-party client compatibility
 
 Adopting RFC 8188 encrypted-content-encoding and HKDF-SHA256 as the *native*
