@@ -88,7 +88,7 @@ func (s *SQLite) Create(ctx context.Context, u *Upload) error {
 		u.ID, u.WrappedFileKey, u.WrapNonce, u.MetadataEnvelope, u.MetadataNonce,
 		u.AuthTokenHash, u.OwnerTokenHash, u.AtRestKey,
 		salt, memory, iterations, parallelism,
-		u.Size, u.CreatedAt.Unix(), nullableUnix(u.ExpiresAt), u.MaxDownloads, u.DownloadCount,
+		u.Size, u.CreatedAt.Unix(), nullableUnix(u.ExpiresAt), u.MaxDownloads, u.DownloadCount, u.BytesServed,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -115,37 +115,33 @@ func (s *SQLite) Get(ctx context.Context, id string, now time.Time) (*Upload, er
 	return u, nil
 }
 
-// ClaimDownload reserves one download and returns the upload.
+// RecordServed adds n bytes to the served total and returns the upload as it
+// stands afterwards.
 //
-// The reservation and the limit check are a single statement. Reading the
-// count, deciding, then incrementing would let concurrent requests all observe
-// the same count and collectively exceed the limit.
-func (s *SQLite) ClaimDownload(ctx context.Context, id string, now time.Time) (*Upload, error) {
+// The accumulation and the recomputed count are a single statement, so
+// concurrent transfers cannot lose each other's bytes.
+func (s *SQLite) RecordServed(ctx context.Context, id string, n int64) (*Upload, error) {
+	if n < 0 {
+		return nil, fmt.Errorf("store: record served: negative byte count %d", n)
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("store: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	res, err := tx.ExecContext(ctx, claimDownload, id, now.Unix())
+	res, err := tx.ExecContext(ctx, recordServed, n, n, id)
 	if err != nil {
-		return nil, fmt.Errorf("store: claim: %w", err)
+		return nil, fmt.Errorf("store: record served: %w", err)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("store: claim: %w", err)
+		return nil, fmt.Errorf("store: record served: %w", err)
 	}
-
 	if affected == 0 {
-		// Distinguish "no such upload" from "limit reached" only for the
-		// caller's logging; both are reported to a client as not found.
-		u, err := scanUpload(tx.QueryRowContext(ctx, selectUpload, id))
-		if err != nil {
-			return nil, err
-		}
-		if u.Exhausted() {
-			return nil, ErrExhausted
-		}
+		// A transfer may still be in flight when the reaper removes what it was
+		// reading. Reporting that is more useful than failing.
 		return nil, ErrNotFound
 	}
 
@@ -217,7 +213,7 @@ func scanUpload(row scannable) (*Upload, error) {
 		&u.ID, &u.WrappedFileKey, &u.WrapNonce, &u.MetadataEnvelope, &u.MetadataNonce,
 		&u.AuthTokenHash, &u.OwnerTokenHash, &u.AtRestKey,
 		&salt, &memory, &iters, &par,
-		&u.Size, &createdAt, &expiresAt, &u.MaxDownloads, &u.DownloadCount,
+		&u.Size, &createdAt, &expiresAt, &u.MaxDownloads, &u.DownloadCount, &u.BytesServed,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound

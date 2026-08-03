@@ -100,7 +100,7 @@ func (p *Postgres) Create(ctx context.Context, u *Upload) error {
 		u.ID, u.WrappedFileKey, u.WrapNonce, u.MetadataEnvelope, u.MetadataNonce,
 		u.AuthTokenHash, u.OwnerTokenHash, u.AtRestKey,
 		salt, memory, iterations, parallelism,
-		u.Size, u.CreatedAt.Unix(), nullableUnix(u.ExpiresAt), u.MaxDownloads, u.DownloadCount,
+		u.Size, u.CreatedAt.Unix(), nullableUnix(u.ExpiresAt), u.MaxDownloads, u.DownloadCount, u.BytesServed,
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -125,34 +125,31 @@ func (p *Postgres) Get(ctx context.Context, id string, now time.Time) (*Upload, 
 	return u, nil
 }
 
-// ClaimDownload reserves one download and returns the upload.
+// RecordServed adds n bytes to the served total and returns the upload as it
+// stands afterwards.
 //
-// As with SQLite the reservation and the limit check are one statement, so
-// concurrent requests cannot collectively exceed the limit.
-func (p *Postgres) ClaimDownload(ctx context.Context, id string, now time.Time) (*Upload, error) {
+// As with SQLite the accumulation and the recomputed count are one statement,
+// so concurrent transfers cannot lose each other's bytes.
+func (p *Postgres) RecordServed(ctx context.Context, id string, n int64) (*Upload, error) {
+	if n < 0 {
+		return nil, fmt.Errorf("store: record served: negative byte count %d", n)
+	}
+
 	tx, err := p.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("store: begin: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	res, err := tx.ExecContext(ctx, rebind(claimDownload), id, now.Unix())
+	res, err := tx.ExecContext(ctx, rebind(recordServed), n, n, id)
 	if err != nil {
-		return nil, fmt.Errorf("store: claim: %w", err)
+		return nil, fmt.Errorf("store: record served: %w", err)
 	}
 	affected, err := res.RowsAffected()
 	if err != nil {
-		return nil, fmt.Errorf("store: claim: %w", err)
+		return nil, fmt.Errorf("store: record served: %w", err)
 	}
-
 	if affected == 0 {
-		u, err := scanUpload(tx.QueryRowContext(ctx, rebind(selectUpload), id))
-		if err != nil {
-			return nil, err
-		}
-		if u.Exhausted() {
-			return nil, ErrExhausted
-		}
 		return nil, ErrNotFound
 	}
 

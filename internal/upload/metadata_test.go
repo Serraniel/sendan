@@ -136,3 +136,65 @@ func TestMetadataOnAnUnknownUpload(t *testing.T) {
 		t.Fatalf("got %v, want ErrNotFound", err)
 	}
 }
+
+// The counter counts transfers, not requests. These are the two cases that rule
+// out the alternatives: counting requests would charge a resumed download
+// twice, and counting completions would let an attacker read almost all of a
+// file repeatedly without ever being counted.
+func TestRecordServedCountsTransfersNotRequests(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	const id = "SERVEDAAAAAAAAAAAAAAAA"
+	const content = "0123456789" // ten bytes
+	h.put(t, id, content, h.clock.Add(time.Hour), 2)
+
+	// Interrupted at 60%, then resumed: one download, not two.
+	if err := h.svc.RecordServed(t.Context(), id, 6); err != nil {
+		t.Fatalf("partial: %v", err)
+	}
+	u, err := h.store.Get(t.Context(), id, h.clock)
+	if err != nil {
+		t.Fatalf("the upload vanished after a partial transfer: %v", err)
+	}
+	if u.DownloadCount != 0 {
+		t.Fatalf("a partial transfer counted %d, want 0", u.DownloadCount)
+	}
+
+	if err := h.svc.RecordServed(t.Context(), id, 4); err != nil {
+		t.Fatalf("remainder: %v", err)
+	}
+	u, err = h.store.Get(t.Context(), id, h.clock)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if u.DownloadCount != 1 {
+		t.Fatalf("a resumed transfer counted %d, want 1", u.DownloadCount)
+	}
+}
+
+func TestRecordServedIgnoresNothingToRecord(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	const id = "ZEROAAAAAAAAAAAAAAAAAA"
+	h.put(t, id, "content", h.clock.Add(time.Hour), 0)
+
+	for _, n := range []int64{0, -1} {
+		if err := h.svc.RecordServed(t.Context(), id, n); err != nil {
+			t.Fatalf("RecordServed(%d): %v", n, err)
+		}
+	}
+	u, err := h.store.Get(t.Context(), id, h.clock)
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if u.BytesServed != 0 {
+		t.Errorf("recorded %d bytes for a transfer that served none", u.BytesServed)
+	}
+}
+
+// A transfer may still be running when the reaper removes what it was reading.
+// Reporting that as an error would surface a race nobody can act on.
+func TestRecordServedToleratesAVanishedUpload(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	if err := h.svc.RecordServed(t.Context(), "GONEAAAAAAAAAAAAAAAAAA", 100); err != nil {
+		t.Fatalf("recording against a removed upload failed: %v", err)
+	}
+}

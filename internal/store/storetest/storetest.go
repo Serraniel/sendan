@@ -33,22 +33,24 @@ func Run(t *testing.T, newStore Factory) {
 	t.Helper()
 
 	for name, fn := range map[string]func(*testing.T, Factory){
-		"CreateAndGet":                  testCreateAndGet,
-		"CreateRejectsDuplicates":       testCreateRejectsDuplicates,
-		"CreateRejectsIncomplete":       testCreateRejectsIncomplete,
-		"PasswordParametersRoundTrip":   testPasswordParametersRoundTrip,
-		"NoPasswordMeansNoParameters":   testNoPasswordMeansNoParameters,
-		"ExpiredIsUnreachable":          testExpiredIsUnreachable,
-		"NoDeadlineNeverExpires":        testNoDeadlineNeverExpires,
-		"DownloadLimitEnforced":         testDownloadLimitEnforced,
-		"UnlimitedDownloads":            testUnlimitedDownloads,
-		"ConcurrentClaimsRespectLimit":  testConcurrentClaimsRespectLimit,
-		"DeleteIsHardAndIdempotent":     testDeleteIsHardAndIdempotent,
-		"ListDeadFindsExpired":          testListDeadFindsExpired,
-		"ListDeadFindsExhausted":        testListDeadFindsExhausted,
-		"ListDeadRespectsLimit":         testListDeadRespectsLimit,
-		"CheckpointIsSafeToCallAnyTime": testCheckpointIsSafeToCallAnyTime,
-		"LargeValuesRoundTrip":          testLargeValuesRoundTrip,
+		"CreateAndGet":                     testCreateAndGet,
+		"CreateRejectsDuplicates":          testCreateRejectsDuplicates,
+		"CreateRejectsIncomplete":          testCreateRejectsIncomplete,
+		"PasswordParametersRoundTrip":      testPasswordParametersRoundTrip,
+		"NoPasswordMeansNoParameters":      testNoPasswordMeansNoParameters,
+		"ExpiredIsUnreachable":             testExpiredIsUnreachable,
+		"NoDeadlineNeverExpires":           testNoDeadlineNeverExpires,
+		"DownloadLimitEnforced":            testDownloadLimitEnforced,
+		"UnlimitedDownloads":               testUnlimitedDownloads,
+		"PartialTransfersChargedByVolume":  testPartialTransfersAreChargedByVolume,
+		"RepeatedNearCompleteReadsCharged": testRepeatedNearCompleteReadsAreCharged,
+		"ConcurrentServedBytesNotLost":     testConcurrentServedBytesAreNotLost,
+		"DeleteIsHardAndIdempotent":        testDeleteIsHardAndIdempotent,
+		"ListDeadFindsExpired":             testListDeadFindsExpired,
+		"ListDeadFindsExhausted":           testListDeadFindsExhausted,
+		"ListDeadRespectsLimit":            testListDeadRespectsLimit,
+		"CheckpointIsSafeToCallAnyTime":    testCheckpointIsSafeToCallAnyTime,
+		"LargeValuesRoundTrip":             testLargeValuesRoundTrip,
 	} {
 		t.Run(name, func(t *testing.T) { fn(t, newStore) })
 	}
@@ -212,8 +214,12 @@ func testExpiredIsUnreachable(t *testing.T, newStore Factory) {
 	if _, err := s.Get(t.Context(), u.ID, now); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("get: got %v, want ErrNotFound", err)
 	}
-	if _, err := s.ClaimDownload(t.Context(), u.ID, now); !errors.Is(err, store.ErrNotFound) {
-		t.Errorf("claim: got %v, want ErrNotFound", err)
+	// Recording bytes still succeeds on a row the reaper has not reached. A
+	// transfer may have been in flight when the deadline passed, and those
+	// bytes were served whatever the clock says. Liveness is enforced by Get,
+	// which is what refuses to start a transfer.
+	if _, err := s.RecordServed(t.Context(), u.ID, 1); err != nil {
+		t.Errorf("record served on an expired row: %v", err)
 	}
 }
 
@@ -245,20 +251,81 @@ func testDownloadLimitEnforced(t *testing.T, newStore Factory) {
 		t.Fatalf("create: %v", err)
 	}
 
+	// A whole file's worth of bytes is one download, so serving the size twice
+	// reaches the limit.
 	for i := 1; i <= 2; i++ {
-		got, err := s.ClaimDownload(t.Context(), u.ID, now)
+		got, err := s.RecordServed(t.Context(), u.ID, u.Size)
 		if err != nil {
-			t.Fatalf("claim %d: %v", i, err)
+			t.Fatalf("serve %d: %v", i, err)
 		}
 		if got.DownloadCount != i {
-			t.Fatalf("claim %d recorded count %d", i, got.DownloadCount)
+			t.Fatalf("after serving %d files' worth the count is %d, want %d", i, got.DownloadCount, i)
 		}
-	}
-	if _, err := s.ClaimDownload(t.Context(), u.ID, now); !errors.Is(err, store.ErrExhausted) {
-		t.Fatalf("third claim: got %v, want ErrExhausted", err)
 	}
 	if _, err := s.Get(t.Context(), u.ID, now); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("an exhausted upload is still reachable: %v", err)
+	}
+}
+
+// A transfer that stops partway is charged for what it consumed, and resuming
+// it costs nothing further. Counting requests would charge two for one file;
+// counting only completions would let an attacker read almost all of a file
+// repeatedly without ever being counted.
+func testPartialTransfersAreChargedByVolume(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	now := time.Now()
+	u := Sample(t, NewID(t))
+	u.MaxDownloads = 1
+	if err := s.Create(t.Context(), u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Nine tenths of the file, then the rest: one download in total.
+	got, err := s.RecordServed(t.Context(), u.ID, u.Size*9/10)
+	if err != nil {
+		t.Fatalf("partial: %v", err)
+	}
+	if got.DownloadCount != 0 {
+		t.Fatalf("a partial transfer counted %d downloads, want 0", got.DownloadCount)
+	}
+	if _, err := s.Get(t.Context(), u.ID, now); err != nil {
+		t.Fatalf("the upload became unreachable after a partial transfer: %v", err)
+	}
+
+	got, err = s.RecordServed(t.Context(), u.ID, u.Size-u.Size*9/10)
+	if err != nil {
+		t.Fatalf("remainder: %v", err)
+	}
+	if got.DownloadCount != 1 {
+		t.Fatalf("resuming to completion counted %d downloads, want 1", got.DownloadCount)
+	}
+	if _, err := s.Get(t.Context(), u.ID, now); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("the upload survived its only download: %v", err)
+	}
+}
+
+// Reading almost all of a file repeatedly must be charged. This is the case
+// that rules out counting completions.
+func testRepeatedNearCompleteReadsAreCharged(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	u := Sample(t, NewID(t))
+	u.MaxDownloads = 2
+	if err := s.Create(t.Context(), u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	// Three reads of 99%, none of them ever finishing.
+	ninetyNine := u.Size * 99 / 100
+	var last *store.Upload
+	for i := range 3 {
+		got, err := s.RecordServed(t.Context(), u.ID, ninetyNine)
+		if err != nil {
+			t.Fatalf("read %d: %v", i+1, err)
+		}
+		last = got
+	}
+	if last.DownloadCount < 2 {
+		t.Fatalf("three reads of 99%% counted %d downloads; the limit is evadable by aborting", last.DownloadCount)
 	}
 }
 
@@ -270,33 +337,39 @@ func testUnlimitedDownloads(t *testing.T, newStore Factory) {
 		t.Fatalf("create: %v", err)
 	}
 	for i := range 20 {
-		if _, err := s.ClaimDownload(t.Context(), u.ID, now); err != nil {
-			t.Fatalf("claim %d: %v", i, err)
+		if _, err := s.RecordServed(t.Context(), u.ID, u.Size); err != nil {
+			t.Fatalf("serve %d: %v", i, err)
 		}
+	}
+	if _, err := s.Get(t.Context(), u.ID, now); err != nil {
+		t.Fatalf("an upload with no limit became unreachable: %v", err)
 	}
 }
 
-// Exceeding a download limit under concurrency is a security defect, not a
-// cosmetic one: the uploader chose the limit and the file must not be readable
-// more times than that.
-func testConcurrentClaimsRespectLimit(t *testing.T, newStore Factory) {
+// Losing a concurrent write is a security defect, not a cosmetic one: bytes
+// that were served but not recorded are downloads the uploader's limit never
+// sees.
+//
+// This replaces a test of atomic claiming. The invariant changed with the
+// accounting model, but the lesson did not: accumulation and the derived count
+// must be one operation, or concurrent transfers overwrite each other's totals.
+func testConcurrentServedBytesAreNotLost(t *testing.T, newStore Factory) {
 	s := newStore(t)
-	now := time.Now()
 
-	const limit = 5
 	const racers = 40
+	const each = 64
 
 	u := Sample(t, NewID(t))
-	u.MaxDownloads = limit
+	// No limit, so every writer proceeds and the total is the only thing under
+	// test. A limit would let the row vanish mid-run and mask a lost update.
 	if err := s.Create(t.Context(), u); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	var (
-		wg        sync.WaitGroup
-		mu        sync.Mutex
-		succeeded int
-		other     []error
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		other []error
 	)
 	start := make(chan struct{})
 
@@ -305,15 +378,10 @@ func testConcurrentClaimsRespectLimit(t *testing.T, newStore Factory) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := s.ClaimDownload(context.Background(), u.ID, now)
-			mu.Lock()
-			defer mu.Unlock()
-			switch {
-			case err == nil:
-				succeeded++
-			case errors.Is(err, store.ErrExhausted), errors.Is(err, store.ErrNotFound):
-			default:
+			if _, err := s.RecordServed(context.Background(), u.ID, each); err != nil {
+				mu.Lock()
 				other = append(other, err)
+				mu.Unlock()
 			}
 		}()
 	}
@@ -323,10 +391,17 @@ func testConcurrentClaimsRespectLimit(t *testing.T, newStore Factory) {
 	for _, err := range other {
 		t.Errorf("unexpected error: %v", err)
 	}
-	// Never more than the limit. Fewer is acceptable under contention, since a
-	// losing writer may fail rather than corrupt; more is never acceptable.
-	if succeeded > limit {
-		t.Fatalf("%d concurrent claims succeeded, which exceeds the limit of %d", succeeded, limit)
+
+	got, err := s.Get(t.Context(), u.ID, time.Now())
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if want := int64(racers * each); got.BytesServed != want {
+		t.Fatalf("recorded %d bytes after %d concurrent writers, want %d: writes were lost",
+			got.BytesServed, racers, want)
+	}
+	if want := int64(racers*each) / u.Size; got.DownloadCount != int(want) {
+		t.Fatalf("download count %d, want %d", got.DownloadCount, want)
 	}
 }
 
@@ -382,8 +457,8 @@ func testListDeadFindsExhausted(t *testing.T, newStore Factory) {
 	if err := s.Create(t.Context(), u); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := s.ClaimDownload(t.Context(), u.ID, now); err != nil {
-		t.Fatalf("claim: %v", err)
+	if _, err := s.RecordServed(t.Context(), u.ID, u.Size); err != nil {
+		t.Fatalf("serve: %v", err)
 	}
 	ids, err := s.ListDead(t.Context(), now, 10)
 	if err != nil {

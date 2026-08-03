@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -114,9 +115,6 @@ func TestExpiredUploadIsUnreachableBeforeReaping(t *testing.T) {
 	if _, err := s.Get(t.Context(), u.ID, now); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get: got %v, want ErrNotFound", err)
 	}
-	if _, err := s.ClaimDownload(t.Context(), u.ID, now); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("claim: got %v, want ErrNotFound", err)
-	}
 
 	// The row is still present until the reaper removes it, which is exactly
 	// why lazy expiry has to exist.
@@ -158,15 +156,15 @@ func TestDownloadLimitIsEnforced(t *testing.T) {
 	}
 
 	for i := 1; i <= 2; i++ {
-		got, err := s.ClaimDownload(t.Context(), u.ID, now)
+		got, err := s.RecordServed(t.Context(), u.ID, u.Size)
 		if err != nil {
-			t.Fatalf("claim %d: %v", i, err)
+			t.Fatalf("serve %d: %v", i, err)
 		}
 		if got.DownloadCount != i {
-			t.Fatalf("claim %d recorded count %d", i, got.DownloadCount)
+			t.Fatalf("serving %d files' worth recorded count %d", i, got.DownloadCount)
 		}
 	}
-	if _, err := s.ClaimDownload(t.Context(), u.ID, now); !errors.Is(err, ErrExhausted) {
+	if _, err := s.Get(t.Context(), u.ID, now); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("third claim: got %v, want ErrExhausted", err)
 	}
 	if _, err := s.Get(t.Context(), u.ID, now); !errors.Is(err, ErrNotFound) {
@@ -176,41 +174,41 @@ func TestDownloadLimitIsEnforced(t *testing.T) {
 
 func TestUnlimitedDownloadsAreNotCapped(t *testing.T) {
 	s := newStore(t)
-	now := time.Now()
 	u := sample("UNLIMITEDAAAAAAAAAAAAA")
 	if err := s.Create(t.Context(), u); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	for i := range 20 {
-		if _, err := s.ClaimDownload(t.Context(), u.ID, now); err != nil {
-			t.Fatalf("claim %d: %v", i, err)
+		if _, err := s.RecordServed(t.Context(), u.ID, u.Size); err != nil {
+			t.Fatalf("serve %d: %v", i, err)
 		}
+	}
+	if _, err := s.Get(t.Context(), u.ID, time.Now()); err != nil {
+		t.Fatalf("an upload with no limit became unreachable: %v", err)
 	}
 }
 
-// The issue calls a concurrent over-limit download a security defect rather
-// than a cosmetic one, so this asserts the claim is genuinely atomic: with a
-// limit of N and many simultaneous requests, exactly N may succeed.
+// A lost concurrent write is a security defect rather than a cosmetic one:
+// bytes that were served but not recorded are downloads the uploader's limit
+// never sees.
 //
 // Each goroutine uses its own store handle, and therefore its own connection.
 // Racing through a single handle would prove nothing: the pool is capped at one
 // connection, so it serialises every statement and a read-then-write
 // implementation would pass. Real concurrency is what makes this test able to
-// fail.
-func TestConcurrentClaimsNeverExceedTheLimit(t *testing.T) {
+// fail. That was found the hard way; see PR #74.
+func TestConcurrentWritesDoNotLoseServedBytes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "race.db")
 	s, err := OpenSQLite(t.Context(), path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
 	defer func() { _ = s.Close() }()
-	now := time.Now()
 
-	const limit = 5
 	const racers = 24
+	const each = 64
 
 	u := sample("RACEAAAAAAAAAAAAAAAAAA")
-	u.MaxDownloads = limit
 	if err := s.Create(t.Context(), u); err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -226,10 +224,9 @@ func TestConcurrentClaimsNeverExceedTheLimit(t *testing.T) {
 	}
 
 	var (
-		wg        sync.WaitGroup
-		mu        sync.Mutex
-		succeeded int
-		other     []error
+		wg    sync.WaitGroup
+		mu    sync.Mutex
+		other []error
 	)
 	start := make(chan struct{})
 
@@ -238,15 +235,10 @@ func TestConcurrentClaimsNeverExceedTheLimit(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, err := handles[i].ClaimDownload(context.Background(), u.ID, now)
-			mu.Lock()
-			defer mu.Unlock()
-			switch {
-			case err == nil:
-				succeeded++
-			case errors.Is(err, ErrExhausted), errors.Is(err, ErrNotFound):
-			default:
+			if _, err := handles[i].RecordServed(context.Background(), u.ID, each); err != nil {
+				mu.Lock()
 				other = append(other, err)
+				mu.Unlock()
 			}
 		}()
 	}
@@ -256,13 +248,14 @@ func TestConcurrentClaimsNeverExceedTheLimit(t *testing.T) {
 	for _, err := range other {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if succeeded != limit {
-		t.Fatalf("%d of %d concurrent claims succeeded, want exactly %d", succeeded, racers, limit)
-	}
 
-	final, err := s.ClaimDownload(t.Context(), u.ID, now)
-	if !errors.Is(err, ErrExhausted) {
-		t.Fatalf("after the race: got %v (%+v), want ErrExhausted", err, final)
+	got, err := s.Get(t.Context(), u.ID, time.Now())
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if want := int64(racers * each); got.BytesServed != want {
+		t.Fatalf("recorded %d bytes after %d concurrent writers, want %d: writes were lost",
+			got.BytesServed, racers, want)
 	}
 }
 
@@ -404,8 +397,8 @@ func TestListDeadFindsExhaustedUploads(t *testing.T) {
 	if err := s.Create(t.Context(), u); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if _, err := s.ClaimDownload(t.Context(), u.ID, now); err != nil {
-		t.Fatalf("claim: %v", err)
+	if _, err := s.RecordServed(t.Context(), u.ID, u.Size); err != nil {
+		t.Fatalf("serve: %v", err)
 	}
 	dead, err := s.ListDead(t.Context(), now, 10)
 	if err != nil {
@@ -471,12 +464,70 @@ func TestMigrationsAreIdempotent(t *testing.T) {
 	if _, err := second.Get(t.Context(), u.ID, time.Now()); err != nil {
 		t.Fatalf("the upload did not survive a reopen: %v", err)
 	}
+	// Counted against the number of migration files rather than a literal, so
+	// adding one does not require editing this test - and so the test keeps
+	// asserting idempotency rather than a number that happens to be right.
+	want, err := fs.Glob(migrationFS, "migrations/sqlite/*.sql")
+	if err != nil {
+		t.Fatalf("list migrations: %v", err)
+	}
+
 	var applied int
 	if err := second.db.QueryRowContext(t.Context(),
 		`SELECT COUNT(*) FROM schema_migrations`).Scan(&applied); err != nil {
 		t.Fatalf("count migrations: %v", err)
 	}
-	if applied != 1 {
-		t.Fatalf("%d migrations recorded after two opens, want 1", applied)
+	if applied != len(want) {
+		t.Fatalf("%d migrations recorded after two opens, want %d", applied, len(want))
+	}
+	if len(want) < 2 {
+		t.Fatal("this test only proves idempotency once a second migration exists")
+	}
+}
+
+// An existing database must gain the column rather than be rebuilt. This opens
+// a store whose schema_migrations claims only the initial migration ran, which
+// is what an instance upgraded from the previous release looks like.
+func TestUpgradeFromTheInitialSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "upgrade.db")
+
+	// Create at the current schema, then rewind the record so the second open
+	// believes 0002 has not run.
+	first, err := OpenSQLite(t.Context(), path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	u := sample("UPGRADEAAAAAAAAAAAAAAA")
+	if err := first.Create(t.Context(), u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if _, err := first.db.ExecContext(t.Context(),
+		`DELETE FROM schema_migrations WHERE name LIKE '0002%'`); err != nil {
+		t.Fatalf("rewind: %v", err)
+	}
+	if _, err := first.db.ExecContext(t.Context(),
+		`ALTER TABLE uploads DROP COLUMN bytes_served`); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	second, err := OpenSQLite(t.Context(), path)
+	if err != nil {
+		t.Fatalf("the upgrade failed: %v", err)
+	}
+	defer func() { _ = second.Close() }()
+
+	// The row survives, and the new column is usable.
+	got, err := second.Get(t.Context(), u.ID, time.Now())
+	if err != nil {
+		t.Fatalf("the upload did not survive the upgrade: %v", err)
+	}
+	if got.BytesServed != 0 {
+		t.Errorf("an upgraded row starts at %d bytes served, want 0", got.BytesServed)
+	}
+	if _, err := second.RecordServed(t.Context(), u.ID, u.Size); err != nil {
+		t.Fatalf("record served after upgrade: %v", err)
 	}
 }
