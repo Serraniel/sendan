@@ -23,6 +23,7 @@ import (
 
 	"github.com/Serraniel/sendan/internal/blob"
 	"github.com/Serraniel/sendan/internal/config"
+	"github.com/Serraniel/sendan/internal/httpapi"
 	"github.com/Serraniel/sendan/internal/logging"
 	"github.com/Serraniel/sendan/internal/ratelimit"
 	"github.com/Serraniel/sendan/internal/store"
@@ -123,17 +124,14 @@ func run() error {
 	}()
 	defer reaper.Wait()
 
-	// Routes arrive with the API (M3). Until then the server exists so that
-	// configuration, logging and shutdown are exercised rather than assumed.
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("ok\n"))
+	handler := httpapi.New(httpapi.Options{
+		BaseURL: cfg.BaseURL,
+		Log:     log,
 	})
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 10 * time.Second,
 		// No write timeout: downloads stream for as long as the client needs,
 		// and a deadline here would truncate large transfers.
