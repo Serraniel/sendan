@@ -19,6 +19,26 @@ Pull requests only.
 Both checks read individual commits rather than the pull request title, because
 squash merging is disabled and every commit lands in `main` as written.
 
+### Automated pull requests
+
+A pull request opened by a bot account still requires a `Signed-off-by` line,
+but it need not match the commit author. Dependency updates sign off under an
+identity that differs from the one they author with:
+
+```
+author:        dependabot[bot] <…+dependabot[bot]@users.noreply.github.com>
+Signed-off-by: dependabot[bot] <support@github.com>
+```
+
+An exact match can never succeed there, and no rewrite is available, because
+nobody holds the bot's key.
+
+> [!IMPORTANT]
+> The exemption is decided by the **pull request's author**, which GitHub
+> authenticates — not by the commit author field, which is chosen by whoever
+> made the commit. Keying on the commit would let any contributor bypass the
+> check by claiming to be a bot.
+
 ## What a failure means
 
 **You need to rewrite your commits.** Neither failure indicates a problem with
