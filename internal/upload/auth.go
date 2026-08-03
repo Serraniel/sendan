@@ -7,9 +7,12 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
+	"io"
 	"time"
 
 	"github.com/Serraniel/sendan/internal/crypto"
+	"github.com/Serraniel/sendan/internal/store"
 )
 
 var (
@@ -42,9 +45,19 @@ var (
 // and so that the download counter cannot be spent by someone who cannot read
 // the file.
 func (s *Service) Authenticate(ctx context.Context, id string, token []byte) error {
+	_, err := s.authenticated(ctx, id, token)
+	return err
+}
+
+// authenticated verifies a token and returns the upload it belongs to.
+//
+// Content needs the row it just authenticated - for the at-rest key and the
+// size - and fetching it a second time would both cost a query and open a
+// window in which the upload could vanish between the check and the read.
+func (s *Service) authenticated(ctx context.Context, id string, token []byte) (*store.Upload, error) {
 	u, err := s.store.Get(ctx, id, s.now())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// The allowance is consumed before the comparison, not after, so that an
@@ -52,11 +65,11 @@ func (s *Service) Authenticate(ctx context.Context, id string, token []byte) err
 	// charging only for failures would leave the budget untouched by a
 	// correctly guessed token, which is the case worth bounding.
 	if s.attempts != nil && !s.attempts.Allow(id) {
-		return ErrTooManyAttempts
+		return nil, ErrTooManyAttempts
 	}
 
 	if subtle.ConstantTimeCompare(crypto.AuthTokenHash(token), u.AuthTokenHash) != 1 {
-		return ErrUnauthorized
+		return nil, ErrUnauthorized
 	}
 
 	// A correct token clears the record. Someone holding it is the intended
@@ -66,7 +79,7 @@ func (s *Service) Authenticate(ctx context.Context, id string, token []byte) err
 	if s.attempts != nil {
 		s.attempts.Forget(id)
 	}
-	return nil
+	return u, nil
 }
 
 // RetryAfter reports how long until this upload accepts another attempt.
@@ -75,4 +88,26 @@ func (s *Service) RetryAfter(id string) (d time.Duration) {
 		return 0
 	}
 	return s.attempts.Retry(id)
+}
+
+// Content verifies a download token and opens the upload's ciphertext.
+//
+// The reader is seekable, so a caller may serve byte ranges from it without
+// holding the content in memory. Closing it is the caller's responsibility.
+//
+// Verification happens first, and that ordering is the guarantee: producing a
+// valid token requires the link secret and, where set, the password, so nobody
+// who could not have decrypted a file can cause its content to be read or its
+// allowance to be spent.
+func (s *Service) Content(ctx context.Context, id string, token []byte) (io.ReadSeekCloser, int64, error) {
+	u, err := s.authenticated(ctx, id, token)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	rc, err := s.blobs.Open(ctx, id, u.AtRestKey)
+	if err != nil {
+		return nil, 0, fmt.Errorf("upload: open content: %w", err)
+	}
+	return rc, u.Size, nil
 }

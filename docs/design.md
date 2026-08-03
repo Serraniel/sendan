@@ -316,7 +316,44 @@ still applies alongside it, and neither substitutes for the other.
 > the token is not observable, and it is derived from a secret the URL already
 > carries, so a challenge-response would add a round trip and no property.
 
-### 4.3 Counting downloads
+### 4.3 Content
+
+`GET /api/uploads/{id}/content` streams ciphertext at flat server memory, whatever
+the file size, and supports range requests so an interrupted transfer can be
+resumed.
+
+Range handling is delegated to `http.ServeContent` rather than parsed here.
+Overlapping ranges, suffix ranges, unsatisfiable ranges and conditional requests
+are a well-known source of defects, and none of that is specific to this
+project.
+
+The ordering is **verify, serve, account**:
+
+1. The download token is verified (§4.2). Nobody who could not have decrypted
+   the file can cause its content to be read or its allowance to be spent.
+2. Content is streamed from a seekable reader. The at-rest layer is CTR, which
+   is what keeps it seekable, so a range is served without reading from the
+   start.
+3. The bytes actually written are recorded (§4.4).
+
+Three details are load-bearing:
+
+- **An `ETag` is served.** Content never changes, so the identifier is a
+  complete validator. Without one, a resumed request carrying `If-Range` fails
+  the comparison and `ServeContent` answers with the whole file — charging a
+  second download for content the client already holds.
+- **`Cache-Control: no-store`.** A shared cache serving content the server never
+  saw would make the download limit unenforceable.
+- **Accounting does not ride the request context.** A client that disconnects
+  has already cancelled it; recording through it would be cancelled too, and
+  every abandoned transfer would be free. That is precisely the bypass §4.4
+  exists to close, so it is recorded through `context.WithoutCancel`.
+
+The response carries no filename: the server does not know it. `Content-Type` is
+`application/octet-stream` and set explicitly, because without it the ciphertext
+would be sniffed, and a stream of random bytes can be detected as anything.
+
+### 4.4 Counting downloads
 
 The download counter counts **transfers, not requests**:
 

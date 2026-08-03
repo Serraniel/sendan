@@ -29,6 +29,7 @@ type apiHarness struct {
 	handler http.Handler
 	svc     *upload.Service
 	store   *store.SQLite
+	blobs   *blob.Shredder
 	clock   time.Time
 }
 
@@ -60,12 +61,13 @@ func newAPIHarness(t *testing.T) *apiHarness {
 	if err != nil {
 		t.Fatalf("open blobs: %v", err)
 	}
+	shredder := blob.NewShredder(fs)
 
 	// Real time rather than an injected clock: the service's clock is
 	// unexported, and adding production API so a test in another package can
 	// reach it would be worse than expressing the fixtures relative to now.
-	h := &apiHarness{store: st, clock: time.Now().UTC()}
-	svc := upload.New(st, blob.NewShredder(fs), upload.Policy{
+	h := &apiHarness{store: st, blobs: shredder, clock: time.Now().UTC()}
+	svc := upload.New(st, shredder, upload.Policy{
 		DefaultTTL: 24 * time.Hour, MaxTTL: 7 * 24 * time.Hour,
 	}, logging.New(io.Discard, logging.Options{Format: "json"}))
 
