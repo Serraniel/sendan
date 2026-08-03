@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+
+	"github.com/Serraniel/sendan/internal/logging"
 )
 
 // errorResponse is the shape of every error this API returns.
@@ -48,8 +50,21 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 // The error is logged rather than returned, because it may name a backend, a
 // query or a path. The caller learns that something failed, which is all they
 // can act on.
+//
+// The route pattern is logged, never r.URL.Path. Two reasons, and both matter:
+//
+//   - The path carries the upload identifier. Sendan's guarantee is that
+//     identifiers never appear in logs verbatim, so that a log which leaks
+//     does not become a list of downloadable files. They go through
+//     logging.FileID, which records a truncated hash.
+//   - The path is caller-controlled. A pattern is a compile-time constant
+//     registered by this package, so it cannot be used to forge log entries.
 func writeServerError(w http.ResponseWriter, r *http.Request, err error) {
-	slog.Default().Error("request failed",
-		"method", r.Method, "path", r.URL.Path, "error", err)
+	attrs := []any{"method", r.Method, "route", r.Pattern, "error", err}
+	if id := r.PathValue("id"); id != "" {
+		attrs = append(attrs, logging.FileID([]byte(id)))
+	}
+	slog.Default().Error("request failed", attrs...)
+
 	writeError(w, http.StatusInternalServerError, "internal", "internal error")
 }

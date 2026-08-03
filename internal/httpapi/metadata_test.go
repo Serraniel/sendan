@@ -448,6 +448,42 @@ func TestBackendFailureIsNotReportedAsMissing(t *testing.T) {
 	if !strings.Contains(logBuf.String(), "connection refused") {
 		t.Errorf("the fault was not logged, so an operator would not see it:\n%s", logBuf.String())
 	}
+
+	// The request path carries the upload identifier. Logging it verbatim would
+	// turn a leaked log into a list of downloadable files, which is the
+	// guarantee internal/logging exists to keep.
+	if strings.Contains(logBuf.String(), testID) {
+		t.Errorf("the upload identifier was logged verbatim:\n%s", logBuf.String())
+	}
+	if !strings.Contains(logBuf.String(), `"route"`) {
+		t.Errorf("the route pattern was not logged, so an operator cannot tell what failed:\n%s", logBuf.String())
+	}
+}
+
+// A caller-controlled path in a log entry lets a caller forge log entries. The
+// route pattern is a constant registered by this package, so a request cannot
+// influence it - asserted here with a path built to break a line-oriented log.
+func TestRequestPathCannotForgeLogEntries(t *testing.T) {
+	var logBuf bytes.Buffer
+	slog.SetDefault(logging.New(&logBuf, logging.Options{Format: "text"}))
+	t.Cleanup(func() { slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, nil))) })
+
+	svc := upload.New(failingStore{}, nil, upload.Policy{DefaultTTL: time.Hour},
+		logging.New(io.Discard, logging.Options{Format: "json"}))
+	handler := New(Options{Uploads: svc})
+
+	// A 22-character identifier that is also an attempt at a second log line.
+	forged := "AAAA\nlevel=INFO msg=ok"
+	req := httptest.NewRequest(http.MethodGet, "/api/uploads/x/metadata", nil)
+	req.SetPathValue("id", forged)
+	req.URL.Path = "/api/uploads/" + forged + "/metadata"
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if strings.Contains(logBuf.String(), "level=INFO msg=ok\n") {
+		t.Errorf("a request forged a log entry:\n%s", logBuf.String())
+	}
 }
 
 // An exhausted upload is unreachable through the handler, because liveness is
