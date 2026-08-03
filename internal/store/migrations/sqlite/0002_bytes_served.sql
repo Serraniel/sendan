@@ -1,0 +1,20 @@
+-- SPDX-License-Identifier: AGPL-3.0-or-later
+--
+-- The download counter counts transfers, not requests.
+--
+-- Counting requests made a resumed download cost two, because a transfer that
+-- drops partway needs a second, ranged request to finish. Counting completions
+-- instead would be evadable: an attacker could request the whole file, abort at
+-- 99% and repeat forever, reading almost all of it every time while the counter
+-- never moved. Each record is independently authenticated, so 99% of the
+-- ciphertext decrypts to 99% of the file.
+--
+-- Accounting by volume answers both. Every byte is charged once, so resuming is
+-- free; and reading almost all of a file repeatedly is charged for what it
+-- actually consumed.
+--
+--   download_count = bytes_served / size   (integer division)
+--
+-- download_count is therefore derived rather than incremented, and is kept as a
+-- column so that expiry can be evaluated without arithmetic in every query.
+ALTER TABLE uploads ADD COLUMN bytes_served INTEGER NOT NULL DEFAULT 0;

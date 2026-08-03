@@ -27,25 +27,32 @@ const (
 		id, wrapped_file_key, wrap_nonce, metadata_envelope, metadata_nonce,
 		auth_token_hash, owner_token_hash, at_rest_key,
 		password_salt, argon2_memory_kib, argon2_iterations, argon2_parallelism,
-		size, created_at, expires_at, max_downloads, download_count`
+		size, created_at, expires_at, max_downloads, download_count, bytes_served`
 
 	insertUpload = `INSERT INTO uploads (
 		id, wrapped_file_key, wrap_nonce, metadata_envelope, metadata_nonce,
 		auth_token_hash, owner_token_hash, at_rest_key,
 		password_salt, argon2_memory_kib, argon2_iterations, argon2_parallelism,
-		size, created_at, expires_at, max_downloads, download_count
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+		size, created_at, expires_at, max_downloads, download_count, bytes_served
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 
 	selectUpload = `SELECT` + uploadColumns + ` FROM uploads WHERE id = ?`
 
-	// The reservation and the limit check are one statement. Reading the count,
-	// deciding, then incrementing would let concurrent requests observe the
-	// same count and collectively exceed the limit.
-	claimDownload = `UPDATE uploads
-	    SET download_count = download_count + 1
-	  WHERE id = ?
-	    AND (expires_at IS NULL OR expires_at > ?)
-	    AND (max_downloads = 0 OR download_count < max_downloads)`
+	// Accumulation and the derived count are one statement. Reading the total,
+	// dividing, then writing back would let concurrent transfers observe the
+	// same total and lose each other's bytes.
+	//
+	// download_count is recomputed rather than incremented, so it is always
+	// exactly the number of whole files served. A size of zero cannot occur for
+	// a stored upload, but dividing by it would panic the database rather than
+	// return an error, so it is guarded.
+	recordServed = `UPDATE uploads
+	    SET bytes_served = bytes_served + ?,
+	        download_count = CASE WHEN size > 0
+	                              THEN (bytes_served + ?) / size
+	                              ELSE download_count
+	                         END
+	  WHERE id = ?`
 
 	deleteUpload = `DELETE FROM uploads WHERE id = ?`
 

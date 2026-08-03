@@ -276,8 +276,10 @@ func TestReapRemovesExpiredAndExhaustedUploads(t *testing.T) {
 	h.put(t, live, "still here", h.clock.Add(time.Hour), 0)
 	h.put(t, expired, "gone", h.clock.Add(-time.Second), 0)
 	h.put(t, exhausted, "gone", h.clock.Add(time.Hour), 1)
-	if _, err := h.store.ClaimDownload(t.Context(), exhausted, h.clock); err != nil {
-		t.Fatalf("claim: %v", err)
+	// "gone" is four bytes, so serving four is one whole download and exhausts
+	// a limit of one.
+	if _, err := h.store.RecordServed(t.Context(), exhausted, int64(len("gone"))); err != nil {
+		t.Fatalf("record served: %v", err)
 	}
 
 	n, err := h.svc.Reap(t.Context(), 100)

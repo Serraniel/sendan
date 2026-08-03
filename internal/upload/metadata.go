@@ -5,6 +5,8 @@ package upload
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Serraniel/sendan/internal/store"
@@ -72,4 +74,28 @@ func (s *Service) Metadata(ctx context.Context, id string) (*PublicMetadata, err
 		MaxDownloads:     u.MaxDownloads,
 		DownloadCount:    u.DownloadCount,
 	}, nil
+}
+
+// RecordServed accounts for content served to a client.
+//
+// The download counter counts transfers, not requests: n bytes are added to the
+// upload's running total, and the count is recomputed as the number of whole
+// files that total represents. Resuming a transfer is therefore free, because
+// each byte is charged once, and abandoning one repeatedly is charged for what
+// it consumed.
+//
+// An upload the reaper has already removed is not an error. A transfer may
+// still be in flight when its deadline passes, and failing there would report a
+// race nobody can act on.
+func (s *Service) RecordServed(ctx context.Context, id string, n int64) error {
+	if n <= 0 {
+		return nil
+	}
+	if _, err := s.store.RecordServed(ctx, id, n); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("upload: record served: %w", err)
+	}
+	return nil
 }

@@ -316,6 +316,45 @@ still applies alongside it, and neither substitutes for the other.
 > the token is not observable, and it is derived from a secret the URL already
 > carries, so a challenge-response would add a round trip and no property.
 
+### 4.3 Counting downloads
+
+The download counter counts **transfers, not requests**:
+
+```
+download_count = bytes_served / size      (integer division)
+```
+
+Every byte is charged once, so resuming an interrupted transfer is free, and a
+transfer that is abandoned is charged for what it consumed.
+
+Two simpler models were considered and both are wrong:
+
+| Model | Why it fails |
+|---|---|
+| Count each request | A transfer that drops partway needs a second, ranged request to finish, so one download costs two. On a limit of one, an interrupted transfer destroys the upload before anyone receives it. |
+| Count each completion | Evadable. An attacker requests the whole file, aborts at 99%, and repeats forever: the counter never moves, and because each record is independently authenticated, 99% of the ciphertext decrypts to 99% of the file. |
+
+Accounting by volume answers both, and needs nothing from the client — no
+completion notification, no session token, no cooperation. The server knows how
+many bytes it wrote.
+
+> [!NOTE]
+> **Two honest costs.**
+>
+> A transfer abandoned partway is charged for the bytes it took, so a download
+> that fails at 90% consumes nine tenths of an allowance rather than nothing.
+> That is the price of a limit that cannot be evaded by aborting.
+>
+> Concurrent transfers can overshoot the limit slightly, because each is
+> permitted before either has finished accounting. This requires a valid
+> download token, so only a party who could have decrypted the file can do it,
+> and it costs them their own allowance.
+
+Accumulation and the recomputed count are a single statement, so concurrent
+transfers cannot lose each other's bytes. That property has its own conformance
+case on every backend, replacing the atomic-claim case the previous model
+needed.
+
 ## 5. Third-party client compatibility
 
 Adopting RFC 8188 encrypted-content-encoding and HKDF-SHA256 as the *native*

@@ -91,8 +91,14 @@ type Upload struct {
 
 	// MaxDownloads is zero when there is no download limit.
 	MaxDownloads int
-	// DownloadCount is how many downloads have been claimed.
+	// DownloadCount is how many whole files' worth of bytes have been served.
+	// It is derived from BytesServed rather than incremented per request, so a
+	// resumed transfer counts once and an abandoned one counts for what it
+	// actually consumed.
 	DownloadCount int
+
+	// BytesServed is the total content served for this upload.
+	BytesServed int64
 }
 
 // Expired reports whether the upload has passed its deadline at now.
@@ -123,13 +129,18 @@ type Store interface {
 	// the reaper is behind.
 	Get(ctx context.Context, id string, now time.Time) (*Upload, error)
 
-	// ClaimDownload atomically reserves one download and returns the upload.
+	// RecordServed adds n bytes to an upload's served total and returns the
+	// upload as it stands afterwards.
 	//
-	// The reservation and the limit check are one operation on purpose. Reading
-	// the count, deciding, then incrementing would let concurrent requests all
-	// pass the check and exceed the limit, which is a security defect rather
-	// than a cosmetic one.
-	ClaimDownload(ctx context.Context, id string, now time.Time) (*Upload, error)
+	// The download count is recomputed from the total rather than incremented,
+	// so it is always exactly the number of whole files served. Accumulating
+	// and recomputing are one operation: reading the total, dividing, then
+	// writing back would let concurrent transfers lose each other's bytes.
+	//
+	// Serving to an upload that no longer exists is not an error. A transfer
+	// may still be in flight when the reaper removes what it was reading, and
+	// failing there would turn a race into an error nobody can act on.
+	RecordServed(ctx context.Context, id string, n int64) (*Upload, error)
 
 	// Delete removes the upload. Deleting one that does not exist is not an
 	// error: expiry and revocation race, and neither should fail because the

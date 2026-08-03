@@ -290,6 +290,7 @@ The server stores, per upload, and learns nothing else:
 | `passwordRequired` | boolean |
 | `pwSalt`, Argon2id parameters | present only when `passwordRequired` |
 | expiry deadline, download count and limit | §3 of `docs/design.md` |
+| bytes served | §4.3 of `docs/design.md`; the download count is derived from it |
 | per-file server-side key | crypto-shredding; see `docs/design.md` §3 |
 
 `passwordRequired`, `pwSalt`, and the Argon2id parameters are necessarily
