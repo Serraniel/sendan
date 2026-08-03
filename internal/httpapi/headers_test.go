@@ -39,9 +39,15 @@ func TestSecurityHeadersOnEveryResponse(t *testing.T) {
 	h := testHandler(t, "https://sendan.example")
 
 	requests := []struct {
-		name       string
-		method     string
-		target     string
+		name   string
+		method string
+		target string
+		// wantStatus is zero where the exact code is not the point. The router
+		// cleans a traversal path and redirects, and which redirect it uses is
+		// an implementation detail that changed between Go 1.25 and 1.26 - 301
+		// to 307, so that the method is preserved. Asserting it would make this
+		// test fail on a toolchain difference rather than on a dropped header,
+		// which is the only thing it is here to detect.
 		wantStatus int
 	}{
 		{"a routed request", http.MethodGet, "/healthz", http.StatusOK},
@@ -49,10 +55,7 @@ func TestSecurityHeadersOnEveryResponse(t *testing.T) {
 		{"the root", http.MethodGet, "/", http.StatusNotFound},
 		{"a wrong method on a real route", http.MethodPost, "/healthz", http.StatusMethodNotAllowed},
 		{"a path that looks like an upload", http.MethodGet, "/api/download/AAAAAAAAAAAAAAAAAAAAAA", http.StatusNotFound},
-		// The router cleans the path and redirects rather than routing it. A
-		// redirect is a response too, and the one most likely to be missed by a
-		// policy applied per handler.
-		{"a traversal attempt", http.MethodGet, "/../../etc/passwd", http.StatusTemporaryRedirect},
+		{"a traversal attempt", http.MethodGet, "/../../etc/passwd", 0},
 	}
 
 	for _, tc := range requests {
@@ -60,8 +63,11 @@ func TestSecurityHeadersOnEveryResponse(t *testing.T) {
 			rec := httptest.NewRecorder()
 			h.ServeHTTP(rec, httptest.NewRequest(tc.method, tc.target, nil))
 
-			if rec.Code != tc.wantStatus {
+			switch {
+			case tc.wantStatus != 0 && rec.Code != tc.wantStatus:
 				t.Errorf("status %d, want %d", rec.Code, tc.wantStatus)
+			case tc.wantStatus == 0 && rec.Code < 300:
+				t.Errorf("status %d, want a redirect or an error", rec.Code)
 			}
 			for name, want := range requiredHeaders {
 				if got := rec.Header().Get(name); got != want {
