@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/Serraniel/sendan/internal/ratelimit"
 	"github.com/Serraniel/sendan/internal/upload"
 )
 
@@ -36,6 +37,16 @@ type Options struct {
 	// only when it is present, so a handler can never be reached with a nil
 	// service.
 	Uploads *upload.Service
+
+	// RateLimit is the per-address request limit. A nil limiter disables the
+	// check; the caller decides that, so that a configured limit of zero means
+	// "no limit" rather than "no service".
+	RateLimit *ratelimit.Limiter
+
+	// TrustedProxies is how many reverse proxies stand in front of this
+	// instance. Zero, the default, means the peer address is used and
+	// X-Forwarded-For is ignored entirely.
+	TrustedProxies int
 
 	Log *slog.Logger
 }
@@ -71,5 +82,8 @@ func New(opts Options) http.Handler {
 	}
 
 	https := opts.BaseURL != nil && opts.BaseURL.Scheme == "https"
-	return secureHeaders(https, mux)
+
+	// The limit is outside the header middleware so that a refused request
+	// still carries the security headers: a 429 is a response like any other.
+	return secureHeaders(https, rateLimit(opts.RateLimit, opts.TrustedProxies, mux))
 }

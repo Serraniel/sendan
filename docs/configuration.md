@@ -20,6 +20,7 @@ require restarting repeatedly to discover the next fault.
 > | `SENDAN_DATABASE`, `SENDAN_STORAGE` | applied — the backend is opened at startup and the reaper sweeps it |
 > | `SENDAN_*_TTL`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | given to the lifecycle service, so they govern expiry and reaping — but nothing can be uploaded, so nothing yet reaches them |
 > | `SENDAN_SOURCE_URL` | applied — reported at `/api/source` |
+> | `SENDAN_RATE_LIMIT`, `SENDAN_RATE_BURST`, `SENDAN_TRUSTED_PROXIES` | applied to every request the server answers |
 > | `SENDAN_BASE_URL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_SERVE_UI` | validated and logged only. Nothing builds links, measures an upload, or serves a client yet |
 > | `SENDAN_SEND_COMPAT` | no endpoints; the compatibility layer is M7. It does log a warning at startup when enabled |
 >
@@ -71,6 +72,35 @@ require restarting repeatedly to discover the next fault.
 | Variable | Default | Meaning |
 |---|---|---|
 | `SENDAN_MAX_UPLOAD_SIZE` | `1GiB` | Largest single upload |
+| `SENDAN_RATE_LIMIT` | `120` | Sustained requests per minute, per client. `0` disables rate limiting |
+| `SENDAN_RATE_BURST` | `30` | How many requests may arrive at once |
+| `SENDAN_TRUSTED_PROXIES` | `0` | How many reverse proxies stand in front of this instance |
+
+`/healthz` is never rate limited. It reads nothing, and a health check that
+began failing because a limit was reached would cause the restart it exists to
+prevent.
+
+> [!WARNING]
+> **`SENDAN_TRUSTED_PROXIES` is a security setting, not a convenience.**
+>
+> At `0`, `X-Forwarded-For` is ignored entirely and the peer address is used.
+> Setting it to `1` tells Sendan to believe the last entry in that header.
+>
+> **Set it above the number of proxies actually in front of the instance — in
+> particular, set it at all when there is no proxy — and a caller can write the
+> header that decides which bucket they are charged to, and so opt out of the
+> limit entirely.**
+>
+> Setting it too high is safe by comparison: several clients share one bucket,
+> which is stricter than intended rather than weaker. Both misconfigurations
+> are logged at startup.
+
+Rate limits are keyed per address, so one abusive client cannot exhaust the
+budget of others. IPv6 is keyed on the **/64** rather than the full address: a
+single subscriber is commonly allocated a /64 or larger, and keying on the
+address would let them present billions of distinct ones and never meet a limit
+at all. Clients sharing a /64 therefore share a bucket, which is the intended
+trade.
 
 Sizes accept a plain byte count or a binary suffix: `1024`, `500MiB`, `2GiB`,
 `1TiB`.

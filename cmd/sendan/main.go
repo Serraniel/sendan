@@ -79,12 +79,23 @@ func run() error {
 		"max_ttl", cfg.MaxTTL.String(),
 		"allow_infinite_ttl", cfg.AllowInfiniteTTL,
 		"max_upload_size", cfg.MaxUploadSize,
+		"rate_limit_per_minute", cfg.RateLimit,
+		"trusted_proxies", cfg.TrustedProxies,
 	)
 	if cfg.SendCompat {
 		log.Warn("third-party compatibility endpoints are enabled; uploads made through them use a weaker, server-enforced password model")
 	}
 	if cfg.AllowInfiniteTTL {
 		log.Warn("unlimited retention is permitted; uploads may never expire")
+	}
+	if cfg.RateLimit <= 0 {
+		log.Warn("rate limiting is disabled; every endpoint is unmetered")
+	}
+	if cfg.TrustedProxies > 0 {
+		// Trusting a hop that is not there lets a caller write the header that
+		// decides which bucket they are charged to.
+		log.Warn("trusting forwarded client addresses; this must match the number of reverse proxies actually in front of this instance",
+			"trusted_proxies", cfg.TrustedProxies)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -109,6 +120,14 @@ func run() error {
 	}
 	log.Info("blob store ready", "location", redactCredentials(cfg.Storage))
 
+	var limiter *ratelimit.Limiter
+	if cfg.RateLimit > 0 {
+		limiter = ratelimit.New(ratelimit.Config{
+			Rate:  float64(cfg.RateLimit) / 60,
+			Burst: cfg.RateBurst,
+		})
+	}
+
 	attempts := ratelimit.NewPasswordAttempts()
 	uploads := upload.New(metadata, blob.NewShredder(blobs), upload.Policy{
 		DefaultTTL:          cfg.DefaultTTL,
@@ -131,7 +150,11 @@ func run() error {
 		Version:   version,
 		Commit:    commit,
 		Uploads:   uploads,
-		Log:       log,
+
+		RateLimit:      limiter,
+		TrustedProxies: cfg.TrustedProxies,
+
+		Log: log,
 	})
 
 	srv := &http.Server{

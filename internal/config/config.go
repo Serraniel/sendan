@@ -28,6 +28,8 @@ const (
 	DefaultMaxUploadSize = 1 << 30 // 1 GiB
 	DefaultMaxDownloads  = 0       // unlimited unless the uploader sets one
 	DefaultSourceURL     = "https://github.com/Serraniel/sendan"
+	DefaultRateLimit     = 120 // requests per minute per address
+	DefaultRateBurst     = 30
 	DefaultDatabase      = "sqlite:data/sendan.db"
 	DefaultStorage       = "file:data/blobs"
 )
@@ -48,6 +50,21 @@ type Config struct {
 	// version actually running, and a link to upstream would name code that is
 	// not what the user is talking to.
 	SourceURL *url.URL
+
+	// RateLimit is the sustained requests per minute permitted per address.
+	// Zero disables rate limiting entirely.
+	RateLimit int
+	// RateBurst is how many requests may arrive at once.
+	RateBurst int
+
+	// TrustedProxies is how many reverse proxies stand in front of this
+	// instance.
+	//
+	// Zero means none, and X-Forwarded-For is ignored. Setting it above the
+	// real number of proxies - in particular setting it at all when there is no
+	// proxy - lets a caller write the header that decides which rate limit
+	// bucket they are charged to, and so opt out of the limit.
+	TrustedProxies int
 
 	// ServeUI serves the embedded web client. Disabling it yields a
 	// backend-only instance from the same binary.
@@ -103,6 +120,10 @@ func Load(getenv Getenv) (*Config, error) {
 		DefaultTTL:       l.duration("SENDAN_DEFAULT_TTL", DefaultTTL),
 		MaxTTL:           l.duration("SENDAN_MAX_TTL", DefaultMaxTTL),
 		AllowInfiniteTTL: l.boolean("SENDAN_ALLOW_INFINITE_TTL", false),
+
+		RateLimit:      l.integer("SENDAN_RATE_LIMIT", DefaultRateLimit),
+		RateBurst:      l.integer("SENDAN_RATE_BURST", DefaultRateBurst),
+		TrustedProxies: l.integer("SENDAN_TRUSTED_PROXIES", 0),
 
 		DefaultMaxDownloads: l.integer("SENDAN_DEFAULT_MAX_DOWNLOADS", DefaultMaxDownloads),
 		MaxUploadSize:       l.bytes("SENDAN_MAX_UPLOAD_SIZE", DefaultMaxUploadSize),
@@ -288,6 +309,13 @@ func (l *loader) validate(cfg *Config) {
 		l.errs = append(l.errs, errors.New(
 			"SENDAN_DEFAULT_TTL=0 requests unlimited retention, which requires SENDAN_ALLOW_INFINITE_TTL=true"))
 	}
+	// A limit with no burst refuses every request, including the first, which
+	// would look like an outage rather than a misconfiguration.
+	if cfg.RateLimit > 0 && cfg.RateBurst <= 0 {
+		l.errs = append(l.errs, errors.New(
+			"SENDAN_RATE_BURST must be at least 1 when SENDAN_RATE_LIMIT is set, or no request would be permitted"))
+	}
+
 	if cfg.MaxTTL > 0 && cfg.DefaultTTL > cfg.MaxTTL {
 		l.errs = append(l.errs, fmt.Errorf(
 			"SENDAN_DEFAULT_TTL (%s) exceeds SENDAN_MAX_TTL (%s)", cfg.DefaultTTL, cfg.MaxTTL))
