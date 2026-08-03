@@ -95,6 +95,62 @@ func (h *harness) put(t *testing.T, id, content string, expiresAt time.Time, max
 	return ownerToken
 }
 
+// blobsOnDisk counts the files under the blob root.
+//
+// This, not a store read, is what tells us the reaper ran. Liveness is
+// evaluated on read, so store.Get reports a dead upload as ErrNotFound the
+// moment it expires, whether or not anything has reaped it. Only the reaper
+// removes the file.
+func (h *harness) blobsOnDisk(t *testing.T) int {
+	t.Helper()
+	n := 0
+	err := filepath.WalkDir(h.blobRoot, func(path string, d fs.DirEntry, err error) error {
+		// The reaper deletes while this walks, so an entry can vanish between
+		// being listed and being visited. That is the state we are waiting for,
+		// not a failure - but only below the root. A missing root would make
+		// every count zero and turn the wait into a false pass.
+		if errors.Is(err, fs.ErrNotExist) && path != h.blobRoot {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			n++
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk the blob root: %v", err)
+	}
+	return n
+}
+
+// waitForBlobs blocks until the blob root holds want files, failing if it does
+// not reach that state. It waits for the effect rather than for a duration:
+// sleeping and hoping made these tests cover a different set of paths on
+// roughly half their runs.
+func (h *harness) waitForBlobs(t *testing.T, want int) {
+	t.Helper()
+	h.waitForBlobsWithin(t, want, 5*time.Second)
+}
+
+func (h *harness) waitForBlobsWithin(t *testing.T, want int, within time.Duration) {
+	t.Helper()
+	deadline := time.After(within)
+	for {
+		got := h.blobsOnDisk(t)
+		if got == want {
+			return
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("the blob root holds %d files, want %d", got, want)
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
 func defaultPolicy() Policy {
 	return Policy{DefaultTTL: 24 * time.Hour, MaxTTL: 7 * 24 * time.Hour}
 }
@@ -316,8 +372,8 @@ func TestReaperLoopStopsOnCancellation(t *testing.T) {
 		close(done)
 	}()
 
-	// Give it a few ticks to clear the backlog, then stop it.
-	time.Sleep(60 * time.Millisecond)
+	// The blob, not the store read, is the evidence that the loop ran.
+	h.waitForBlobs(t, 0)
 	cancel()
 
 	select {
@@ -371,5 +427,132 @@ func TestDeleteClearsPasswordAttemptState(t *testing.T) {
 	}
 	if attempts.Len() != 0 {
 		t.Fatalf("attempt state for a deleted upload survives: %d entries", attempts.Len())
+	}
+}
+
+// checkpointFailure fails to retire the write-ahead log.
+type checkpointFailure struct{ store.Store }
+
+func (checkpointFailure) Checkpoint(context.Context) error {
+	return errors.New("checkpoint unavailable")
+}
+
+// A failed checkpoint means reclaimable data stays in the write-ahead log,
+// which is worth an error in the log. The uploads themselves are already gone,
+// so the sweep must report them as removed rather than fail.
+//
+// This branch was previously covered on roughly one run in twelve, by a
+// checkpoint that happened to fail under a cancelled context. Coverage by
+// accident is not coverage.
+func TestReapReportsRemovalsWhenTheCheckpointFails(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	h.put(t, "CKPTAAAAAAAAAAAAAAAAAA", "x", h.clock.Add(-time.Hour), 0)
+
+	var buf bytes.Buffer
+	svc := New(checkpointFailure{h.store}, h.blobs, defaultPolicy(),
+		logging.New(&buf, logging.Options{Level: slog.LevelDebug, Format: "json"}))
+	svc.now = h.svc.now
+
+	n, err := svc.Reap(t.Context(), 10)
+	if err != nil {
+		t.Fatalf("reap: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("reaped %d, want 1", n)
+	}
+	if !strings.Contains(buf.String(), "could not checkpoint after reaping") {
+		t.Fatalf("the checkpoint failure was not reported:\n%s", buf.String())
+	}
+	if got := h.blobsOnDisk(t); got != 0 {
+		t.Fatalf("the blob root holds %d files after reaping, want 0", got)
+	}
+}
+
+// sweepSignal reports each sweep the reaper performs, so a test can tell how
+// much work one tick did rather than only what had happened by some deadline.
+type sweepSignal struct {
+	store.Store
+	sweeps chan struct{}
+}
+
+func (s *sweepSignal) ListDead(ctx context.Context, now time.Time, limit int) ([]string, error) {
+	select {
+	case s.sweeps <- struct{}{}:
+	default:
+	}
+	return s.Store.ListDead(ctx, now, limit)
+}
+
+// A backlog larger than one batch must be cleared within a single tick rather
+// than trickled away at one batch per tick.
+//
+// The tick interval is long and the assertion window short, so the whole
+// backlog has to go on the first tick. With a short interval this test passed
+// against a reaper that swept once per tick, because the extra ticks arrived
+// before the deadline: it measured the ticker, not the drain loop.
+func TestReaperLoopDrainsABacklogLargerThanOneBatch(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+
+	ids := []string{
+		"BL1AAAAAAAAAAAAAAAAAAA", "BL2AAAAAAAAAAAAAAAAAAA", "BL3AAAAAAAAAAAAAAAAAAA",
+		"BL4AAAAAAAAAAAAAAAAAAA", "BL5AAAAAAAAAAAAAAAAAAA",
+	}
+	for _, id := range ids {
+		h.put(t, id, "x", h.clock.Add(-time.Hour), 0)
+	}
+
+	const tick = 2 * time.Second
+	signal := &sweepSignal{Store: h.store, sweeps: make(chan struct{}, 1)}
+	svc := New(signal, h.blobs, defaultPolicy(),
+		logging.New(io.Discard, logging.Options{Format: "json"}))
+	svc.now = h.svc.now
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		// A batch of two against five dead uploads forces the drain loop.
+		svc.RunReaper(ctx, tick, 2)
+		close(done)
+	}()
+
+	select {
+	case <-signal.sweeps:
+	case <-time.After(tick + 5*time.Second):
+		t.Fatal("the reaper never swept")
+	}
+
+	// Well inside the tick, so anything still here means the loop is waiting
+	// for the next one instead of draining.
+	h.waitForBlobsWithin(t, 0, tick/4)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the reaper did not stop when cancelled")
+	}
+}
+
+// A reaper whose store fails must log and keep running rather than exit,
+// otherwise one transient error stops all reclamation until a restart.
+func TestReaperSurvivesAFailingBlobStore(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	h.put(t, "FAILAAAAAAAAAAAAAAAAAA", "x", h.clock.Add(-time.Hour), 0)
+
+	failing := New(h.store, blob.NewShredder(failingStore{}), defaultPolicy(),
+		logging.New(io.Discard, logging.Options{Format: "json"}))
+	failing.now = h.svc.now
+
+	// Delete fails at the blob step, but the row is already gone, so a second
+	// pass finds nothing and reports zero rather than looping forever.
+	if _, err := failing.Reap(t.Context(), 10); err != nil {
+		t.Fatalf("reap: %v", err)
+	}
+	n, err := failing.Reap(t.Context(), 10)
+	if err != nil {
+		t.Fatalf("second reap: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("second reap removed %d, want 0", n)
 	}
 }

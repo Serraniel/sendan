@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Minimum statement coverage per package, enforced by scripts/coverage.sh.
+#
+# These are a ratchet, not a target. Each floor sits just below the coverage
+# actually achieved, so a change that reduces coverage fails rather than merely
+# being noticed later. When coverage rises, raise the floor in the same pull
+# request — that is what turns this into a ratchet rather than a line everyone
+# eventually forgets.
+#
+# ⚠️ Coverage is a floor, not a goal. A high percentage over code that never
+# exercises a failure path is worthless. The area-specific requirements in
+# CONTRIBUTING.md are what actually matter; this file exists to stop those
+# requirements eroding silently.
+#
+# The cryptographic core and the storage layer carry the highest floors because
+# a defect there is silent: the wrong bytes still look like bytes.
+#
+# Format: <package path> <minimum percent>
+
+internal/crypto      85.0
+internal/store       78.0
+internal/blob        81.0
+internal/upload      78.0
+internal/config      93.0
+internal/logging     98.0
+internal/ratelimit   96.0
