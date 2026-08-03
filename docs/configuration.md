@@ -11,8 +11,9 @@ require restarting repeatedly to discover the next fault.
 > [!WARNING]
 > **Not every variable is honoured yet.** All of them are parsed and validated,
 > so an invalid value fails at startup, and storage now opens for real — but the
-> server serves `/healthz`, `/api/source` and upload metadata, so nothing can be
-> uploaded or downloaded regardless of configuration.
+> server serves `/healthz`, `/api/source`, upload metadata and download
+> authentication, so nothing can be uploaded or downloaded regardless of
+> configuration.
 >
 > | Variable | Effect today |
 > |---|---|

@@ -79,6 +79,7 @@ func New(opts Options) http.Handler {
 
 	if opts.Uploads != nil {
 		mux.HandleFunc("GET /api/uploads/{id}/metadata", handleMetadata(opts.Uploads))
+		mux.HandleFunc("POST /api/uploads/{id}/auth", handleAuth(opts.Uploads))
 	}
 
 	https := opts.BaseURL != nil && opts.BaseURL.Scheme == "https"

@@ -272,6 +272,50 @@ existed.
 > the count, and an identifier holder can already observe availability by
 > attempting a download.
 
+### 4.2 Download authentication
+
+`POST /api/uploads/{id}/auth` verifies a download token (spec §8.1) without
+serving anything, so a client can report a wrong password before starting a
+transfer rather than part-way through one.
+
+The token travels in `Authorization: Bearer …`, never in the path or query. It
+derives from the link secret, which the whole scheme keeps out of logs by
+putting it in the URL fragment; a query parameter would write it to every access
+log between the client and the server.
+
+> [!IMPORTANT]
+> **Verification precedes claiming, which precedes streaming.** Producing a
+> valid token requires the link secret and, where set, the password, so this
+> ordering is what guarantees that *nobody who could not have decrypted a file
+> is able to consume one of its downloads*. Without it, anyone holding only the
+> identifier could exhaust a download limit and destroy the upload for its
+> recipient — a denial of service against data they cannot read.
+
+Authenticating does not claim a download. Checking a password is not using the
+file, and an upload whose allowance could be spent on attempts would be
+destroyed by anyone able to reach it.
+
+Attempts are limited **per upload** rather than per address, because an
+adversary chooses their address and can rotate through many; keying by upload
+bounds the whole attack wherever it originates. The per-address limit of §8.1
+still applies alongside it, and neither substitutes for the other.
+
+- The allowance is charged whatever the outcome, so an attempt costs the
+  attacker even when their guess is right — which is the case worth bounding.
+- A **correct** token clears the record, so a recipient who mistyped a password
+  and then succeeded is not left throttled.
+- Once throttled, a correct token is refused too. Accepting it would mean the
+  limit bounded nothing at the moment it mattered.
+- A **malformed** credential is refused without being charged. Otherwise anyone
+  could exhaust an upload's allowance with garbage and lock out its recipient
+  without ever making a real attempt.
+
+> [!NOTE]
+> Issue #30 described this as an HMAC challenge. The specification settled on
+> presenting the token instead (§8.1), which is what is implemented: under TLS
+> the token is not observable, and it is derived from a secret the URL already
+> carries, so a challenge-response would add a round trip and no property.
+
 ## 5. Third-party client compatibility
 
 Adopting RFC 8188 encrypted-content-encoding and HKDF-SHA256 as the *native*

@@ -20,18 +20,31 @@ import (
 
 	"github.com/Serraniel/sendan/internal/blob"
 	"github.com/Serraniel/sendan/internal/logging"
+	"github.com/Serraniel/sendan/internal/ratelimit"
 	"github.com/Serraniel/sendan/internal/store"
 	"github.com/Serraniel/sendan/internal/upload"
 )
 
 type apiHarness struct {
 	handler http.Handler
+	svc     *upload.Service
 	store   *store.SQLite
 	clock   time.Time
 }
 
 // the identifier of a 16-byte value, per spec §10.
 const testID = "AAAAAAAAAAAAAAAAAAAAAA"
+
+// newAPIHarnessWithAttempts builds a harness whose per-upload attempt limit has
+// the given burst and never refills, so a test bounds attempts without waiting.
+func newAPIHarnessWithAttempts(t *testing.T, burst int) *apiHarness {
+	t.Helper()
+	h := newAPIHarness(t)
+	h.svc = h.svc.WithPasswordAttempts(ratelimit.NewPasswordAttemptsWith(
+		ratelimit.Config{Rate: 0, Burst: burst, Idle: time.Hour}))
+	h.handler = New(Options{Uploads: h.svc, BaseURL: mustURL(t, "https://sendan.example")})
+	return h
+}
 
 func newAPIHarness(t *testing.T) *apiHarness {
 	t.Helper()
@@ -56,6 +69,7 @@ func newAPIHarness(t *testing.T) *apiHarness {
 		DefaultTTL: 24 * time.Hour, MaxTTL: 7 * 24 * time.Hour,
 	}, logging.New(io.Discard, logging.Options{Format: "json"}))
 
+	h.svc = svc
 	h.handler = New(Options{Uploads: svc, BaseURL: mustURL(t, "https://sendan.example")})
 	return h
 }

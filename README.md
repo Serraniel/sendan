@@ -23,7 +23,8 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > **Not built:** most of the HTTP API, the web client, the command line client,
 > and the container image. The binary currently starts, reads its configuration,
 > opens its storage backends, runs the reaper, and serves `/healthz`,
-> `/api/source` and upload metadata. It cannot yet accept or serve a file.
+> `/api/source`, upload metadata and download authentication. It cannot yet
+> accept or serve a file.
 
 ## Features
 
