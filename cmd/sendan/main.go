@@ -29,8 +29,10 @@ import (
 	"github.com/Serraniel/sendan/internal/upload"
 )
 
-// version is set at build time by the release tooling. It is reported at
-// /api/source, which is how an instance discloses what it is running.
+// version is set at build time by the release tooling. It will be reported at
+// /api/source, which is how an instance discloses what it is running; that
+// endpoint is not built yet (#32), so these are currently compiled in and
+// unused.
 var (
 	version = "dev"
 	commit  = "unknown"

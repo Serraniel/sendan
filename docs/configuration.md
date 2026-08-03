@@ -17,10 +17,10 @@ require restarting repeatedly to discover the next fault.
 > | Variable | Effect today |
 > |---|---|
 > | `SENDAN_LISTEN`, `SENDAN_LOG_*` | applied |
-> | `SENDAN_DATABASE`, `SENDAN_STORAGE` | applied — the backend is opened at startup and the reaper runs |
-> | `SENDAN_*_TTL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | applied to expiry and reaping; not yet enforced on upload, since there is no upload endpoint |
-> | `SENDAN_SERVE_UI` | no effect; there is no web client yet |
-> | `SENDAN_SEND_COMPAT` | no effect; the compatibility endpoints are M7 |
+> | `SENDAN_DATABASE`, `SENDAN_STORAGE` | applied — the backend is opened at startup and the reaper sweeps it |
+> | `SENDAN_*_TTL`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | given to the lifecycle service, so they govern expiry and reaping — but nothing can be uploaded, so nothing yet reaches them |
+> | `SENDAN_BASE_URL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_SERVE_UI` | validated and logged only. Nothing builds links, measures an upload, or serves a client yet |
+> | `SENDAN_SEND_COMPAT` | no endpoints; the compatibility layer is M7. It does log a warning at startup when enabled |
 >
 > This page describes the intended behaviour of each setting. Where the two
 > differ, the table above is what is true.
