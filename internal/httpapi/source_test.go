@@ -13,19 +13,20 @@ import (
 	"testing"
 )
 
-func getSource(t *testing.T, opts Options) (*http.Response, Build) {
+// getSource returns the recorder rather than a *http.Response, so no response
+// body exists to leak. Reading rec.Result() would create one, and closing it in
+// a helper is something the linter cannot see, which makes every caller look
+// like a leak.
+func getSource(t *testing.T, opts Options) (*httptest.ResponseRecorder, Build) {
 	t.Helper()
 	rec := httptest.NewRecorder()
 	New(opts).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/source", nil))
 
-	res := rec.Result()
-	t.Cleanup(func() { _ = res.Body.Close() })
-
 	var b Build
-	if err := json.NewDecoder(res.Body).Decode(&b); err != nil {
+	if err := json.NewDecoder(rec.Body).Decode(&b); err != nil {
 		t.Fatalf("decode the report: %v", err)
 	}
-	return res, b
+	return rec, b
 }
 
 func mustURL(t *testing.T, raw string) *url.URL {
@@ -44,10 +45,10 @@ func TestSourceReportsTheBuild(t *testing.T) {
 		SourceURL: mustURL(t, "https://github.com/Serraniel/sendan"),
 	})
 
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("status %d, want 200", res.StatusCode)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200", res.Code)
 	}
-	if got := res.Header.Get("Content-Type"); got != "application/json; charset=utf-8" {
+	if got := res.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
 		t.Errorf("Content-Type %q", got)
 	}
 	if b.Version != "1.2.3" {
@@ -250,8 +251,8 @@ func TestSourceIsUnauthenticatedAndCarriesSecurityHeaders(t *testing.T) {
 // endpoint's job is to say what is true.
 func TestSourceToleratesAnAbsentLocation(t *testing.T) {
 	res, b := getSource(t, Options{})
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("status %d, want 200", res.StatusCode)
+	if res.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200", res.Code)
 	}
 	if b.Source != "" {
 		t.Errorf("source %q, want empty", b.Source)
