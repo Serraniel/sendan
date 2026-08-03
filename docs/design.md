@@ -28,6 +28,7 @@ command line client are produced from a single Go module.
 | `internal/store` | Upload metadata: SQLite and PostgreSQL, plus a conformance suite |
 | `internal/blob` | Upload ciphertext: filesystem and S3, plus crypto-shredding and a conformance suite |
 | `internal/upload` | Lifecycle: expiry policy, revocation, reaping |
+| `internal/httpapi` | HTTP surface and the middleware every response passes through |
 | `internal/config` | Environment configuration and validation |
 | `internal/logging` | Structured logging with identifier redaction |
 | `internal/ratelimit` | Structural abuse controls |
@@ -284,6 +285,43 @@ End-to-end encryption precludes content inspection, so controls must be
 structural: size caps, per-address rate limits, a short default retention period,
 `X-Robots-Tag: noindex`, and optional upload authentication (token, later OIDC)
 for instances that require it.
+
+### 8.1 Response headers
+
+Every response carries the same header set, applied as one middleware around the
+router rather than per route, so an endpoint added later inherits it. See
+`internal/httpapi`.
+
+Three carry most of the weight, for reasons specific to this design:
+
+- **`Referrer-Policy: no-referrer`.** The link secret is in the URL fragment.
+  Browsers do not put a fragment in a referrer, so this is not what protects it,
+  but a referrer would still disclose which instance and which upload a visitor
+  came from — and it removes the possibility that a future page which puts the
+  secret anywhere else leaks it outright.
+- **`connect-src 'self'`.** The client holds the file key in memory. This is
+  what ensures an injected script has nowhere to send it: script injection
+  becomes a local failure rather than a key disclosure.
+- **`base-uri 'none'`.** An injected `<base>` element would silently redirect
+  every relative API request, which on a page performing key exchange is
+  equivalent to changing the server.
+
+> [!IMPORTANT]
+> **`script-src` must permit `'wasm-unsafe-eval'`.** WebCrypto offers no
+> Argon2id, so password derivation runs in WebAssembly, and instantiating a
+> module counts as evaluation. Removing the directive — an obvious-looking
+> hardening — breaks password-protected uploads and downloads while leaving
+> every other path working, so the failure survives any test that does not set a
+> password. A test asserts the directive is present for this reason.
+
+HSTS is sent only when `SENDAN_BASE_URL` is `https`. The decision is taken from
+configuration rather than `X-Forwarded-Proto`, which is written by whatever
+spoke last and, on a deployment without a proxy, is the client.
+
+> [!WARNING]
+> A reverse proxy that sets its own security headers may replace these rather
+> than merge them. Operators terminating TLS should confirm the policy reaching
+> the browser is the one below, particularly `connect-src`.
 
 ## 9. Licence
 
