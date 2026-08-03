@@ -6,6 +6,7 @@ package upload
 import (
 	"bytes"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -227,5 +228,108 @@ func TestAuthenticateWorksWithoutALimiter(t *testing.T) {
 	}
 	if d := h.svc.RetryAfter(id); d != 0 {
 		t.Errorf("RetryAfter = %s without a limiter, want 0", d)
+	}
+}
+
+func TestContentRequiresAValidToken(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	const id = "CONTENTAUTHAAAAAAAAAAA"
+	token := authFixture(t, h, id)
+
+	t.Run("a wrong token opens nothing", func(t *testing.T) {
+		rc, _, err := h.svc.Content(t.Context(), id, bytes.Repeat([]byte{0x22}, 32))
+		if !errors.Is(err, ErrUnauthorized) {
+			t.Fatalf("got %v, want ErrUnauthorized", err)
+		}
+		if rc != nil {
+			t.Error("a reader was returned to a caller that failed authentication")
+		}
+	})
+
+	t.Run("the right token opens the content", func(t *testing.T) {
+		rc, size, err := h.svc.Content(t.Context(), id, token)
+		if err != nil {
+			t.Fatalf("content: %v", err)
+		}
+		defer func() { _ = rc.Close() }()
+
+		if size != int64(len("content")) {
+			t.Errorf("size %d, want %d", size, len("content"))
+		}
+		got, err := io.ReadAll(rc)
+		if err != nil {
+			t.Fatalf("read: %v", err)
+		}
+		if string(got) != "content" {
+			t.Errorf("read %q, want %q", got, "content")
+		}
+	})
+}
+
+// The reader must be seekable, or a range could only be served by reading from
+// the start - which is what would make memory scale with the offset.
+func TestContentIsSeekable(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	const id = "CONTENTSEEKAAAAAAAAAAA"
+
+	token := bytes.Repeat([]byte{0x11}, 32)
+	h.putWith(t, id, "0123456789", h.clock.Add(time.Hour), 0, func(u *store.Upload) {
+		u.AuthTokenHash = crypto.AuthTokenHash(token)
+	})
+
+	rc, _, err := h.svc.Content(t.Context(), id, token)
+	if err != nil {
+		t.Fatalf("content: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	if _, err := rc.Seek(4, io.SeekStart); err != nil {
+		t.Fatalf("seek: %v", err)
+	}
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != "456789" {
+		t.Errorf("after seeking to 4, read %q, want %q", got, "456789")
+	}
+}
+
+func TestContentRefusesDeadAndUnknownUploads(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	token := bytes.Repeat([]byte{0x11}, 32)
+
+	const expired = "CONTENTDEADAAAAAAAAAAA"
+	h.putWith(t, expired, "content", h.clock.Add(-time.Hour), 0, func(u *store.Upload) {
+		u.AuthTokenHash = crypto.AuthTokenHash(token)
+	})
+
+	for _, id := range []string{expired, "CONTENTNONEAAAAAAAAAAA"} {
+		if _, _, err := h.svc.Content(t.Context(), id, token); !errors.Is(err, store.ErrNotFound) {
+			t.Errorf("%s: got %v, want ErrNotFound", id, err)
+		}
+	}
+}
+
+// Opening content is subject to the same per-upload attempt limit as any other
+// use of the token, or the limit could be evaded by attacking this path.
+func TestContentIsSubjectToTheAttemptLimit(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	attempts := ratelimit.NewPasswordAttemptsWith(ratelimit.Config{
+		Rate: 0, Burst: 2, Idle: time.Hour,
+	})
+	h.svc = h.svc.WithPasswordAttempts(attempts)
+
+	const id = "CONTENTLIMITAAAAAAAAAA"
+	authFixture(t, h, id)
+	wrong := bytes.Repeat([]byte{0x22}, 32)
+
+	for range 2 {
+		if _, _, err := h.svc.Content(t.Context(), id, wrong); !errors.Is(err, ErrUnauthorized) {
+			t.Fatal("expected ErrUnauthorized")
+		}
+	}
+	if _, _, err := h.svc.Content(t.Context(), id, wrong); !errors.Is(err, ErrTooManyAttempts) {
+		t.Fatalf("got %v, want ErrTooManyAttempts", err)
 	}
 }

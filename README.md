@@ -20,11 +20,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > with encryption at rest; the expiry, revocation and reaping lifecycle;
 > configuration, structured logging and abuse controls.
 >
-> **Not built:** most of the HTTP API, the web client, the command line client,
-> and the container image. The binary currently starts, reads its configuration,
-> opens its storage backends, runs the reaper, and serves `/healthz`,
-> `/api/source`, upload metadata and download authentication. It cannot yet
-> accept or serve a file.
+> **Not built:** the upload endpoints, the web client, the command line client,
+> and the container image. The download path is complete — metadata,
+> authentication and ranged streaming — but nothing can be uploaded yet, so an
+> instance has nothing to serve.
 
 ## Features
 
