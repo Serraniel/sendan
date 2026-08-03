@@ -303,6 +303,27 @@ was built from, which for a rebuild of an old release is a different thing.
 has no commit that corresponds to it, so no source link can be exact — which is
 worth stating rather than presenting a link that appears authoritative.
 
+> [!WARNING]
+> **This report is a claim, not evidence.** The caveat above applies here as
+> much as to the per-file report: the instance compiles and serves this
+> endpoint, so an operator who has modified the code can return whatever it
+> says. Committing their changes yields a clean tree and `"modified": false`;
+> editing the handler yields any version, commit and source they choose, with
+> nothing to contradict it.
+>
+> What the endpoint achieves is therefore narrower than it looks:
+>
+> - **Honest operators** get a correct answer and an effortless way to meet
+>   §13.
+> - **Careless operators** are caught, because a dirty build reports
+>   `"modified": true` beside a source link that cannot correspond to it.
+> - **Dishonest operators** are not caught at all, and no endpoint served by
+>   them could catch them.
+>
+> Nothing an instance serves about itself can be a defence against that
+> instance. The command line client remains the only trust anchor — see
+> [SECURITY.md](../SECURITY.md).
+
 > [!NOTE]
 > The endpoint is the machine-readable half. The prominent offer AGPL §13 asks
 > for is the client footer, [#41](https://github.com/Serraniel/sendan/issues/41),

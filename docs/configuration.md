@@ -44,7 +44,9 @@ require restarting repeatedly to discover the next fault.
 > is not running.
 >
 > `/api/source` also reports whether the binary was built from a modified tree,
-> so a mismatch is visible rather than merely asserted.
+> which catches the common case of forgetting to set this. It is not a check on
+> a dishonest operator: the instance compiles and serves that endpoint, so its
+> answers are claims, not evidence.
 
 ## Retention
 
