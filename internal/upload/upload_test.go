@@ -151,6 +151,43 @@ func (h *harness) waitForBlobsWithin(t *testing.T, want int, within time.Duratio
 	}
 }
 
+// putWith stores an upload and lets a test adjust the row before it is written,
+// for fields the common helper does not take.
+func (h *harness) putWith(t *testing.T, id, content string, expiresAt time.Time,
+	maxDownloads int, adjust func(*store.Upload),
+) {
+	t.Helper()
+	atRest, err := blob.NewAtRestKey()
+	if err != nil {
+		t.Fatalf("at-rest key: %v", err)
+	}
+	if _, err := h.blobs.Put(t.Context(), id, atRest, strings.NewReader(content)); err != nil {
+		t.Fatalf("put blob: %v", err)
+	}
+
+	sum := sha256.Sum256(bytes.Repeat([]byte{0xAB}, 32))
+	u := &store.Upload{
+		ID:               id,
+		WrappedFileKey:   bytes.Repeat([]byte{0x01}, 48),
+		WrapNonce:        bytes.Repeat([]byte{0x02}, 12),
+		MetadataEnvelope: bytes.Repeat([]byte{0x03}, 256),
+		MetadataNonce:    bytes.Repeat([]byte{0x04}, 12),
+		AuthTokenHash:    bytes.Repeat([]byte{0x05}, 32),
+		OwnerTokenHash:   sum[:],
+		AtRestKey:        atRest,
+		Size:             int64(len(content)),
+		CreatedAt:        h.clock,
+		ExpiresAt:        expiresAt,
+		MaxDownloads:     maxDownloads,
+	}
+	if adjust != nil {
+		adjust(u)
+	}
+	if err := h.store.Create(t.Context(), u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+}
+
 func defaultPolicy() Policy {
 	return Policy{DefaultTTL: 24 * time.Hour, MaxTTL: 7 * 24 * time.Hour}
 }

@@ -21,13 +21,11 @@
 internal/crypto      85.0
 internal/store       78.0
 internal/blob        81.0
-internal/upload      78.0
-# internal/httpapi was 100 before /api/source, which added two branches that
-# cannot be reached from a test: debug.ReadBuildInfo reporting failure, and a
-# marshal error on a struct of strings and a bool. Lowering a floor is what this
-# file exists to resist, so the reason is recorded rather than left to a
-# reviewer to reconstruct.
-internal/httpapi     93.0
+internal/upload      79.0
+# internal/httpapi cannot reach 100: debug.ReadBuildInfo reporting failure and a
+# marshal error on a struct of strings and a bool are both unreachable from a
+# test.
+internal/httpapi     95.0
 internal/config      93.0
 internal/logging     98.0
 internal/ratelimit   96.0
