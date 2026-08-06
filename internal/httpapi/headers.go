@@ -3,7 +3,10 @@
 
 package httpapi
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 // contentSecurityPolicy is the policy served with every response.
 //
@@ -25,7 +28,7 @@ import "net/http"
 //     rendered from object URLs. It is deliberately absent from script-src and
 //     worker-src, where it would be an injection vector rather than a feature.
 const contentSecurityPolicy = "default-src 'self'; " +
-	"script-src 'self' 'wasm-unsafe-eval'; " +
+	scriptSrcPlaceholder + "; " +
 	"style-src 'self'; " +
 	"img-src 'self' blob:; " +
 	"media-src 'self' blob:; " +
@@ -36,6 +39,23 @@ const contentSecurityPolicy = "default-src 'self'; " +
 	"base-uri 'none'; " +
 	"form-action 'none'; " +
 	"frame-ancestors 'none'"
+
+// scriptSrcPlaceholder is the script-src directive before the shell's inline
+// bootstrap is accounted for.
+//
+// The client's entry point is inline and differs per build, so its hash cannot
+// be written here. It is added at construction from the shell that is actually
+// embedded, which is the only value that can be correct for a given binary.
+const scriptSrcPlaceholder = "script-src 'self' 'wasm-unsafe-eval'"
+
+// withScriptHashes returns the policy with additional script sources allowed.
+func withScriptHashes(policy string, hashes []string) string {
+	if len(hashes) == 0 {
+		return policy
+	}
+	return strings.Replace(policy, scriptSrcPlaceholder,
+		scriptSrcPlaceholder+" "+strings.Join(hashes, " "), 1)
+}
 
 // permissionsPolicy denies every feature the client has no use for. Sendan
 // reads no sensors and captures no media, so the correct answer to all of them
@@ -57,7 +77,7 @@ const hstsMaxAge = "max-age=63072000"
 // later cannot be forgotten. Headers are set before the wrapped handler runs,
 // because WriteHeader flushes them: setting them afterwards would silently do
 // nothing for any handler that has already written.
-func secureHeaders(https bool, next http.Handler) http.Handler {
+func secureHeaders(https bool, policy string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 
@@ -68,7 +88,7 @@ func secureHeaders(https bool, next http.Handler) http.Handler {
 		// no-referrer removes the question.
 		h.Set("Referrer-Policy", "no-referrer")
 
-		h.Set("Content-Security-Policy", contentSecurityPolicy)
+		h.Set("Content-Security-Policy", policy)
 		h.Set("Permissions-Policy", permissionsPolicy)
 
 		// Ciphertext must never be sniffed into a type the browser will execute

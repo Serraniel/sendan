@@ -4,11 +4,19 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
+
+	"github.com/Serraniel/sendan/internal/webui"
 )
 
 // requiredHeaders must appear on every response the instance produces.
@@ -192,7 +200,7 @@ func TestHeadersSurviveAHandlerThatWritesImmediately(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	secureHeaders(true, inner).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	secureHeaders(true, contentSecurityPolicy, inner).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	if rec.Code != http.StatusTeapot {
 		t.Fatalf("status %d, want %d", rec.Code, http.StatusTeapot)
@@ -231,4 +239,105 @@ func TestNewToleratesAnAbsentBaseURL(t *testing.T) {
 	if got := rec.Header().Get("Strict-Transport-Security"); got != "" {
 		t.Errorf("HSTS = %q without a configured origin", got)
 	}
+}
+
+// The client's bootstrap is inline and the policy forbids inline scripts, so
+// the policy has to carry its hash. Without it a browser refuses to run the
+// script and the application never starts - which no test that serves the page
+// without executing it can see.
+//
+// The hash is computed here independently rather than by calling the function
+// that produces it. Asking that function what the answer is and then checking
+// the answer against itself would pass whatever convention it used: hashing the
+// script tags along with the body is self-consistent, and rejected by every
+// browser. What a browser hashes is the text between the tags, and that is what
+// this reproduces.
+//
+// The client is supplied rather than embedded, so this runs on an ordinary
+// build. A test that needed a JavaScript toolchain would skip wherever one is
+// absent, which is most places.
+func TestThePolicyCarriesTheHashOfTheServedInlineScript(t *testing.T) {
+	const bootstrap = "\n\t__sveltekit = { base: \"\" };\n"
+
+	handler := New(Options{
+		BaseURL: mustURL(t, "https://sendan.example"),
+		ServeUI: true,
+		WebUI: fstest.MapFS{
+			"index.html": {Data: []byte(
+				`<html><head><script src="/_app/start.js"></script>` +
+					`<script>` + bootstrap + `</script></head><body></body></html>`)},
+		},
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200", rec.Code)
+	}
+
+	scripts := servedInlineScripts(rec.Body.String())
+	if len(scripts) != 1 {
+		t.Fatalf("served %d inline scripts, want 1", len(scripts))
+	}
+
+	sum := sha256.Sum256([]byte(scripts[0]))
+	want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+
+	csp := rec.Header().Get("Content-Security-Policy")
+	if !strings.Contains(csp, want) {
+		t.Errorf("the policy does not allow the inline script it served.\nwant %s\nin   %s", want, csp)
+	}
+	if strings.Contains(csp, "'unsafe-inline'") {
+		t.Error("the policy allows every inline script rather than the one it serves")
+	}
+}
+
+// The real client, when this build has one. The synthetic shell above proves
+// the mechanism; this proves the shell SvelteKit actually emits goes through it.
+func TestTheRealClientsBootstrapIsAllowed(t *testing.T) {
+	assets, ok := webui.Assets()
+	if !ok {
+		t.Skip("this build embeds no client; the tagged run in continuous integration covers it")
+	}
+
+	handler := New(Options{
+		BaseURL: mustURL(t, "https://sendan.example"),
+		ServeUI: true,
+		WebUI:   assets,
+		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, script := range servedInlineScripts(rec.Body.String()) {
+		sum := sha256.Sum256([]byte(script))
+		want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+		if !strings.Contains(csp, want) {
+			t.Errorf("the real client's inline script is not allowed.\nwant %s\nin   %s", want, csp)
+		}
+	}
+}
+
+// scriptRE captures a script element's attributes and its body.
+//
+// Go's regexp has no lookahead, so scripts with a src are filtered out
+// afterwards rather than excluded by the pattern.
+var scriptRE = regexp.MustCompile(`(?s)<script([^>]*)>(.*?)</script>`)
+
+// servedInlineScripts returns the body of every inline script in a document.
+//
+// Written here rather than reused from the package under test on purpose: this
+// is the independent reading that makes the hash assertion mean something.
+func servedInlineScripts(doc string) []string {
+	var out []string
+	for _, m := range scriptRE.FindAllStringSubmatch(doc, -1) {
+		if strings.Contains(m[1], "src=") {
+			continue
+		}
+		out = append(out, m[2])
+	}
+	return out
 }

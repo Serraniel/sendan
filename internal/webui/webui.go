@@ -10,6 +10,8 @@
 package webui
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"io/fs"
 	"net/http"
@@ -79,4 +81,63 @@ func serveShell(w http.ResponseWriter, r *http.Request, fsys fs.FS) {
 		return
 	}
 	_, _ = w.Write(body)
+}
+
+// InlineScriptHashes returns a Content-Security-Policy source expression for
+// every inline script in the shell.
+//
+// The client's bootstrap is inline: it is the two hundred bytes that tell the
+// application where it was served from, and it cannot be a separate file
+// because it differs per build. The policy forbids 'unsafe-inline', so without
+// its hash a browser refuses to run it and the application never starts - a
+// failure invisible to any test that does not execute the page.
+//
+// Hashing here rather than letting the client emit its own policy keeps one
+// authoritative header. Two policies both apply, and the intersection of a
+// header without the hash and a meta tag with it still blocks the script.
+func InlineScriptHashes(fsys fs.FS) ([]string, error) {
+	body, err := fs.ReadFile(fsys, shell)
+	if err != nil {
+		return nil, err
+	}
+
+	var hashes []string
+	for _, script := range inlineScripts(string(body)) {
+		sum := sha256.Sum256([]byte(script))
+		hashes = append(hashes, "'sha256-"+base64.StdEncoding.EncodeToString(sum[:])+"'")
+	}
+	return hashes, nil
+}
+
+// inlineScripts returns the body of every script element that has no src.
+//
+// Deliberately narrow: it reads the shell this project builds, not arbitrary
+// markup. A general HTML parser would invite the assumption that it handles
+// hostile input, which it never sees.
+func inlineScripts(doc string) []string {
+	var out []string
+	rest := doc
+	for {
+		open := strings.Index(rest, "<script")
+		if open < 0 {
+			return out
+		}
+		rest = rest[open:]
+
+		gt := strings.Index(rest, ">")
+		if gt < 0 {
+			return out
+		}
+		attrs := rest[:gt]
+		rest = rest[gt+1:]
+
+		end := strings.Index(rest, "</script>")
+		if end < 0 {
+			return out
+		}
+		if !strings.Contains(attrs, "src=") {
+			out = append(out, rest[:end])
+		}
+		rest = rest[end+len("</script>"):]
+	}
 }
