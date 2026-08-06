@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/Serraniel/sendan/internal/webui"
 )
@@ -251,15 +252,22 @@ func TestNewToleratesAnAbsentBaseURL(t *testing.T) {
 // script tags along with the body is self-consistent, and rejected by every
 // browser. What a browser hashes is the text between the tags, and that is what
 // this reproduces.
+//
+// The client is supplied rather than embedded, so this runs on an ordinary
+// build. A test that needed a JavaScript toolchain would skip wherever one is
+// absent, which is most places.
 func TestThePolicyCarriesTheHashOfTheServedInlineScript(t *testing.T) {
-	if _, ok := webui.Assets(); !ok {
-		t.Skip("this build embeds no client; run with -tags embedui")
-	}
+	const bootstrap = "\n\t__sveltekit = { base: \"\" };\n"
 
 	handler := New(Options{
 		BaseURL: mustURL(t, "https://sendan.example"),
 		ServeUI: true,
-		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+		WebUI: fstest.MapFS{
+			"index.html": {Data: []byte(
+				`<html><head><script src="/_app/start.js"></script>` +
+					`<script>` + bootstrap + `</script></head><body></body></html>`)},
+		},
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
 	})
 
 	rec := httptest.NewRecorder()
@@ -268,23 +276,68 @@ func TestThePolicyCarriesTheHashOfTheServedInlineScript(t *testing.T) {
 		t.Fatalf("status %d, want 200", rec.Code)
 	}
 
-	scripts := inlineScriptRE.FindAllStringSubmatch(rec.Body.String(), -1)
-	if len(scripts) == 0 {
-		t.Skip("the served shell has no inline script, so there is nothing to allow")
+	scripts := servedInlineScripts(rec.Body.String())
+	if len(scripts) != 1 {
+		t.Fatalf("served %d inline scripts, want 1", len(scripts))
 	}
 
+	sum := sha256.Sum256([]byte(scripts[0]))
+	want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+
 	csp := rec.Header().Get("Content-Security-Policy")
-	for _, m := range scripts {
-		sum := sha256.Sum256([]byte(m[1]))
-		want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
-		if !strings.Contains(csp, want) {
-			t.Errorf("the policy does not allow the inline script it served.\nwant %s\nin   %s", want, csp)
-		}
+	if !strings.Contains(csp, want) {
+		t.Errorf("the policy does not allow the inline script it served.\nwant %s\nin   %s", want, csp)
 	}
 	if strings.Contains(csp, "'unsafe-inline'") {
 		t.Error("the policy allows every inline script rather than the one it serves")
 	}
 }
 
-// inlineScriptRE matches a script element with no src, capturing its body.
-var inlineScriptRE = regexp.MustCompile(`(?s)<script(?:\s[^>]*)?>(.*?)</script>`)
+// The real client, when this build has one. The synthetic shell above proves
+// the mechanism; this proves the shell SvelteKit actually emits goes through it.
+func TestTheRealClientsBootstrapIsAllowed(t *testing.T) {
+	assets, ok := webui.Assets()
+	if !ok {
+		t.Skip("this build embeds no client; the tagged run in continuous integration covers it")
+	}
+
+	handler := New(Options{
+		BaseURL: mustURL(t, "https://sendan.example"),
+		ServeUI: true,
+		WebUI:   assets,
+		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, script := range servedInlineScripts(rec.Body.String()) {
+		sum := sha256.Sum256([]byte(script))
+		want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+		if !strings.Contains(csp, want) {
+			t.Errorf("the real client's inline script is not allowed.\nwant %s\nin   %s", want, csp)
+		}
+	}
+}
+
+// scriptRE captures a script element's attributes and its body.
+//
+// Go's regexp has no lookahead, so scripts with a src are filtered out
+// afterwards rather than excluded by the pattern.
+var scriptRE = regexp.MustCompile(`(?s)<script([^>]*)>(.*?)</script>`)
+
+// servedInlineScripts returns the body of every inline script in a document.
+//
+// Written here rather than reused from the package under test on purpose: this
+// is the independent reading that makes the hash assertion mean something.
+func servedInlineScripts(doc string) []string {
+	var out []string
+	for _, m := range scriptRE.FindAllStringSubmatch(doc, -1) {
+		if strings.Contains(m[1], "src=") {
+			continue
+		}
+		out = append(out, m[2])
+	}
+	return out
+}

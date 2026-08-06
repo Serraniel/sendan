@@ -4,6 +4,8 @@
 package webui
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -143,4 +145,80 @@ func TestAssetsReflectTheBuildTag(t *testing.T) {
 		t.Fatal("Assets reported failure and returned something")
 	}
 	t.Logf("client embedded: %v", ok)
+}
+
+// What a browser hashes is the text between the tags. Getting the convention
+// wrong is self-consistent everywhere except in a browser, so the expected
+// values here are written out rather than computed by the code under test.
+func TestInlineScriptHashes(t *testing.T) {
+	const body = "console.log(1)"
+	sum := sha256.Sum256([]byte(body))
+	want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+
+	fsys := fstest.MapFS{
+		"index.html": {Data: []byte(
+			`<html><head>` +
+				`<script src="/_app/x.js"></script>` +
+				`<script>` + body + `</script>` +
+				`</head></html>`)},
+	}
+
+	got, err := InlineScriptHashes(fsys)
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("hashed %d scripts, want 1 - a script with a src is fetched, not inline", len(got))
+	}
+	if got[0] != want {
+		t.Errorf("hash %s, want %s: a browser would reject the script", got[0], want)
+	}
+}
+
+func TestInlineScriptHashesOnAShellWithoutOne(t *testing.T) {
+	got, err := InlineScriptHashes(fstest.MapFS{
+		"index.html": {Data: []byte(`<html><head><script src="/a.js"></script></head></html>`)},
+	})
+	if err != nil {
+		t.Fatalf("hash: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("hashed %d scripts, want none", len(got))
+	}
+}
+
+func TestInlineScriptHashesWithoutAShell(t *testing.T) {
+	if _, err := InlineScriptHashes(fstest.MapFS{}); err == nil {
+		t.Fatal("hashing a build with no shell reported success")
+	}
+}
+
+func TestInlineScripts(t *testing.T) {
+	tests := []struct {
+		name string
+		doc  string
+		want []string
+	}{
+		{"none", `<html><body>nothing</body></html>`, nil},
+		{"one", `<script>a</script>`, []string{"a"}},
+		{"src is not inline", `<script src="/a.js"></script>`, nil},
+		{"attributes on an inline script", `<script type="module">a</script>`, []string{"a"}},
+		{"several", `<script>a</script><script src="/b.js"></script><script>c</script>`, []string{"a", "c"}},
+		{"whitespace is part of the body", "<script>\n a \n</script>", []string{"\n a \n"}},
+		{"unclosed is ignored", `<script>a`, nil},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := inlineScripts(tc.doc)
+			if len(got) != len(tc.want) {
+				t.Fatalf("found %d scripts %q, want %d %q", len(got), got, len(tc.want), tc.want)
+			}
+			for i := range got {
+				if got[i] != tc.want[i] {
+					t.Errorf("script %d = %q, want %q", i, got[i], tc.want[i])
+				}
+			}
+		})
+	}
 }

@@ -8,6 +8,7 @@
 package httpapi
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -37,10 +38,15 @@ type Options struct {
 	// MaxUploadSize bounds a single upload, in bytes. Zero means unbounded.
 	MaxUploadSize int64
 
-	// ServeUI serves the embedded web client. A build without one serves
-	// nothing regardless, so this only decides whether an instance that has a
-	// client offers it.
+	// ServeUI serves the web client. A build without one serves nothing
+	// regardless, so this only decides whether an instance that has a client
+	// offers it.
 	ServeUI bool
+
+	// WebUI is the client to serve. Passed in rather than looked up here, so
+	// that serving it can be tested without a JavaScript build: a branch only a
+	// tagged binary can reach is a branch continuous integration never checks.
+	WebUI fs.FS
 
 	// Uploads owns the upload lifecycle. Routes that need it are registered
 	// only when it is present, so a handler can never be reached with a nil
@@ -120,7 +126,7 @@ func New(opts Options) http.Handler {
 	// client contains.
 	policy := contentSecurityPolicy
 	if opts.ServeUI {
-		if assets, ok := webui.Assets(); ok {
+		if assets := opts.WebUI; assets != nil {
 			// The shell's bootstrap is inline, and the policy forbids inline
 			// scripts. Without its hash the client is served and then refused
 			// by the browser, which no test that does not execute the page can

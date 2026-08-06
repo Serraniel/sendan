@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -28,6 +29,7 @@ import (
 	"github.com/Serraniel/sendan/internal/ratelimit"
 	"github.com/Serraniel/sendan/internal/store"
 	"github.com/Serraniel/sendan/internal/upload"
+	"github.com/Serraniel/sendan/internal/webui"
 )
 
 // version is set at build time by the release tooling and reported at
@@ -152,6 +154,7 @@ func run() error {
 		Commit:        commit,
 		Uploads:       uploads,
 		ServeUI:       cfg.ServeUI,
+		WebUI:         clientAssets(),
 		MaxUploadSize: cfg.MaxUploadSize,
 
 		RateLimit:      limiter,
@@ -209,4 +212,14 @@ func redactCredentials(location string) string {
 	}
 	u.User = url.User(u.User.Username())
 	return u.String()
+}
+
+// clientAssets returns the embedded web client, or nil when this binary was
+// built without one.
+func clientAssets() fs.FS {
+	assets, ok := webui.Assets()
+	if !ok {
+		return nil
+	}
+	return assets
 }
