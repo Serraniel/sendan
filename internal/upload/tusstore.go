@@ -142,12 +142,9 @@ func (t *TusStore) newRow(info tus.FileInfo) (*store.Upload, error) {
 			// than refuse - a parallelism of 300 would be stored as 44 - and
 			// the client would derive with parameters the uploader never chose,
 			// producing a file that cannot be opened.
-			//nolint:gosec // G115: bounded above, which is the point of bounded.
-			MemoryKiB: uint32(m.bounded(metaArgon2Memory, math.MaxUint32)),
-			//nolint:gosec // G115: bounded above.
-			Iterations: uint32(m.bounded(metaArgon2Iterations, math.MaxUint32)),
-			//nolint:gosec // G115: bounded above.
-			Parallelism: uint8(m.bounded(metaArgon2Parallel, math.MaxUint8)),
+			MemoryKiB:   m.uint32Value(metaArgon2Memory),
+			Iterations:  m.uint32Value(metaArgon2Iterations),
+			Parallelism: m.uint8Value(metaArgon2Parallel),
 		}
 		if u.Password.MemoryKiB == 0 || u.Password.Iterations == 0 || u.Password.Parallelism == 0 {
 			m.fail("the Argon2id parameters must all be present and non-zero when a password salt is given")
@@ -323,19 +320,43 @@ func (m *metadata) blob(key string) []byte {
 	return []byte(v)
 }
 
-// bounded reads a value that must fit a smaller type, refusing anything larger
-// rather than truncating it.
-func (m *metadata) bounded(key string, limit int64) int64 {
+// uint32Value and uint8Value read a value that must fit a narrower type,
+// refusing anything larger rather than truncating it. A parallelism of 300
+// stored as 44 would make a client derive with parameters the uploader never
+// chose, producing a file nobody can open.
+//
+// The bound and the conversion are in one function deliberately. Doing the
+// check in a helper and converting at the call site is equivalent for a reader
+// and opaque to a static analyser, which then cannot tell a guarded conversion
+// from an unguarded one - and neither can a reviewer relying on it.
+func (m *metadata) uint32Value(key string) uint32 {
 	v := m.integer64(key, 0)
-	if v > limit {
-		m.fail(fmt.Sprintf("%s is %d, which exceeds the maximum of %d", key, v, limit))
+	if v < 0 || v > math.MaxUint32 {
+		m.fail(fmt.Sprintf("%s is %d, which exceeds the maximum of %d", key, v, int64(math.MaxUint32)))
 		return 0
 	}
-	return v
+	return uint32(v)
 }
 
+func (m *metadata) uint8Value(key string) uint8 {
+	v := m.integer64(key, 0)
+	if v < 0 || v > math.MaxUint8 {
+		m.fail(fmt.Sprintf("%s is %d, which exceeds the maximum of %d", key, v, math.MaxUint8))
+		return 0
+	}
+	return uint8(v)
+}
+
+// integer reads a count that must fit an int, which is 32 bits on some
+// platforms. Without the bound a large value would wrap rather than be
+// refused, and a download limit would become something the uploader never set.
 func (m *metadata) integer(key string, fallback int) int {
-	return int(m.integer64(key, int64(fallback)))
+	v := m.integer64(key, int64(fallback))
+	if v < 0 || v > math.MaxInt32 {
+		m.fail(fmt.Sprintf("%s is %d, which exceeds the maximum of %d", key, v, math.MaxInt32))
+		return fallback
+	}
+	return int(v)
 }
 
 func (m *metadata) integer64(key string, fallback int64) int64 {

@@ -325,3 +325,53 @@ func TestServiceCheckpoint(t *testing.T) {
 		t.Fatalf("checkpoint: %v", err)
 	}
 }
+
+// A count that does not fit an int must be refused rather than wrapped. On a
+// platform where int is 32 bits, a large value would become a download limit
+// the uploader never set.
+func TestOutOfRangeCountsAreRefused(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	ts := NewTusStore(h.svc, 0)
+
+	for _, value := range []string{"4294967296", "9223372036854775807"} {
+		meta := validMeta()
+		meta[metaMaxDownloads] = value
+		if _, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta}); err == nil {
+			t.Errorf("maxDownloads of %s was accepted", value)
+		}
+	}
+
+	// A value that fits is still accepted, so the bound is not simply refusing
+	// everything.
+	meta := validMeta()
+	meta[metaMaxDownloads] = "5"
+	up, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta})
+	if err != nil {
+		t.Fatalf("a download limit of five was refused: %v", err)
+	}
+	info, _ := up.GetInfo(t.Context())
+	row, err := h.store.Pending(t.Context(), info.ID)
+	if err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	if row.MaxDownloads != 5 {
+		t.Errorf("max downloads %d, want 5", row.MaxDownloads)
+	}
+}
+
+// The Argon2id memory parameter is a uint32, so a value beyond it must be
+// refused for the same reason parallelism is.
+func TestArgon2MemoryIsBounded(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	ts := NewTusStore(h.svc, 0)
+
+	meta := validMeta()
+	meta[metaPasswordSalt] = string(bytes.Repeat([]byte{0x5A}, crypto.PasswordSaltSize))
+	meta[metaArgon2Memory] = "4294967296" // one beyond a uint32
+	meta[metaArgon2Iterations] = "3"
+	meta[metaArgon2Parallel] = "1"
+
+	if _, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta}); err == nil {
+		t.Fatal("an out-of-range memory parameter was accepted")
+	}
+}
