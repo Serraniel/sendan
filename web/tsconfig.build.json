@@ -3,6 +3,17 @@
   "compilerOptions": {
     "noEmit": false,
     "outDir": "build",
+    // Stated rather than inferred. TypeScript derives the output layout from
+    // the common source directory, which today is src/crypto because that is
+    // the only source tree. Adding the web client would move it to src and
+    // silently reshape everything under build/.
+    //
+    // src is chosen over src/crypto because it is the root that survives that
+    // addition. Nothing consumes build/ yet, so the one-time change of shape
+    // costs nothing now and cannot be had for free later.
+    //
+    // TypeScript 7 requires this to be explicit in any case (#100).
+    "rootDir": "src",
     "declaration": true
   },
   "exclude": ["src/**/*.test.ts", "src/crypto/vectors/**"]
