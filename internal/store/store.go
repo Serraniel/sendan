@@ -163,6 +163,18 @@ type Store interface {
 	// other won.
 	Delete(ctx context.Context, id string) error
 
+	// Pending returns an upload that is still being written, and only such an
+	// upload: a completed one yields ErrNotFound.
+	//
+	// The upload path needs the row that Get deliberately hides, for the
+	// at-rest key that encrypts arriving chunks. Restricting it to incomplete
+	// uploads is what stops a caller appending to a finished one - without it,
+	// anyone holding an identifier could write past the end of a completed
+	// upload and replace what its recipient receives. Identifiers become known
+	// to recipients once a link is shared, so this is not a theoretical order
+	// of events.
+	Pending(ctx context.Context, id string) (*Upload, error)
+
 	// Complete marks an upload as finished being written, making it reachable.
 	// Completing one that is already complete is not an error.
 	Complete(ctx context.Context, id string, now time.Time) error

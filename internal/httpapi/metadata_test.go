@@ -47,6 +47,38 @@ func newAPIHarnessWithAttempts(t *testing.T, burst int) *apiHarness {
 	return h
 }
 
+// newAPIHarnessWithIncompleteTTL treats an upload as abandoned almost
+// immediately, so a test can reach the reaper without waiting or rewriting
+// timestamps behind the service's back.
+func newAPIHarnessWithIncompleteTTL(t *testing.T, ttl time.Duration) *apiHarness {
+	t.Helper()
+	h := newAPIHarness(t)
+	h.svc = upload.New(h.store, h.blobs, upload.Policy{
+		DefaultTTL: 24 * time.Hour, MaxTTL: 7 * 24 * time.Hour, IncompleteTTL: ttl,
+	}, logging.New(io.Discard, logging.Options{Format: "json"}))
+	h.handler = New(Options{Uploads: h.svc, BaseURL: mustURL(t, "https://sendan.example")})
+	return h
+}
+
+func newAPIHarnessWithLimit(t *testing.T, maxSize int64) *apiHarness {
+	t.Helper()
+	h := newAPIHarness(t)
+	h.handler = New(Options{
+		Uploads: h.svc, BaseURL: mustURL(t, "https://sendan.example"),
+		MaxUploadSize: maxSize,
+	})
+	return h
+}
+
+func newAPIHarnessWithLogger(t *testing.T, log *slog.Logger) *apiHarness {
+	t.Helper()
+	h := newAPIHarness(t)
+	h.handler = New(Options{
+		Uploads: h.svc, BaseURL: mustURL(t, "https://sendan.example"), Log: log,
+	})
+	return h
+}
+
 func newAPIHarness(t *testing.T) *apiHarness {
 	t.Helper()
 	dir := t.TempDir()

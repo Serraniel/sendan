@@ -296,3 +296,9 @@ func (s *SQLite) Complete(ctx context.Context, id string, now time.Time) error {
 	}
 	return nil
 }
+
+// Pending returns an upload that is still being written, and only such an
+// upload.
+func (s *SQLite) Pending(ctx context.Context, id string) (*Upload, error) {
+	return scanUpload(s.db.QueryRowContext(ctx, selectPending, id))
+}

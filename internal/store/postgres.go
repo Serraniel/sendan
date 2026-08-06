@@ -226,3 +226,9 @@ func (p *Postgres) Complete(ctx context.Context, id string, now time.Time) error
 	}
 	return nil
 }
+
+// Pending returns an upload that is still being written, and only such an
+// upload.
+func (p *Postgres) Pending(ctx context.Context, id string) (*Upload, error) {
+	return scanUpload(p.db.QueryRowContext(ctx, rebind(selectPending), id))
+}

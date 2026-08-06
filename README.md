@@ -20,10 +20,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > with encryption at rest; the expiry, revocation and reaping lifecycle;
 > configuration, structured logging and abuse controls.
 >
-> **Not built:** the upload endpoints, the web client, the command line client,
-> and the container image. The download path is complete — metadata,
-> authentication and ranged streaming — but nothing can be uploaded yet, so an
-> instance has nothing to serve.
+> **Not built:** the web client, the command line client, and the container
+> image. The transfer API is complete — resumable upload, metadata,
+> authentication and ranged download — but nothing yet speaks it, so a file can
+> only be moved by a client written against the API directly.
 
 ## Features
 

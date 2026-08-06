@@ -391,3 +391,37 @@ func TestAbandonedTransfersAreStillCharged(t *testing.T) {
 		t.Errorf("recorded %d bytes but wrote %d", served, rec.Body.Len())
 	}
 }
+
+// The content endpoint is subject to the same per-upload attempt limit as the
+// authentication one, or an attacker would simply guess against this path
+// instead.
+func TestContentThrottlesRepeatedWrongTokens(t *testing.T) {
+	h := newAPIHarnessWithAttempts(t, 2)
+	h.putContent(t, testID, 0)
+
+	wrong := bearer(bytes.Repeat([]byte{0x22}, 32))
+	for i := range 2 {
+		req := httptest.NewRequest(http.MethodGet, "/api/uploads/"+testID+"/content", nil)
+		req.Header.Set("Authorization", wrong)
+		rec := httptest.NewRecorder()
+		h.handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: status %d, want 401", i+1, rec.Code)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/uploads/"+testID+"/content", nil)
+	req.Header.Set("Authorization", wrong)
+	rec := httptest.NewRecorder()
+	h.handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status %d, want 429", rec.Code)
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Error("Retry-After is missing, so a client cannot know when to return")
+	}
+	if served, _ := h.counts(t, testID); served != 0 {
+		t.Errorf("refused attempts were charged %d bytes", served)
+	}
+}
