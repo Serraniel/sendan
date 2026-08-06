@@ -1,11 +1,24 @@
 module github.com/Serraniel/sendan
 
+// The minimum Go this module requires.
+//
+// This is not what continuous integration builds with, and should not be: CI
+// resolves the newest patch of a release line so that standard library fixes
+// arrive without anyone editing a file. Pinning CI to this exact version was
+// tried in #117 and reverted, because it built against a version with known
+// vulnerabilities - govulncheck reported them within minutes.
+//
+// A contributor's Go may therefore differ from both. GOTOOLCHAIN only ever
+// moves forward, so a newer local installation is used in preference; see
+// CONTRIBUTING.md for how to reproduce a CI run when that matters.
 go 1.25.8
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/minio/minio-go/v7 v7.2.1
+	github.com/tus/tusd/v2 v2.10.0
 	golang.org/x/crypto v0.54.0
+	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743
 	modernc.org/sqlite v1.55.0
 )
 
@@ -28,10 +41,8 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/tinylib/msgp v1.6.1 // indirect
-	github.com/tus/tusd/v2 v2.10.0 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743 // indirect
 	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
