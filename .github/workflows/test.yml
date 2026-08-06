@@ -16,6 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  GO_VERSION: "1.25"
   NODE_VERSION: "22"
 
 jobs:
@@ -26,9 +27,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          # Follows go.mod, so what CI runs cannot drift from what the
-          # module declares. See the toolchain line there.
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
 
   test-go:
@@ -60,9 +59,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          # Follows go.mod, so what CI runs cannot drift from what the
-          # module declares. See the toolchain line there.
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
 
       # MinIO is started here rather than as a service container: services
       # cannot pass a command, and the image needs "server /data".
@@ -149,9 +146,7 @@ jobs:
           fi
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          # Follows go.mod, so what CI runs cannot drift from what the
-          # module declares. See the toolchain line there.
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
@@ -193,9 +188,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          # Follows go.mod, so what CI runs cannot drift from what the
-          # module declares. See the toolchain line there.
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}

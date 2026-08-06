@@ -1,16 +1,16 @@
 module github.com/Serraniel/sendan
 
-// The Go version every build uses. Continuous integration reads this file
-// rather than carrying a version of its own, so what CI runs cannot drift from
-// what the module declares.
+// The minimum Go this module requires.
 //
-// It is a floor for a contributor, not a pin: a newer local Go is used in
-// preference, because GOTOOLCHAIN only ever moves forward. To reproduce CI
-// exactly, set GOTOOLCHAIN to this version - see CONTRIBUTING.md.
+// This is not what continuous integration builds with, and should not be: CI
+// resolves the newest patch of a release line so that standard library fixes
+// arrive without anyone editing a file. Pinning CI to this exact version was
+// tried in #117 and reverted, because it built against a version with known
+// vulnerabilities - govulncheck reported them within minutes.
 //
-// The drift is not theoretical. net/http.ServeMux changed the redirect it
-// issues for a cleaned path between 1.25 and 1.26, and a test asserting it
-// passed locally and failed in CI for a reason unrelated to the change (#96).
+// A contributor's Go may therefore differ from both. GOTOOLCHAIN only ever
+// moves forward, so a newer local installation is used in preference; see
+// CONTRIBUTING.md for how to reproduce a CI run when that matters.
 go 1.25.8
 
 require (

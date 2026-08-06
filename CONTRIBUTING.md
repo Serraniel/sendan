@@ -111,32 +111,35 @@ Continuous integration enforces these checks, including the cross-language
 vector comparison. A failing pipeline blocks merge, and no check may be marked
 `continue-on-error`.
 
-### Reproducing continuous integration
+### Go versions
 
-Continuous integration reads the Go version from `go.mod`, so it cannot drift
-from what the module declares. Your local Go may still differ: `GOTOOLCHAIN`
-only ever moves *forward*, so a newer installation is used in preference and
-you build against a different standard library than CI does.
+Three versions are in play, and they are allowed to differ:
 
-That difference is real. `net/http.ServeMux` changed the redirect it issues for
-a cleaned path between 1.25 and 1.26, and a test asserting it passed locally and
+| Where | What | Why |
+|---|---|---|
+| `go.mod` | the **minimum** the module requires | what a consumer needs to build it |
+| Workflows | the newest patch of a **release line** | so standard library fixes arrive without editing a file |
+| Your machine | whatever you installed | `GOTOOLCHAIN` only ever moves forward, so a newer Go is used in preference |
+
+Pinning continuous integration to the exact version in `go.mod` was tried and
+reverted: it built against a release with known vulnerabilities, which
+`govulncheck` reported immediately. Reproducibility and receiving security fixes
+pull in opposite directions, and fixes win.
+
+The cost is that your standard library may not be the one CI uses, and the
+difference is real: `net/http.ServeMux` changed the redirect it issues for a
+cleaned path between 1.25 and 1.26, and a test asserting it passed locally and
 failed in CI for a reason unrelated to the change. The next such difference may
 not fail a test at all.
 
-To run exactly what CI runs:
+When that matters — anything timing-, protocol- or standard-library-sensitive —
+run against a specific toolchain:
 
 ```sh
-GOTOOLCHAIN=$(go mod edit -json | jq -r .Go | sed 's/^/go/') go test ./...
+GOTOOLCHAIN=go1.25.12 go test ./...
 ```
 
-or simply name the version in `go.mod`:
-
-```sh
-GOTOOLCHAIN=go1.25.8 go test ./...
-```
-
-Worth doing before opening a pull request that touches anything timing-,
-protocol- or standard-library-sensitive.
+The version a CI run used is printed in its "Setup Go" step.
 
 ### Coverage floors
 

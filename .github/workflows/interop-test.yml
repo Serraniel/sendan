@@ -16,6 +16,19 @@ on:
 permissions:
   contents: read
 
+# The Go release line every job builds against.
+#
+# A line rather than an exact patch, deliberately. setup-go resolves this to the
+# newest patch release, so a standard library fix arrives without anyone editing
+# a file. Pinning the patch was tried and reverted in #117: it made continuous
+# integration build against a version with known vulnerabilities, which
+# govulncheck reported within minutes.
+#
+# The minimum the module requires is the go directive in go.mod, which is a
+# different question and a different value.
+env:
+  GO_VERSION: "1.25"
+
 concurrency:
   group: interop-${{ github.ref }}
   cancel-in-progress: true
@@ -38,9 +51,7 @@ jobs:
       - if: steps.guard.outputs.present == 'true'
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          # Follows go.mod, so what CI runs cannot drift from what the
-          # module declares.
-          go-version-file: go.mod
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Install ffsend
         if: steps.guard.outputs.present == 'true'
