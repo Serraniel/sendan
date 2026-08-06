@@ -1,9 +1,10 @@
 {
+  // SvelteKit generates a base with the module resolution and path aliases the
+  // framework needs. It does not enable strict checking, so every option this
+  // project relies on is restated below rather than inherited - inheriting a
+  // base that changes between releases is how a guarantee quietly disappears.
+  "extends": "./.svelte-kit/tsconfig.json",
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
@@ -11,7 +12,7 @@
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
     "skipLibCheck": true,
+    "lib": ["ES2022", "DOM"],
     "types": ["vitest/globals", "node"]
-  },
-  "include": ["src/**/*.ts"]
+  }
 }

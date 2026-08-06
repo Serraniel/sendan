@@ -146,11 +146,13 @@ func run() error {
 	defer reaper.Wait()
 
 	handler := httpapi.New(httpapi.Options{
-		BaseURL:   cfg.BaseURL,
-		SourceURL: cfg.SourceURL,
-		Version:   version,
-		Commit:    commit,
-		Uploads:   uploads,
+		BaseURL:       cfg.BaseURL,
+		SourceURL:     cfg.SourceURL,
+		Version:       version,
+		Commit:        commit,
+		Uploads:       uploads,
+		ServeUI:       cfg.ServeUI,
+		MaxUploadSize: cfg.MaxUploadSize,
 
 		RateLimit:      limiter,
 		TrustedProxies: cfg.TrustedProxies,

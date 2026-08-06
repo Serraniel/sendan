@@ -26,6 +26,7 @@ internal/upload      82.0
 # marshal error on a struct of strings and a bool are both unreachable from a
 # test.
 internal/httpapi     96.0
+internal/webui       90.0
 internal/config      93.0
 internal/logging     98.0
 internal/ratelimit   96.0
