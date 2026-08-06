@@ -52,3 +52,8 @@ node_modules/
 /coverage.out
 /coverage.html
 web/coverage/
+
+# The built web client, written straight into the Go tree by the web build and
+# embedded from there. Generated, so not tracked; a build without it compiles
+# and serves an explanation, because the embed is behind a build tag.
+/internal/webui/dist/

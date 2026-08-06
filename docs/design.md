@@ -29,6 +29,8 @@ command line client are produced from a single Go module.
 | `internal/blob` | Upload ciphertext: filesystem and S3, plus crypto-shredding and a conformance suite |
 | `internal/upload` | Lifecycle: expiry policy, revocation, reaping |
 | `internal/httpapi` | HTTP surface and the middleware every response passes through |
+| `internal/webui` | Serving the embedded web client |
+| `web` | The client itself: SvelteKit, and the TypeScript half of the scheme |
 | `internal/config` | Environment configuration and validation |
 | `internal/logging` | Structured logging with identifier redaction |
 | `internal/ratelimit` | Structural abuse controls |
@@ -535,6 +537,43 @@ Accumulation and the recomputed count are a single statement, so concurrent
 transfers cannot lose each other's bytes. That property has its own conformance
 case on every backend, replacing the atomic-claim case the previous model
 needed.
+
+## 4.5 Serving the client
+
+One binary, one artefact, no second web server. The client is built to static
+files and embedded.
+
+**It is a single-page application.** A download URL contains an upload
+identifier, so the set of pages is not known at build time and never will be;
+any path that does not name a file receives the shell, which routes in the
+browser. Nothing is server-rendered, because the link secret lives in the URL
+fragment and a server never receives it — there is nothing it could usefully
+render.
+
+> [!IMPORTANT]
+> **The embed is behind the `embedui` build tag**, and a release must set it:
+>
+> ```sh
+> (cd web && npm ci && npm run build)
+> go build -tags embedui ./cmd/sendan
+> ```
+>
+> Without the tag the binary compiles and serves an explanation instead of the
+> client. That is deliberate: `go build` and `go test` must not require a
+> JavaScript toolchain, or a contributor changing a storage backend would have
+> to install one to compile the project.
+>
+> The embed pattern has no fallback file, so a *tagged* build with no client
+> present fails rather than producing a binary silently missing its interface.
+> Continuous integration builds both ways and then greps the tagged binary for
+> the client, because a forgotten tag is otherwise invisible until a user
+> reports a blank page.
+
+The client is registered at the root, so it answers only what nothing else
+claimed; the API and the health endpoint keep their paths. Hashed asset names
+are content-addressed and cached for a year, while the shell is never cached —
+it names the assets of the build that produced it, and a stale one would load
+files that no longer exist.
 
 ## 5. Third-party client compatibility
 

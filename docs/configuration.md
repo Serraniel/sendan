@@ -16,7 +16,7 @@ require restarting repeatedly to discover the next fault.
 >
 > | Variable | Effect today |
 > |---|---|
-> | `SENDAN_SERVE_UI` | no effect; there is no web client to serve |
+> | `SENDAN_SERVE_UI` | applied, in a build that has a client. See below |
 > | `SENDAN_SEND_COMPAT` | no endpoints; the compatibility layer is M7. It does log a warning at startup when enabled |
 >
 > Everything else applies: storage opens at startup, uploads are accepted and
@@ -30,6 +30,11 @@ require restarting repeatedly to discover the next fault.
 | `SENDAN_LISTEN` | `:8080` | Address the HTTP server binds to |
 | `SENDAN_BASE_URL` | `http://localhost:8080` | Externally visible origin, used to build download links. Must be absolute `http` or `https` |
 | `SENDAN_SERVE_UI` | `true` | Serve the embedded web client. `false` gives a backend-only instance from the same binary |
+
+> [!NOTE]
+> The client is embedded behind the `embedui` build tag. A binary built without
+> it serves an explanation rather than the client, whatever this setting says,
+> and logs a warning at startup. See [`docs/design.md`](design.md) §4.5.
 | `SENDAN_SOURCE_URL` | the upstream repository | Where this instance's corresponding source can be obtained, reported at `/api/source` |
 
 > [!IMPORTANT]

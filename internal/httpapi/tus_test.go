@@ -484,3 +484,66 @@ func TestAStreamedChunkCanResume(t *testing.T) {
 			got.Body.Len(), len(body))
 	}
 }
+
+// The client is registered at the root, so it answers whatever nothing else
+// claimed. That is only safe if the API and the health endpoint keep their
+// paths - a client that shadowed them would break every request while looking
+// like a routing preference.
+func TestTheClientDoesNotShadowTheAPI(t *testing.T) {
+	h := newAPIHarness(t)
+	// The handler is rebuilt with the client enabled. An untagged build embeds
+	// nothing, so this exercises the registration rather than the assets.
+	handler := New(Options{
+		Uploads: h.svc,
+		BaseURL: mustURL(t, "https://sendan.example"),
+		ServeUI: true,
+		Log:     logging.New(io.Discard, logging.Options{Format: "json"}),
+	})
+
+	h.putContent(t, testID, 0)
+
+	cases := []struct {
+		name   string
+		method string
+		target string
+		reject int
+	}{
+		{"health", http.MethodGet, "/healthz", http.StatusNotFound},
+		{"source", http.MethodGet, "/api/source", http.StatusNotFound},
+		{"metadata", http.MethodGet, "/api/uploads/" + testID + "/metadata", http.StatusNotFound},
+		{"content", http.MethodGet, "/api/uploads/" + testID + "/content", http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, tc.target, nil)
+			if strings.Contains(tc.target, "/content") {
+				req.Header.Set("Authorization", bearer(authToken))
+			}
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			if rec.Code == tc.reject {
+				t.Fatalf("%s was answered by the client rather than its handler", tc.target)
+			}
+			if strings.Contains(rec.Body.String(), "<!doctype html") {
+				t.Errorf("%s received the client shell:\n%s", tc.target, rec.Body.String())
+			}
+		})
+	}
+}
+
+// With the client disabled, an instance is backend-only from the same binary.
+func TestTheClientIsNotServedWhenDisabled(t *testing.T) {
+	h := newAPIHarness(t)
+	handler := New(Options{
+		Uploads: h.svc,
+		BaseURL: mustURL(t, "https://sendan.example"),
+		ServeUI: false,
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("status %d with the client disabled, want 404", rec.Code)
+	}
+}

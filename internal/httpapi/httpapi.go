@@ -14,6 +14,7 @@ import (
 
 	"github.com/Serraniel/sendan/internal/ratelimit"
 	"github.com/Serraniel/sendan/internal/upload"
+	"github.com/Serraniel/sendan/internal/webui"
 )
 
 // Options configures the handler.
@@ -35,6 +36,11 @@ type Options struct {
 
 	// MaxUploadSize bounds a single upload, in bytes. Zero means unbounded.
 	MaxUploadSize int64
+
+	// ServeUI serves the embedded web client. A build without one serves
+	// nothing regardless, so this only decides whether an instance that has a
+	// client offers it.
+	ServeUI bool
 
 	// Uploads owns the upload lifecycle. Routes that need it are registered
 	// only when it is present, so a handler can never be reached with a nil
@@ -107,6 +113,18 @@ func New(opts Options) http.Handler {
 		mux.Handle("HEAD /api/uploads/{id}", mounted)
 		mux.Handle("PATCH /api/uploads/{id}", mounted)
 		mux.Handle("OPTIONS /api/uploads/{id}", mounted)
+	}
+
+	// Registered last and at the root, so it answers only what nothing above
+	// claimed. The API and the health endpoint keep their paths whatever the
+	// client contains.
+	if opts.ServeUI {
+		if assets, ok := webui.Assets(); ok {
+			mux.Handle("/", webui.Handler(assets))
+		} else {
+			opts.Log.Warn("the web client is enabled but not built into this binary; " +
+				"build with -tags embedui to include it")
+		}
 	}
 
 	https := opts.BaseURL != nil && opts.BaseURL.Scheme == "https"
