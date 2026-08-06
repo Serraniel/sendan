@@ -111,6 +111,33 @@ Continuous integration enforces these checks, including the cross-language
 vector comparison. A failing pipeline blocks merge, and no check may be marked
 `continue-on-error`.
 
+### Reproducing continuous integration
+
+Continuous integration reads the Go version from `go.mod`, so it cannot drift
+from what the module declares. Your local Go may still differ: `GOTOOLCHAIN`
+only ever moves *forward*, so a newer installation is used in preference and
+you build against a different standard library than CI does.
+
+That difference is real. `net/http.ServeMux` changed the redirect it issues for
+a cleaned path between 1.25 and 1.26, and a test asserting it passed locally and
+failed in CI for a reason unrelated to the change. The next such difference may
+not fail a test at all.
+
+To run exactly what CI runs:
+
+```sh
+GOTOOLCHAIN=$(go mod edit -json | jq -r .Go | sed 's/^/go/') go test ./...
+```
+
+or simply name the version in `go.mod`:
+
+```sh
+GOTOOLCHAIN=go1.25.8 go test ./...
+```
+
+Worth doing before opening a pull request that touches anything timing-,
+protocol- or standard-library-sensitive.
+
 ### Coverage floors
 
 Go coverage is held to a per-package floor in `.coverage-floors`; TypeScript

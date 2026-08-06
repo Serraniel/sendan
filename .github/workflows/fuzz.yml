@@ -36,7 +36,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.25"
+          # Follows go.mod, so what CI runs cannot drift from what the
+          # module declares.
+          go-version-file: go.mod
 
       # Fuzzing is unbounded work, so it runs on a schedule rather than as a
       # merge gate. A pull request cannot wait on it, but nothing else explores

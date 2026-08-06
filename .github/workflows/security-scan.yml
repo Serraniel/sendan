@@ -24,7 +24,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: "1.25"
+          # Follows go.mod, so what CI runs cannot drift from what the
+          # module declares.
+          go-version-file: go.mod
       # govulncheck reports only vulnerabilities actually reachable from this
       # code, so its findings are high signal and worth failing on.
       - name: Run govulncheck
