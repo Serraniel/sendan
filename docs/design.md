@@ -295,6 +295,27 @@ Three protocol extensions are disabled, each for a reason:
 would make `SENDAN_MAX_UPLOAD_SIZE` a limit in name only, since the server would
 discover the excess having already written it.
 
+#### Streamed and chunked uploads are the same endpoint
+
+A browser with `fetch` request streaming (`duplex: "half"`) sends the whole
+upload as one request whose length it does not declare on the request itself.
+That needs no second endpoint and no second protocol: it is the same `PATCH`,
+with the body arriving as a stream. A browser without it slices the file and
+sends several. The server cannot tell the difference and does not need to.
+
+There is therefore **one upload path on the server**, which matters because the
+alternative — a streaming endpoint beside a chunked one — would mean the
+fallback rots unnoticed, being the path nobody exercises. Feature detection
+belongs to the client, where the difference actually exists.
+
+> [!IMPORTANT]
+> **The declared length is what makes the size limit enforceable**, and a
+> streamed body is precisely the case where the request cannot be checked up
+> front. A client that declares ten bytes and streams a hundred stores ten: the
+> excess is refused, and the upload is not extended by it. Both the streamed and
+> the chunked shapes are tested, because a regression in the streamed one would
+> otherwise surface only in a browser that supports it.
+
 > [!IMPORTANT]
 > **A completed upload cannot be written to.** The upload path reads only rows
 > that are still incomplete, so a `PATCH` to a finished upload is refused.

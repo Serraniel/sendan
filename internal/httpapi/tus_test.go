@@ -8,6 +8,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -390,5 +391,96 @@ func TestTusLoggerBridge(t *testing.T) {
 func TestTusLoggerToleratesNoLogger(t *testing.T) {
 	if l := tusLogger(nil); l == nil {
 		t.Fatal("tusLogger returned nil")
+	}
+}
+
+// streamedBody is a body whose length is not known in advance, which is what a
+// browser sends with fetch request streaming (duplex: "half"). httptest sets a
+// Content-Length for the readers it recognises, so this hides the type.
+type streamedBody struct{ r io.Reader }
+
+func (s streamedBody) Read(p []byte) (int, error) { return s.r.Read(p) }
+
+// patchStreamed sends a chunk whose length the server learns only as it
+// arrives.
+func (h *apiHarness) patchStreamed(t *testing.T, id string, offset int, body []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPatch, "/api/uploads/"+id, streamedBody{bytes.NewReader(body)})
+	req.ContentLength = -1
+	req.Header.Set("Tus-Resumable", "1.0.0")
+	req.Header.Set("Content-Type", "application/offset+octet-stream")
+	req.Header.Set("Upload-Offset", strconv.Itoa(offset))
+	rec := httptest.NewRecorder()
+	h.handler.ServeHTTP(rec, req)
+	return rec
+}
+
+// A browser with fetch request streaming sends the whole upload as one request
+// whose length is not declared on the request itself. That needs no second
+// endpoint: it is the same PATCH, with the body arriving as a stream.
+//
+// This is asserted because nothing else would notice it breaking. The chunked
+// path is exercised by every other test; a regression in the streamed one would
+// surface only in a browser that supports it.
+func TestUploadAcceptsAStreamedBody(t *testing.T) {
+	h := newAPIHarness(t)
+	body := []byte(strings.Repeat("streamed", 500)) // 4000 bytes
+
+	_, id := h.create(t, len(body), uploadMetadata(nil))
+
+	rec := h.patchStreamed(t, id, 0, body)
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("status %d, want 204: %s", rec.Code, rec.Body.String())
+	}
+
+	got := h.fetch(t, id, "", nil)
+	if got.Code != http.StatusOK {
+		t.Fatalf("download: status %d", got.Code)
+	}
+	if !bytes.Equal(got.Body.Bytes(), body) {
+		t.Errorf("a streamed upload produced %d bytes that differ from the %d sent",
+			got.Body.Len(), len(body))
+	}
+}
+
+// The declared length is what makes the size limit enforceable, and a streamed
+// body is the case where the server cannot check the length up front. A client
+// that declares a little and streams a lot must not be able to store the lot.
+func TestAStreamedBodyCannotExceedTheDeclaredLength(t *testing.T) {
+	h := newAPIHarness(t)
+
+	const declared = 10
+	_, id := h.create(t, declared, uploadMetadata(nil))
+
+	rec := h.patchStreamed(t, id, 0, bytes.Repeat([]byte("X"), 100))
+	if rec.Code == http.StatusNoContent {
+		t.Fatal("a body ten times the declared length was accepted in full")
+	}
+
+	// Exactly what was declared is stored, and no more.
+	got := h.fetch(t, id, "", nil)
+	if got.Body.Len() > declared {
+		t.Errorf("stored %d bytes against a declared length of %d", got.Body.Len(), declared)
+	}
+}
+
+// Resumption still works when the resumed chunk is streamed, which is the
+// combination a browser produces after a dropped connection.
+func TestAStreamedChunkCanResume(t *testing.T) {
+	h := newAPIHarness(t)
+	body := []byte(strings.Repeat("y", 2000))
+
+	_, id := h.create(t, len(body), uploadMetadata(nil))
+	if rec := h.patch(t, id, 0, body[:800]); rec.Code != http.StatusNoContent {
+		t.Fatalf("first chunk: %d", rec.Code)
+	}
+	if rec := h.patchStreamed(t, id, 800, body[800:]); rec.Code != http.StatusNoContent {
+		t.Fatalf("streamed resume: status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	got := h.fetch(t, id, "", nil)
+	if !bytes.Equal(got.Body.Bytes(), body) {
+		t.Errorf("a streamed resume produced %d bytes that differ from the %d sent",
+			got.Body.Len(), len(body))
 	}
 }
