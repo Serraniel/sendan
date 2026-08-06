@@ -230,6 +230,42 @@ exhausts tab memory:
   which remains the only portable approach.
 
 
+### 4.0 Storing an upload
+
+An upload arrives in chunks so it can be resumed, which means the blob layer has
+to accept writes at an offset rather than only whole blobs. `WriteChunk`,
+`Length` and `Finish` describe that on both backends, and a partial upload is
+not a blob: `Open` reports it as absent until `Finish`, because what a
+half-written upload decrypts to is not what the uploader sent.
+
+**Offsets are checked, not trusted.** A resuming client reports where it
+believes it stopped. Writing at a position that does not match what is stored
+would leave a gap or an overlap — content that decrypts to nothing from the
+point of failure onwards, discovered by the recipient rather than by the server.
+A mismatch is a distinct error so a client can act on it: ask how much was
+stored and continue from there.
+
+Chunks are encrypted at their offset. The at-rest layer is CTR, whose keystream
+is seekable, so a chunk costs work proportional to itself; a mode without that
+property would make every resumed chunk cost a pass over everything before it.
+
+| Backend | How a partial upload is held |
+|---|---|
+| Filesystem | A file beside the blob, renamed into place by `Finish`. A rename is atomic, so a reader never observes a half-written blob. |
+| Object store | Spooled to local disk and uploaded by `Finish`, because objects are immutable and cannot be appended to. |
+
+> [!NOTE]
+> Spooling costs local disk equal to the upload, and a partial upload does not
+> survive losing the machine it was spooled on — with several replicas,
+> resumability is per-replica. Multipart uploads remove both and are
+> [#111](https://github.com/Serraniel/sendan/issues/111); the interface already
+> describes the behaviour without assuming how it is stored, so that is a
+> backend change behind a settled contract.
+
+A partial upload holds the same content a finished one would, so it is encrypted
+the same way and deleted the same way: `Delete` discards it whether or not a
+blob was ever finished.
+
 ### 4.1 Metadata
 
 `GET /api/uploads/{id}/metadata` returns what a client needs before deciding

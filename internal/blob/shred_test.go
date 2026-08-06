@@ -8,7 +8,10 @@ import (
 	"crypto/aes"
 	"errors"
 	"io"
+	fs2 "io/fs"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -322,4 +325,188 @@ func FuzzShredderSeekRoundTrip(f *testing.F) {
 			t.Fatalf("size %d offset %d: decrypted the wrong plaintext", size, at)
 		}
 	})
+}
+
+// A chunked upload must decrypt to exactly what a single write would produce.
+// The keystream is positioned at each chunk's offset, so an error in that
+// positioning shows up as content that decrypts to noise from the first chunk
+// boundary onwards - and only for uploads that were resumed.
+func TestChunkedEncryptionMatchesWholeEncryption(t *testing.T) {
+	dir := t.TempDir()
+	fs, err := NewFS(dir)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	s := NewShredder(fs)
+	ctx := t.Context()
+
+	key, err := NewAtRestKey()
+	if err != nil {
+		t.Fatalf("key: %v", err)
+	}
+
+	want := make([]byte, 200*1024)
+	for i := range want {
+		want[i] = byte(i * 7 % 253)
+	}
+
+	const chunked = "CHUNKENCAAAAAAAAAAAAAA"
+	// Sizes chosen to cross AES block boundaries mid-chunk: 1 and 4095 are not
+	// multiples of 16, so the keystream must be aligned part-way through a
+	// block for the result to match.
+	sizes := []int{1, 4095, 65536}
+	sent := 0
+	for _, n := range sizes {
+		sent += n
+	}
+	sizes = append(sizes, len(want)-sent)
+
+	var offset int64
+	for _, size := range sizes {
+		n, err := s.WriteChunk(ctx, chunked, key, offset, bytes.NewReader(want[offset:offset+int64(size)]))
+		if err != nil {
+			t.Fatalf("chunk at %d: %v", offset, err)
+		}
+		offset += n
+	}
+	if err := s.Finish(ctx, chunked); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+
+	rc, err := s.Open(ctx, chunked, key)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		for i := range got {
+			if got[i] != want[i] {
+				t.Fatalf("a chunked upload decrypts differently from the first difference at byte %d", i)
+			}
+		}
+		t.Fatalf("read %d bytes, want %d", len(got), len(want))
+	}
+}
+
+// The stored bytes must be ciphertext. A partial upload holds the same content
+// a finished one would, so it gets the same protection.
+func TestPartialUploadIsStoredEncrypted(t *testing.T) {
+	dir := t.TempDir()
+	fs, err := NewFS(dir)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	s := NewShredder(fs)
+
+	key, err := NewAtRestKey()
+	if err != nil {
+		t.Fatalf("key: %v", err)
+	}
+
+	plaintext := []byte("a recognisable run of plaintext that must not reach the disk")
+	if _, err := s.WriteChunk(t.Context(), "PARTENCAAAAAAAAAAAAAAA", key, 0, bytes.NewReader(plaintext)); err != nil {
+		t.Fatalf("chunk: %v", err)
+	}
+
+	var found bool
+	err = filepath.WalkDir(dir, func(path string, d fs2.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err //nolint:nilerr // directories are skipped, errors propagate
+		}
+		data, readErr := os.ReadFile(path) //nolint:gosec // walking a temporary directory in a test
+		if readErr != nil {
+			return nil //nolint:nilerr // unreadable files are not evidence
+		}
+		if bytes.Contains(data, plaintext) {
+			t.Errorf("plaintext found in %s", path)
+		}
+		found = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+	if !found {
+		t.Fatal("no file was written, so this proves nothing")
+	}
+}
+
+func TestShredderChunkedLifecycle(t *testing.T) {
+	s := NewShredder(mustFS(t))
+	ctx := t.Context()
+	key, err := NewAtRestKey()
+	if err != nil {
+		t.Fatalf("key: %v", err)
+	}
+	const id = "SHREDCHUNKAAAAAAAAAAAA"
+
+	if _, err := s.Length(ctx, id); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("length before any chunk: got %v, want ErrNotFound", err)
+	}
+
+	if _, err := s.WriteChunk(ctx, id, key, 0, bytes.NewReader([]byte("hello "))); err != nil {
+		t.Fatalf("first chunk: %v", err)
+	}
+	n, err := s.Length(ctx, id)
+	if err != nil {
+		t.Fatalf("length: %v", err)
+	}
+	if n != 6 {
+		t.Fatalf("length %d, want 6 - a client would resume from the wrong place", n)
+	}
+
+	// The offset is in plaintext bytes, which for CTR are also ciphertext
+	// bytes; a wrong offset must be refused rather than silently written.
+	if _, err := s.WriteChunk(ctx, id, key, 3, bytes.NewReader([]byte("x"))); !errors.Is(err, ErrOffset) {
+		t.Fatalf("chunk at the wrong offset: got %v, want ErrOffset", err)
+	}
+	if _, err := s.WriteChunk(ctx, id, key, 6, bytes.NewReader([]byte("world"))); err != nil {
+		t.Fatalf("second chunk: %v", err)
+	}
+	if err := s.Finish(ctx, id); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+
+	rc, err := s.Open(ctx, id, key)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+	got, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != "hello world" {
+		t.Errorf("read %q, want %q", got, "hello world")
+	}
+}
+
+func TestShredderChunkRejectsBadArguments(t *testing.T) {
+	s := NewShredder(mustFS(t))
+	key, err := NewAtRestKey()
+	if err != nil {
+		t.Fatalf("key: %v", err)
+	}
+
+	if _, err := s.WriteChunk(t.Context(), "NEGATIVEAAAAAAAAAAAAAA", key, -1, bytes.NewReader(nil)); err == nil {
+		t.Error("a negative offset was accepted, which would position the keystream before the start")
+	}
+	short := make([]byte, AtRestKeySize-1)
+	if _, err := s.WriteChunk(t.Context(), "SHORTKEYAAAAAAAAAAAAAA", short, 0, bytes.NewReader(nil)); !errors.Is(err, ErrAtRestKey) {
+		t.Errorf("a short key: got %v, want ErrAtRestKey", err)
+	}
+}
+
+func mustFS(t *testing.T) *FS {
+	t.Helper()
+	fs, err := NewFS(t.TempDir())
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	return fs
 }

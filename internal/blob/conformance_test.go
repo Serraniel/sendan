@@ -6,8 +6,11 @@ package blob_test
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"io"
 	"os"
+	"path"
 	"testing"
 
 	"github.com/Serraniel/sendan/internal/blob"
@@ -44,7 +47,19 @@ func TestS3Conformance(t *testing.T) {
 	}
 
 	blobtest.Run(t, func(t *testing.T) blob.Store {
-		s, err := blob.NewS3(t.Context(), cfg)
+		// A prefix per store, so each case gets a namespace of its own. The
+		// filesystem factory gets this from t.TempDir; without it the object
+		// store would carry state between cases and between runs - which is
+		// how the partial-upload cases first failed, resuming a spool file an
+		// earlier run had left behind.
+		suffix := make([]byte, 8)
+		if _, err := rand.Read(suffix); err != nil {
+			t.Fatalf("random prefix: %v", err)
+		}
+		isolated := cfg
+		isolated.Prefix = path.Join(cfg.Prefix, hex.EncodeToString(suffix))
+
+		s, err := blob.NewS3(t.Context(), isolated)
 		if err != nil {
 			t.Fatalf("connect: %v", err)
 		}

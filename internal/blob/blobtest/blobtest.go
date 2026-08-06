@@ -32,17 +32,25 @@ func Run(t *testing.T, newStore Factory) {
 	t.Helper()
 
 	for name, fn := range map[string]func(*testing.T, Factory){
-		"RoundTrip":                 testRoundTrip,
-		"EmptyBlob":                 testEmptyBlob,
-		"LargeBlob":                 testLargeBlob,
-		"MissingBlob":               testMissingBlob,
-		"DeleteIsIdempotent":        testDeleteIsIdempotent,
-		"IdentifiersAreValidated":   testIdentifiersAreValidated,
-		"FailedPutStoresNothing":    testFailedPutStoresNothing,
-		"CancelledPutStoresNothing": testCancelledPutStoresNothing,
-		"SeekFromStart":             testSeekFromStart,
-		"SeekFromEndAndCurrent":     testSeekFromEndAndCurrent,
-		"OverwriteReplaces":         testOverwriteReplaces,
+		"RoundTrip":                           testRoundTrip,
+		"EmptyBlob":                           testEmptyBlob,
+		"LargeBlob":                           testLargeBlob,
+		"MissingBlob":                         testMissingBlob,
+		"DeleteIsIdempotent":                  testDeleteIsIdempotent,
+		"IdentifiersAreValidated":             testIdentifiersAreValidated,
+		"FailedPutStoresNothing":              testFailedPutStoresNothing,
+		"CancelledPutStoresNothing":           testCancelledPutStoresNothing,
+		"SeekFromStart":                       testSeekFromStart,
+		"SeekFromEndAndCurrent":               testSeekFromEndAndCurrent,
+		"ChunkedUploadMatchesAWholeOne":       testChunkedUploadMatchesAWholeOne,
+		"ChunksMustContinueWhereTheLastEnded": testChunksMustContinueWhereTheLastEnded,
+		"PartialUploadIsNotReadable":          testPartialUploadIsNotReadable,
+		"ResumingReportsTheStoredLength":      testResumingReportsTheStoredLength,
+		"DeleteDiscardsAPartialUpload":        testDeleteDiscardsAPartialUpload,
+		"OverwriteReplaces":                   testOverwriteReplaces,
+		"FinishRequiresAnUpload":              testFinishRequiresAnUpload,
+		"ChunkedWritesValidateIdentifiers":    testChunkedWritesValidateIdentifiers,
+		"AFailedChunkKeepsWhatArrived":        testAFailedChunkKeepsWhatArrived,
 	} {
 		t.Run(name, func(t *testing.T) { fn(t, newStore) })
 	}
@@ -312,3 +320,257 @@ func testOverwriteReplaces(t *testing.T, newStore Factory) {
 type errReader struct{ err error }
 
 func (e errReader) Read([]byte) (int, error) { return 0, e.err }
+
+// A chunked upload must produce exactly the bytes a single write would have.
+// Anything else means the two paths diverge, and the difference would be
+// discovered by a recipient whose file does not decrypt.
+func testChunkedUploadMatchesAWholeOne(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	want := make([]byte, 300*1024)
+	for i := range want {
+		want[i] = byte(i % 251)
+	}
+
+	const chunked = "CHUNKEDAAAAAAAAAAAAAAA"
+	const whole = "WHOLEAAAAAAAAAAAAAAAAA"
+
+	// Deliberately uneven chunks, including several that are not a multiple of
+	// any block size, so an implementation that assumes alignment fails here.
+	// The final chunk is whatever remains, computed rather than written out: an
+	// arithmetic slip in a fixture is a failure that says nothing about the code.
+	sizes := []int{1, 4095, 65536, 100000}
+	sent := 0
+	for _, n := range sizes {
+		sent += n
+	}
+	sizes = append(sizes, len(want)-sent)
+
+	var offset int64
+	for _, size := range sizes {
+		n, err := s.WriteChunk(ctx, chunked, offset, bytes.NewReader(want[offset:offset+int64(size)]))
+		if err != nil {
+			t.Fatalf("chunk at %d: %v", offset, err)
+		}
+		if n != int64(size) {
+			t.Fatalf("chunk at %d wrote %d bytes, want %d", offset, n, size)
+		}
+		offset += n
+	}
+	if offset != int64(len(want)) {
+		t.Fatalf("wrote %d bytes in total, want %d", offset, len(want))
+	}
+	if err := s.Finish(ctx, chunked); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+
+	if _, err := s.Put(ctx, whole, bytes.NewReader(want)); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+
+	for _, id := range []string{chunked, whole} {
+		rc, err := s.Open(ctx, id)
+		if err != nil {
+			t.Fatalf("open %s: %v", id, err)
+		}
+		got, err := io.ReadAll(rc)
+		_ = rc.Close()
+		if err != nil {
+			t.Fatalf("read %s: %v", id, err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("%s: read %d bytes that differ from what was written", id, len(got))
+		}
+	}
+}
+
+// A client reports where it believes it stopped. Writing at a position that
+// does not match what is stored would leave a gap or an overlap, which the
+// recipient discovers as a file that does not decrypt.
+func testChunksMustContinueWhereTheLastEnded(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	ctx := t.Context()
+	const id = "OFFSETAAAAAAAAAAAAAAAA"
+
+	if _, err := s.WriteChunk(ctx, id, 0, bytes.NewReader([]byte("hello"))); err != nil {
+		t.Fatalf("first chunk: %v", err)
+	}
+
+	for _, offset := range []int64{0, 3, 6, 100} {
+		if _, err := s.WriteChunk(ctx, id, offset, bytes.NewReader([]byte("x"))); !errors.Is(err, blob.ErrOffset) {
+			t.Errorf("chunk at %d after 5 bytes: got %v, want ErrOffset", offset, err)
+		}
+	}
+	// The correct offset still works, so the upload is not poisoned by refusals.
+	if _, err := s.WriteChunk(ctx, id, 5, bytes.NewReader([]byte(" world"))); err != nil {
+		t.Fatalf("resuming at the right offset: %v", err)
+	}
+}
+
+// A half-written upload must never be readable: what it decrypts to is not what
+// the uploader sent, and serving it would hand a recipient a corrupt file.
+func testPartialUploadIsNotReadable(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	ctx := t.Context()
+	const id = "PARTIALAAAAAAAAAAAAAAA"
+
+	if _, err := s.WriteChunk(ctx, id, 0, bytes.NewReader([]byte("half a file"))); err != nil {
+		t.Fatalf("chunk: %v", err)
+	}
+	if _, err := s.Open(ctx, id); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("open before finish: got %v, want ErrNotFound", err)
+	}
+
+	if err := s.Finish(ctx, id); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+	rc, err := s.Open(ctx, id)
+	if err != nil {
+		t.Fatalf("open after finish: %v", err)
+	}
+	_ = rc.Close()
+}
+
+func testResumingReportsTheStoredLength(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	ctx := t.Context()
+	const id = "LENGTHAAAAAAAAAAAAAAAA"
+
+	if _, err := s.Length(ctx, id); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("length of an upload that has not begun: got %v, want ErrNotFound", err)
+	}
+
+	var total int64
+	for _, size := range []int{10, 20, 30} {
+		if _, err := s.WriteChunk(ctx, id, total, bytes.NewReader(make([]byte, size))); err != nil {
+			t.Fatalf("chunk: %v", err)
+		}
+		total += int64(size)
+
+		got, err := s.Length(ctx, id)
+		if err != nil {
+			t.Fatalf("length: %v", err)
+		}
+		if got != total {
+			t.Fatalf("length reports %d, want %d - a client would resume from the wrong place", got, total)
+		}
+	}
+}
+
+// An upload that is never finished is a leftover like any other, and it holds
+// the same content a finished one would.
+func testDeleteDiscardsAPartialUpload(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	ctx := t.Context()
+	const id = "ABANDONEDAAAAAAAAAAAAA"
+
+	if _, err := s.WriteChunk(ctx, id, 0, bytes.NewReader([]byte("abandoned"))); err != nil {
+		t.Fatalf("chunk: %v", err)
+	}
+	if err := s.Delete(ctx, id); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := s.Length(ctx, id); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("a partial upload survived deletion: %v", err)
+	}
+}
+
+// Finishing an upload that never began must fail rather than create an empty
+// blob. A client that gets this wrong should be told, not handed a zero-length
+// file that its recipient discovers is empty.
+func testFinishRequiresAnUpload(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	ctx := t.Context()
+	const id = "NEVERSTARTEDAAAAAAAAAA"
+
+	if err := s.Finish(ctx, id); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("got %v, want ErrNotFound", err)
+	}
+	if _, err := s.Open(ctx, id); !errors.Is(err, blob.ErrNotFound) {
+		t.Fatalf("finishing nothing created a blob: %v", err)
+	}
+}
+
+// Identifiers reach the chunked path from request paths too, so the same
+// allowlist applies. A separator here would address a spool file outside the
+// storage root.
+func testChunkedWritesValidateIdentifiers(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	ctx := t.Context()
+
+	for _, id := range []string{"", "short", "../../../../etc/passwd", "AAAAAAAAAA/AAAAAAAAAAA"} {
+		t.Run(id, func(t *testing.T) {
+			if _, err := s.WriteChunk(ctx, id, 0, bytes.NewReader([]byte("x"))); !errors.Is(err, blob.ErrInvalidID) {
+				t.Errorf("WriteChunk: got %v, want ErrInvalidID", err)
+			}
+			if _, err := s.Length(ctx, id); !errors.Is(err, blob.ErrInvalidID) {
+				t.Errorf("Length: got %v, want ErrInvalidID", err)
+			}
+			if err := s.Finish(ctx, id); !errors.Is(err, blob.ErrInvalidID) {
+				t.Errorf("Finish: got %v, want ErrInvalidID", err)
+			}
+		})
+	}
+}
+
+// failingReader yields n bytes and then fails, standing in for a connection
+// that drops mid-chunk.
+type failingReader struct {
+	data []byte
+	n    int
+}
+
+func (r *failingReader) Read(p []byte) (int, error) {
+	if r.n <= 0 {
+		return 0, errors.New("connection reset")
+	}
+	n := min(min(len(p), r.n), len(r.data))
+	copy(p, r.data[:n])
+	r.data = r.data[n:]
+	r.n -= n
+	return n, nil
+}
+
+// A chunk that fails part-way keeps the bytes that arrived. Discarding them
+// would make every interruption restart the upload, which is what resumability
+// exists to avoid - and the client is told the new length so it can continue.
+func testAFailedChunkKeepsWhatArrived(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	ctx := t.Context()
+	const id = "INTERRUPTEDAAAAAAAAAAA"
+
+	body := bytes.Repeat([]byte("x"), 1000)
+	if _, err := s.WriteChunk(ctx, id, 0, &failingReader{data: body, n: 400}); err == nil {
+		t.Fatal("a reader that failed part-way was reported as a success")
+	}
+
+	got, err := s.Length(ctx, id)
+	if err != nil {
+		t.Fatalf("length after a failed chunk: %v", err)
+	}
+	if got != 400 {
+		t.Fatalf("length is %d after 400 bytes arrived: a client would resume from the wrong place", got)
+	}
+
+	// Resuming from the reported length completes the upload.
+	if _, err := s.WriteChunk(ctx, id, got, bytes.NewReader(body[got:])); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if err := s.Finish(ctx, id); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+
+	rc, err := s.Open(ctx, id)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer func() { _ = rc.Close() }()
+	final, err := io.ReadAll(rc)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !bytes.Equal(final, body) {
+		t.Errorf("the resumed upload holds %d bytes that differ from what was sent", len(final))
+	}
+}

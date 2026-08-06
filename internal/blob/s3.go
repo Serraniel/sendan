@@ -5,10 +5,13 @@ package blob
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/minio/minio-go/v7"
@@ -28,6 +31,19 @@ type S3 struct {
 	client *minio.Client
 	bucket string
 	prefix string
+
+	// spool holds chunked uploads on local disk until they are complete.
+	//
+	// Objects are immutable, so an object store cannot be appended to. The
+	// alternative is a multipart upload, whose parts must be at least 5 MiB
+	// except the last - a constraint tus clients know nothing about, so chunks
+	// would have to be buffered to a part boundary anyway. Spooling the whole
+	// upload is the same idea with the part tracking removed.
+	//
+	// The cost is local disk equal to the upload, and that a partial upload
+	// does not survive losing the machine it was spooled on. Both are recorded
+	// in docs/design.md; multipart is issue #111.
+	spool spool
 }
 
 var _ Store = (*S3)(nil)
@@ -109,7 +125,20 @@ func NewS3(ctx context.Context, cfg S3Config) (*S3, error) {
 		return nil, fmt.Errorf("blob: bucket %q does not exist", cfg.Bucket)
 	}
 
-	return &S3{client: client, bucket: cfg.Bucket, prefix: strings.Trim(cfg.Prefix, "/")}, nil
+	// One spool directory per bucket and prefix, so two instances sharing a
+	// machine do not collide, and so a restart finds what it left behind.
+	spoolDir := filepath.Join(os.TempDir(), "sendan-spool",
+		fmt.Sprintf("%x", sha256.Sum256([]byte(cfg.Endpoint+"/"+cfg.Bucket+"/"+cfg.Prefix))))
+	if err := os.MkdirAll(spoolDir, 0o700); err != nil {
+		return nil, fmt.Errorf("blob: create spool directory: %w", err)
+	}
+
+	return &S3{
+		client: client,
+		bucket: cfg.Bucket,
+		prefix: strings.Trim(cfg.Prefix, "/"),
+		spool:  spool{dir: spoolDir},
+	}, nil
 }
 
 // key maps an identifier to an object key, validating it first.
@@ -176,13 +205,14 @@ func (s *S3) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{}); err != nil {
-		if isNotFound(err) {
-			return nil
-		}
+	if err := s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{}); err != nil && !isNotFound(err) {
 		return fmt.Errorf("blob: delete: %w", err)
 	}
-	return nil
+
+	// Reached even when no object exists, because the case that matters most is
+	// an upload that was never finished: there is no object, only a spool file
+	// holding everything the uploader sent.
+	return s.spool.remove(id)
 }
 
 func isNotFound(err error) bool {
@@ -191,4 +221,49 @@ func isNotFound(err error) bool {
 		return resp.Code == "NoSuchKey" || resp.StatusCode == 404
 	}
 	return false
+}
+
+// WriteChunk appends to a partial upload held on local disk.
+func (s *S3) WriteChunk(ctx context.Context, id string, offset int64, r io.Reader) (int64, error) {
+	return s.spool.writeChunk(ctx, id, offset, r)
+}
+
+// Length reports how many bytes of a partial upload are stored.
+func (s *S3) Length(_ context.Context, id string) (int64, error) {
+	return s.spool.length(id)
+}
+
+// Finish uploads the spooled bytes as an object and discards the spool.
+//
+// The object appears only once it is complete, because a single PutObject is
+// atomic from a reader's point of view: there is no window in which a partial
+// object is readable.
+func (s *S3) Finish(ctx context.Context, id string) error {
+	key, err := s.key(id)
+	if err != nil {
+		return err
+	}
+
+	f, err := s.spool.open(id)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = f.Close() }()
+
+	info, err := f.Stat()
+	if err != nil {
+		return fmt.Errorf("blob: stat partial: %w", err)
+	}
+
+	if _, err := s.client.PutObject(ctx, s.bucket, key, f, info.Size(),
+		minio.PutObjectOptions{ContentType: "application/octet-stream"}); err != nil {
+		return fmt.Errorf("blob: finish: %w", err)
+	}
+
+	// Removed only after the object exists. A crash between the two leaves a
+	// spool file, which the reaper discards; the reverse would lose the upload.
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("blob: close partial: %w", err)
+	}
+	return s.spool.remove(id)
 }
