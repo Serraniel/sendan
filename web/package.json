@@ -5,6 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
+    "prepare": "svelte-kit sync",
     "lint": "biome check .",
     "format": "biome check --write .",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

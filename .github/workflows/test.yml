@@ -113,26 +113,13 @@ jobs:
 
       # A single external origin in the built output breaks the strict CSP and
       # silently reintroduces a third party into an end-to-end encrypted page.
-      # The client is built into the Go tree and embedded from there, so the
-      # audit follows it. A missing directory is a failure: it means the build
-      # produced nothing, and auditing nothing would pass while proving nothing.
-      - name: Assert no external origins in built output
-        run: |
-          set -euo pipefail
-          out=internal/webui/dist
-          if [ ! -d "$out" ]; then
-            echo "::error::$out does not exist - the web build produced no output to audit"
-            exit 1
-          fi
-          if [ -z "$(find "$out" -name '*.js' -print -quit)" ]; then
-            echo "::error::$out contains no scripts - the audit would pass without checking anything"
-            exit 1
-          fi
-          if grep -rInP 'https?://(?!localhost|127\.0\.0\.1)' "$out" --include='*.js' --include='*.css' --include='*.html'; then
-            echo "::error::External origin found in built output - this breaks the CSP guarantee"
-            exit 1
-          fi
-          echo "No external origins found."
+      # The policy is the enforcement; this says so at build time rather than in
+      # a browser console. It checks for references that cause a load, not for
+      # the text of a URL: an earlier version grepped every script for https://
+      # and failed on the documentation links inside Svelte's own error
+      # messages.
+      - name: Assert the client loads nothing from a third party
+        run: ./scripts/audit-assets.sh
 
   test-vectors:
     name: Cross-language crypto vectors
