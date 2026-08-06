@@ -40,6 +40,11 @@ const (
 
 	selectUpload = `SELECT` + uploadColumns + ` FROM uploads WHERE id = ?`
 
+	// Restricted to incomplete uploads in the statement rather than checked
+	// afterwards, so no caller can forget to.
+	selectPending = `SELECT` + uploadColumns + ` FROM uploads
+	  WHERE id = ? AND completed_at IS NULL`
+
 	// Accumulation and the derived count are one statement. Reading the total,
 	// dividing, then writing back would let concurrent transfers observe the
 	// same total and lose each other's bytes.

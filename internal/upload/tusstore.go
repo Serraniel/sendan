@@ -1,0 +1,361 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Serraniel and the Sendan contributors
+
+package upload
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"strconv"
+	"strings"
+	"time"
+
+	tus "github.com/tus/tusd/v2/pkg/handler"
+
+	"github.com/Serraniel/sendan/internal/blob"
+	"github.com/Serraniel/sendan/internal/crypto"
+	"github.com/Serraniel/sendan/internal/logging"
+	"github.com/Serraniel/sendan/internal/store"
+)
+
+// Metadata keys a client sends when creating an upload.
+//
+// tus decodes the base64 in Upload-Metadata for us, so the values arrive as
+// raw bytes rather than encoded ones. Encoding them again would be a second
+// representation to keep consistent between two implementations for no gain.
+//
+// values they name are client-produced ciphertext the server cannot read.
+//
+//nolint:gosec // G101: these are metadata field names, not credentials. The
+const (
+	metaWrappedFileKey   = "wrappedFileKey"
+	metaWrapNonce        = "wrapNonce"
+	metaEnvelope         = "metadataEnvelope"
+	metaEnvelopeNonce    = "metadataNonce"
+	metaAuthTokenHash    = "authTokenHash"
+	metaOwnerTokenHash   = "ownerTokenHash"
+	metaPasswordSalt     = "passwordSalt"
+	metaArgon2Memory     = "argon2MemoryKiB"
+	metaArgon2Iterations = "argon2Iterations"
+	metaArgon2Parallel   = "argon2Parallelism"
+	metaTTLSeconds       = "ttlSeconds"
+	metaMaxDownloads     = "maxDownloads"
+)
+
+// ErrUploadTooLarge reports an upload beyond what the instance accepts.
+var ErrUploadTooLarge = errors.New("upload: larger than this instance accepts")
+
+// TusStore adapts the upload lifecycle to the tus protocol.
+//
+// The protocol is adopted rather than reimplemented: resumption, offset
+// negotiation and the request semantics are tusd's, and this type supplies only
+// what is specific to Sendan - where bytes go, how they are encrypted, and what
+// a completed upload becomes.
+type TusStore struct {
+	svc *Service
+	// maxSize bounds a single upload. Zero means unbounded.
+	maxSize int64
+}
+
+var _ tus.DataStore = (*TusStore)(nil)
+
+// NewTusStore returns a tus data store backed by the upload service.
+func NewTusStore(svc *Service, maxSize int64) *TusStore {
+	return &TusStore{svc: svc, maxSize: maxSize}
+}
+
+// NewUpload creates the row an upload accumulates into.
+//
+// The row exists before any byte arrives, because chunks are encrypted with its
+// at-rest key as they are written. It is created incomplete, so it is
+// unreachable until the upload finishes.
+func (t *TusStore) NewUpload(ctx context.Context, info tus.FileInfo) (tus.Upload, error) {
+	// A deferred length would mean accepting bytes without knowing whether the
+	// result will exceed the limit, which is a limit in name only.
+	if info.SizeIsDeferred {
+		return nil, tus.NewError("ERR_SIZE_REQUIRED",
+			"the total upload length must be declared up front", 400)
+	}
+	if t.maxSize > 0 && info.Size > t.maxSize {
+		return nil, tus.NewError("ERR_TOO_LARGE",
+			fmt.Sprintf("upload of %d bytes exceeds the limit of %d", info.Size, t.maxSize), 413)
+	}
+	if info.Size < 0 {
+		return nil, tus.NewError("ERR_INVALID_LENGTH", "the upload length must not be negative", 400)
+	}
+
+	u, err := t.newRow(info)
+	if err != nil {
+		return nil, err
+	}
+	if err := t.svc.store.Create(ctx, u); err != nil {
+		return nil, fmt.Errorf("upload: create: %w", err)
+	}
+
+	info.ID = u.ID
+	info.Offset = 0
+	return &tusUpload{store: t, id: u.ID, info: info}, nil
+}
+
+// newRow builds the store row from the metadata a client supplied.
+//
+// Every cryptographic value is produced by the client and opaque here, but
+// their sizes are not: a wrapped key of the wrong length, or a token hash that
+// is not a SHA-256 digest, means a client that cannot possibly be interoperable
+// and an upload nobody will ever open. Rejecting it at creation is better than
+// storing it and discovering the problem at download.
+func (t *TusStore) newRow(info tus.FileInfo) (*store.Upload, error) {
+	id, err := crypto.NewFileID()
+	if err != nil {
+		return nil, fmt.Errorf("upload: identifier: %w", err)
+	}
+
+	atRest, err := blob.NewAtRestKey()
+	if err != nil {
+		return nil, fmt.Errorf("upload: at-rest key: %w", err)
+	}
+
+	m := newMetadata(info.MetaData)
+	u := &store.Upload{
+		ID:               base64.RawURLEncoding.EncodeToString(id),
+		WrappedFileKey:   m.bytes(metaWrappedFileKey, crypto.WrappedFileKeySize),
+		WrapNonce:        m.bytes(metaWrapNonce, crypto.NonceSize),
+		MetadataEnvelope: m.blob(metaEnvelope),
+		MetadataNonce:    m.bytes(metaEnvelopeNonce, crypto.NonceSize),
+		AuthTokenHash:    m.bytes(metaAuthTokenHash, sha256.Size),
+		OwnerTokenHash:   m.bytes(metaOwnerTokenHash, sha256.Size),
+		AtRestKey:        atRest,
+		Size:             info.Size,
+		CreatedAt:        t.svc.now(),
+		MaxDownloads:     m.integer(metaMaxDownloads, t.svc.policy.DefaultMaxDownloads),
+	}
+
+	if salt, ok := info.MetaData[metaPasswordSalt]; ok && salt != "" {
+		u.Password = &store.PasswordParams{
+			Salt: m.bytes(metaPasswordSalt, crypto.PasswordSaltSize),
+			// Bounded before conversion. A plain cast would truncate rather
+			// than refuse - a parallelism of 300 would be stored as 44 - and
+			// the client would derive with parameters the uploader never chose,
+			// producing a file that cannot be opened.
+			//nolint:gosec // G115: bounded above, which is the point of bounded.
+			MemoryKiB: uint32(m.bounded(metaArgon2Memory, math.MaxUint32)),
+			//nolint:gosec // G115: bounded above.
+			Iterations: uint32(m.bounded(metaArgon2Iterations, math.MaxUint32)),
+			//nolint:gosec // G115: bounded above.
+			Parallelism: uint8(m.bounded(metaArgon2Parallel, math.MaxUint8)),
+		}
+		if u.Password.MemoryKiB == 0 || u.Password.Iterations == 0 || u.Password.Parallelism == 0 {
+			m.fail("the Argon2id parameters must all be present and non-zero when a password salt is given")
+		}
+	}
+
+	// The uploader's requested lifetime is subject to the instance policy, and
+	// an excessive request is rejected rather than clamped: an uploader who
+	// asked for a week and silently received a day would believe their file
+	// outlives what it does.
+	expires, err := t.svc.ResolveExpiry(time.Duration(m.integer64(metaTTLSeconds, 0)) * time.Second)
+	if err != nil {
+		return nil, tus.NewError("ERR_RETENTION", err.Error(), 400)
+	}
+	u.ExpiresAt = expires
+
+	if err := m.err(); err != nil {
+		return nil, err
+	}
+	return u, nil
+}
+
+// GetUpload returns an upload that is still being written.
+//
+// A completed upload is not writable. Without that, anyone holding an
+// identifier could append past the end of a finished upload and replace what
+// its recipient receives - and identifiers become known to recipients as soon
+// as a link is shared.
+func (t *TusStore) GetUpload(ctx context.Context, id string) (tus.Upload, error) {
+	u, err := t.svc.store.Pending(ctx, id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, tus.ErrNotFound
+		}
+		return nil, fmt.Errorf("upload: get pending: %w", err)
+	}
+
+	offset, err := t.svc.blobs.Length(ctx, id)
+	if err != nil && !errors.Is(err, blob.ErrNotFound) {
+		return nil, fmt.Errorf("upload: length: %w", err)
+	}
+
+	return &tusUpload{
+		store: t,
+		id:    id,
+		info: tus.FileInfo{
+			ID:     id,
+			Size:   u.Size,
+			Offset: offset,
+		},
+		atRestKey: u.AtRestKey,
+	}, nil
+}
+
+// tusUpload is one upload in progress.
+type tusUpload struct {
+	store     *TusStore
+	id        string
+	info      tus.FileInfo
+	atRestKey []byte
+}
+
+var _ tus.Upload = (*tusUpload)(nil)
+
+func (u *tusUpload) GetInfo(context.Context) (tus.FileInfo, error) { return u.info, nil }
+
+// WriteChunk encrypts the chunk at its offset and appends it.
+func (u *tusUpload) WriteChunk(ctx context.Context, offset int64, src io.Reader) (int64, error) {
+	key, err := u.key(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	n, err := u.store.svc.blobs.WriteChunk(ctx, u.id, key, offset, src)
+	u.info.Offset = offset + n
+	if err != nil {
+		if errors.Is(err, blob.ErrOffset) {
+			// tus answers a mismatched offset with 409, and a client's correct
+			// response is to ask for the current one rather than retry.
+			return n, tus.ErrMismatchOffset
+		}
+		return n, fmt.Errorf("upload: write chunk: %w", err)
+	}
+	return n, nil
+}
+
+// GetReader is required by the protocol for reading back an in-progress upload.
+//
+// Sendan does not offer it: what a half-written upload decrypts to is not what
+// the uploader sent, and the finished content is served by the download
+// endpoint, which verifies a token first.
+func (u *tusUpload) GetReader(context.Context) (io.ReadCloser, error) {
+	return nil, tus.NewError("ERR_NOT_READABLE",
+		"an upload in progress cannot be read back", 403)
+}
+
+// FinishUpload promotes the partial blob and makes the row reachable.
+//
+// The blob is finished first. A crash between the two leaves a complete blob
+// belonging to a row still marked incomplete, which the reaper removes; the
+// reverse would publish a row whose content was never finished.
+func (u *tusUpload) FinishUpload(ctx context.Context) error {
+	if err := u.store.svc.blobs.Finish(ctx, u.id); err != nil {
+		return fmt.Errorf("upload: finish blob: %w", err)
+	}
+	if err := u.store.svc.store.Complete(ctx, u.id, u.store.svc.now()); err != nil {
+		return fmt.Errorf("upload: complete: %w", err)
+	}
+	u.store.svc.log.Info("upload completed", logging.FileID([]byte(u.id)), "size", u.info.Size)
+	return nil
+}
+
+// key returns the at-rest key, loading it when this handle came from creation
+// rather than from a resumed request.
+func (u *tusUpload) key(ctx context.Context) ([]byte, error) {
+	if u.atRestKey != nil {
+		return u.atRestKey, nil
+	}
+	row, err := u.store.svc.store.Pending(ctx, u.id)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, tus.ErrNotFound
+		}
+		return nil, fmt.Errorf("upload: get pending: %w", err)
+	}
+	u.atRestKey = row.AtRestKey
+	return u.atRestKey, nil
+}
+
+// metadata reads the values a client supplied, collecting every fault rather
+// than reporting the first, so a client fixing its request sees all of them.
+//
+// Faults are held beside the values rather than in them. Writing into the map
+// tus handed over would mutate the client's own metadata, and a second read of
+// the same map would inherit the first read's complaints.
+type metadata struct {
+	values tus.MetaData
+	faults []string
+}
+
+func newMetadata(values tus.MetaData) *metadata { return &metadata{values: values} }
+
+func (m *metadata) bytes(key string, want int) []byte {
+	v, ok := m.values[key]
+	if !ok {
+		m.fail(key + " is required")
+		return nil
+	}
+	if len(v) != want {
+		m.fail(fmt.Sprintf("%s is %d bytes, want %d", key, len(v), want))
+		return nil
+	}
+	return []byte(v)
+}
+
+// blob reads a value whose length is not fixed, but is still bounded: the
+// metadata envelope is padded to a multiple of 256 bytes and carries a tag
+// (spec §7), and a value that is not is not one this scheme produced.
+func (m *metadata) blob(key string) []byte {
+	v, ok := m.values[key]
+	if !ok {
+		m.fail(key + " is required")
+		return nil
+	}
+	const block = 256
+	const maxEnvelope = 64 * 1024
+	switch {
+	case len(v) <= crypto.TagSize || (len(v)-crypto.TagSize)%block != 0:
+		m.fail(fmt.Sprintf("%s is %d bytes, which is not a padded envelope with its tag", key, len(v)))
+	case len(v) > maxEnvelope:
+		m.fail(key + " is implausibly large")
+	}
+	return []byte(v)
+}
+
+// bounded reads a value that must fit a smaller type, refusing anything larger
+// rather than truncating it.
+func (m *metadata) bounded(key string, limit int64) int64 {
+	v := m.integer64(key, 0)
+	if v > limit {
+		m.fail(fmt.Sprintf("%s is %d, which exceeds the maximum of %d", key, v, limit))
+		return 0
+	}
+	return v
+}
+
+func (m *metadata) integer(key string, fallback int) int {
+	return int(m.integer64(key, int64(fallback)))
+}
+
+func (m *metadata) integer64(key string, fallback int64) int64 {
+	v, ok := m.values[key]
+	if !ok || v == "" {
+		return fallback
+	}
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || n < 0 {
+		m.fail(key + " must be a non-negative integer")
+		return fallback
+	}
+	return n
+}
+
+func (m *metadata) fail(reason string) { m.faults = append(m.faults, reason) }
+
+func (m *metadata) err() error {
+	if len(m.faults) == 0 {
+		return nil
+	}
+	return tus.NewError("ERR_INVALID_METADATA", strings.Join(m.faults, "; "), 400)
+}

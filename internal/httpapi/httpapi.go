@@ -33,6 +33,9 @@ type Options struct {
 	Version string
 	Commit  string
 
+	// MaxUploadSize bounds a single upload, in bytes. Zero means unbounded.
+	MaxUploadSize int64
+
 	// Uploads owns the upload lifecycle. Routes that need it are registered
 	// only when it is present, so a handler can never be reached with a nil
 	// service.
@@ -81,6 +84,29 @@ func New(opts Options) http.Handler {
 		mux.HandleFunc("GET /api/uploads/{id}/metadata", handleMetadata(opts.Uploads))
 		mux.HandleFunc("POST /api/uploads/{id}/auth", handleAuth(opts.Uploads))
 		mux.HandleFunc("GET /api/uploads/{id}/content", handleContent(opts.Uploads))
+
+		tusHandler, err := newTusHandler(opts)
+		if err != nil {
+			// Reached only if the protocol handler cannot be constructed, which
+			// is a programming error rather than a runtime condition. Failing
+			// here beats an instance that starts and cannot accept uploads.
+			panic("httpapi: " + err.Error())
+		}
+		// Registered by method and exact path rather than as a prefix. A
+		// catch-all would shadow the sub-resources above, so a POST to
+		// .../metadata would reach the protocol handler and be answered with a
+		// protocol error instead of "method not allowed".
+		//
+		// The prefix is stripped because the protocol handler derives the
+		// upload identifier from the whole request path, so it must see only
+		// the identifier. Its configured base path is used to build the
+		// Location header and is separate from what it receives.
+		mounted := http.StripPrefix("/api/uploads", tusHandler)
+		mux.Handle("POST /api/uploads", mounted)
+		mux.Handle("OPTIONS /api/uploads", mounted)
+		mux.Handle("HEAD /api/uploads/{id}", mounted)
+		mux.Handle("PATCH /api/uploads/{id}", mounted)
+		mux.Handle("OPTIONS /api/uploads/{id}", mounted)
 	}
 
 	https := opts.BaseURL != nil && opts.BaseURL.Scheme == "https"

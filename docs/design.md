@@ -266,6 +266,59 @@ A partial upload holds the same content a finished one would, so it is encrypted
 the same way and deleted the same way: `Delete` discards it whether or not a
 blob was ever finished.
 
+### 4.0 Uploading
+
+`POST /api/uploads` creates an upload and `PATCH /api/uploads/{id}` writes it, in
+chunks, over [tus](https://tus.io). The protocol is adopted rather than
+reimplemented: resumption, offset negotiation and the request semantics are a
+specification with maintained implementations on both sides, and what is
+specific to Sendan is only where bytes go and what a completed upload becomes.
+
+The cryptographic material travels in `Upload-Metadata` at creation — the
+wrapped file key, the metadata envelope, their nonces, the token hashes, and the
+password parameters when there are any. All of it is opaque to the server, but
+its **sizes are not**: a wrapped key of the wrong length, or a token hash that
+is not a digest, means a client that cannot be interoperable and an upload
+nobody will ever open. Rejecting that at creation beats discovering it at
+download, and every fault is reported at once so a client does not fix them one
+round trip at a time.
+
+Three protocol extensions are disabled, each for a reason:
+
+| Extension | Why |
+|---|---|
+| Download | tus would serve content without checking a token. The download endpoint checks one first (§4.2) |
+| Termination | it would remove an upload for anyone holding the identifier, which recipients have. Removal requires the owner token (§6) |
+| Concatenation | each part would be a row with its own at-rest key and no lifecycle, and the parts would then need reaping |
+
+**A declared length is required.** Accepting bytes without knowing the total
+would make `SENDAN_MAX_UPLOAD_SIZE` a limit in name only, since the server would
+discover the excess having already written it.
+
+> [!IMPORTANT]
+> **A completed upload cannot be written to.** The upload path reads only rows
+> that are still incomplete, so a `PATCH` to a finished upload is refused.
+> Without that, anyone holding an identifier could append past the end and
+> replace what the recipient receives — and identifiers become known to
+> recipients as soon as a link is shared, so that is the ordinary order of
+> events rather than a contrived one.
+
+On completion the blob is finished first and the row marked complete second. A
+crash between the two leaves a finished blob belonging to an incomplete row,
+which the reaper removes; the reverse would publish a row whose content was
+never finished.
+
+> [!WARNING]
+> **tus logs the upload identifier**, as an attribute, inside the request path,
+> and inside the `Location` URL. Sendan's guarantee is that identifiers never
+> reach a log verbatim, so its records are bridged through a handler that
+> replaces the identifier with a truncated hash and forwards only an
+> **allowlist** of other attributes.
+>
+> The allowlist is deliberate. Blocking known-bad keys was tried first and
+> leaked three times, each found only because a test looked for it. An attribute
+> a future version of tus adds is now dropped rather than published.
+
 ### 4.0.1 An upload before it is complete
 
 Chunks are encrypted with the row's at-rest key as they arrive, so the row has

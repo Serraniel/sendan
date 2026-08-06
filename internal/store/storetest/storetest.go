@@ -33,27 +33,28 @@ func Run(t *testing.T, newStore Factory) {
 	t.Helper()
 
 	for name, fn := range map[string]func(*testing.T, Factory){
-		"CreateAndGet":                     testCreateAndGet,
-		"CreateRejectsDuplicates":          testCreateRejectsDuplicates,
-		"CreateRejectsIncomplete":          testCreateRejectsIncomplete,
-		"PasswordParametersRoundTrip":      testPasswordParametersRoundTrip,
-		"NoPasswordMeansNoParameters":      testNoPasswordMeansNoParameters,
-		"ExpiredIsUnreachable":             testExpiredIsUnreachable,
-		"NoDeadlineNeverExpires":           testNoDeadlineNeverExpires,
-		"DownloadLimitEnforced":            testDownloadLimitEnforced,
-		"UnlimitedDownloads":               testUnlimitedDownloads,
-		"PartialTransfersChargedByVolume":  testPartialTransfersAreChargedByVolume,
-		"RepeatedNearCompleteReadsCharged": testRepeatedNearCompleteReadsAreCharged,
-		"ConcurrentServedBytesNotLost":     testConcurrentServedBytesAreNotLost,
-		"IncompleteUploadIsUnreachable":    testIncompleteUploadIsUnreachable,
-		"CompleteMakesAnUploadReachable":   testCompleteMakesAnUploadReachable,
-		"AbandonedUploadsAreReaped":        testAbandonedUploadsAreReaped,
-		"DeleteIsHardAndIdempotent":        testDeleteIsHardAndIdempotent,
-		"ListDeadFindsExpired":             testListDeadFindsExpired,
-		"ListDeadFindsExhausted":           testListDeadFindsExhausted,
-		"ListDeadRespectsLimit":            testListDeadRespectsLimit,
-		"CheckpointIsSafeToCallAnyTime":    testCheckpointIsSafeToCallAnyTime,
-		"LargeValuesRoundTrip":             testLargeValuesRoundTrip,
+		"CreateAndGet":                      testCreateAndGet,
+		"CreateRejectsDuplicates":           testCreateRejectsDuplicates,
+		"CreateRejectsIncomplete":           testCreateRejectsIncomplete,
+		"PasswordParametersRoundTrip":       testPasswordParametersRoundTrip,
+		"NoPasswordMeansNoParameters":       testNoPasswordMeansNoParameters,
+		"ExpiredIsUnreachable":              testExpiredIsUnreachable,
+		"NoDeadlineNeverExpires":            testNoDeadlineNeverExpires,
+		"DownloadLimitEnforced":             testDownloadLimitEnforced,
+		"UnlimitedDownloads":                testUnlimitedDownloads,
+		"PartialTransfersChargedByVolume":   testPartialTransfersAreChargedByVolume,
+		"RepeatedNearCompleteReadsCharged":  testRepeatedNearCompleteReadsAreCharged,
+		"ConcurrentServedBytesNotLost":      testConcurrentServedBytesAreNotLost,
+		"PendingFindsOnlyIncompleteUploads": testPendingFindsOnlyIncompleteUploads,
+		"IncompleteUploadIsUnreachable":     testIncompleteUploadIsUnreachable,
+		"CompleteMakesAnUploadReachable":    testCompleteMakesAnUploadReachable,
+		"AbandonedUploadsAreReaped":         testAbandonedUploadsAreReaped,
+		"DeleteIsHardAndIdempotent":         testDeleteIsHardAndIdempotent,
+		"ListDeadFindsExpired":              testListDeadFindsExpired,
+		"ListDeadFindsExhausted":            testListDeadFindsExhausted,
+		"ListDeadRespectsLimit":             testListDeadRespectsLimit,
+		"CheckpointIsSafeToCallAnyTime":     testCheckpointIsSafeToCallAnyTime,
+		"LargeValuesRoundTrip":              testLargeValuesRoundTrip,
 	} {
 		t.Run(name, func(t *testing.T) { fn(t, newStore) })
 	}
@@ -634,5 +635,39 @@ func testAbandonedUploadsAreReaped(t *testing.T, newStore Factory) {
 	}
 	if len(ids) != 1 || ids[0] != old.ID {
 		t.Fatalf("got %v, want only the abandoned upload - an upload still in progress must not be reaped", ids)
+	}
+}
+
+// The upload path reads the row that Get hides, for the at-rest key that
+// encrypts arriving chunks. Restricting that to incomplete uploads is what
+// stops a caller appending to a finished one and replacing what its recipient
+// receives - and identifiers become known to recipients once a link is shared.
+func testPendingFindsOnlyIncompleteUploads(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	now := time.Now()
+
+	u := Sample(t, NewID(t))
+	u.CompletedAt = time.Time{}
+	if err := s.Create(t.Context(), u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	got, err := s.Pending(t.Context(), u.ID)
+	if err != nil {
+		t.Fatalf("an upload being written is not pending: %v", err)
+	}
+	if len(got.AtRestKey) == 0 {
+		t.Error("the at-rest key is missing, so arriving chunks could not be encrypted")
+	}
+
+	if err := s.Complete(t.Context(), u.ID, now); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	if _, err := s.Pending(t.Context(), u.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("a completed upload is still writable: %v", err)
+	}
+
+	if _, err := s.Pending(t.Context(), NewID(t)); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("an unknown upload: got %v, want ErrNotFound", err)
 	}
 }

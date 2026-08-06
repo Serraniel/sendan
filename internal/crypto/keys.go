@@ -19,6 +19,15 @@ const (
 	OwnerTokenSize = 32
 	NonceSize      = 12
 
+	// TagSize is the AES-GCM authentication tag, which every sealed value
+	// carries in addition to its plaintext.
+	TagSize = 16
+
+	// WrappedFileKeySize is the stored size of a wrapped file key: the key
+	// itself plus its tag (spec §6). A value of any other length was not
+	// produced by this scheme.
+	WrappedFileKeySize = FileKeySize + TagSize
+
 	derivedKeySize = 32
 )
 

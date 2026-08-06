@@ -11,8 +11,8 @@ require restarting repeatedly to discover the next fault.
 > [!WARNING]
 > **Not every variable is honoured yet.** All of them are parsed and validated,
 > so an invalid value fails at startup, and storage now opens for real — but the
-> server can serve a download but not accept an upload: there is no upload
-> endpoint yet, so an instance has nothing to serve.
+> server has no web client, so uploads and downloads must be driven by a
+> client speaking the API directly.
 >
 > | Variable | Effect today |
 > |---|---|
@@ -22,7 +22,8 @@ require restarting repeatedly to discover the next fault.
 > | `SENDAN_INCOMPLETE_TTL` | applied by the reaper, which has no incomplete uploads to find until there is an upload endpoint |
 > | `SENDAN_SOURCE_URL` | applied — reported at `/api/source` |
 > | `SENDAN_RATE_LIMIT`, `SENDAN_RATE_BURST`, `SENDAN_TRUSTED_PROXIES` | applied to every request the server answers |
-> | `SENDAN_BASE_URL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_SERVE_UI` | validated and logged only. Nothing builds links, measures an upload, or serves a client yet |
+> | `SENDAN_MAX_UPLOAD_SIZE` | applied — an upload declaring more than this is refused before any byte is written |
+> | `SENDAN_BASE_URL`, `SENDAN_SERVE_UI` | validated and logged only. Nothing builds links or serves a client yet |
 > | `SENDAN_SEND_COMPAT` | no endpoints; the compatibility layer is M7. It does log a warning at startup when enabled |
 >
 > This page describes the intended behaviour of each setting. Where the two
