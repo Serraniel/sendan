@@ -669,10 +669,20 @@ worth stating rather than presenting a link that appears authoritative.
 > Nothing an instance serves about itself can be a defence against that
 > instance. Verification has to come from outside it: see §7.1.
 
-> [!NOTE]
-> The endpoint is the machine-readable half. The prominent offer AGPL §13 asks
-> for is the client footer, [#41](https://github.com/Serraniel/sendan/issues/41),
-> which is not built yet.
+The client shows this in a persistent footer: the version, a shortened commit,
+a link to the source, and the licence. That is the prominent offer §13 asks for;
+the endpoint is the machine-readable half.
+
+> [!IMPORTANT]
+> **When the build is modified, the footer says the link may not correspond.** A
+> build from a modified working tree has no commit that describes it, so no
+> source link can be exact. A footer that presented one anyway would be a
+> decoration rather than a transparency measure - and the modified case is
+> precisely the one §13 exists for.
+
+The footer reads the endpoint after mount and renders nothing if it cannot. An
+instance that fails to answer should still serve a page that uploads a file, and
+a footer is not worth an error boundary.
 
 ### 7.1 Verifying an instance
 

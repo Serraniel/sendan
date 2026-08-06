@@ -105,8 +105,8 @@ The network copyleft provision is deliberate. Operating a modified instance as a
 hosted service obliges the operator to offer users the corresponding source,
 which means a weakened build cannot avoid disclosure by never distributing a
 binary. Every instance reports the version and commit it is running at
-`/api/source`, along with where its corresponding source can be obtained. The
-web client footer that presents this prominently is not built yet.
+`/api/source`, and the web client shows it in a persistent footer along with a
+link to where the corresponding source can be obtained.
 
 Contributions are accepted under the [Developer Certificate of
 Origin](https://developercertificate.org/). There is no contributor licence
