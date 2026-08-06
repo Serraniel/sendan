@@ -319,13 +319,6 @@ func TestIncompleteTTLFallsBackToTheDefault(t *testing.T) {
 	}
 }
 
-func TestServiceCheckpoint(t *testing.T) {
-	h := newHarness(t, defaultPolicy())
-	if err := h.svc.Checkpoint(t.Context()); err != nil {
-		t.Fatalf("checkpoint: %v", err)
-	}
-}
-
 // A count that does not fit an int must be refused rather than wrapped. On a
 // platform where int is 32 bits, a large value would become a download limit
 // the uploader never set.

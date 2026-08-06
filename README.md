@@ -23,7 +23,8 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > **Not built:** the web client, the command line client, and the container
 > image. The transfer API is complete — resumable upload, metadata,
 > authentication and ranged download — but nothing yet speaks it, so a file can
-> only be moved by a client written against the API directly.
+> only be moved by a client written against
+> [the API](docs/api.md) directly.
 
 ## Features
 
@@ -83,6 +84,7 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 | [`docs/design.md`](docs/design.md) | Architecture, cryptographic scheme, and the reasoning behind each decision |
 | [`docs/spec/wire-format-v1.md`](docs/spec/wire-format-v1.md) | Normative wire format and key schedule |
 | [`docs/workflows/`](docs/workflows/README.md) | What each CI workflow does, and what a failure means |
+| [`docs/api.md`](docs/api.md) | Every endpoint: paths, methods, status codes and what each returns |
 | [`docs/configuration.md`](docs/configuration.md) | Every environment variable and its default |
 | [`SECURITY.md`](SECURITY.md) | Threat model and vulnerability disclosure policy |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution process, DCO, and testing requirements |

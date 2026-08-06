@@ -175,13 +175,6 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// Checkpoint retires the metadata store's write-ahead log. Revocation calls it
-// so that a deliberate deletion takes effect on disk immediately rather than
-// waiting for the next reaper pass.
-func (s *Service) Checkpoint(ctx context.Context) error {
-	return s.store.Checkpoint(ctx)
-}
-
 // Reap removes up to limit uploads that have expired or exhausted their
 // download allowance, returning how many were removed.
 //

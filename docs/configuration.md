@@ -8,26 +8,20 @@ that will not run.
 All problems are reported together, so fixing a misconfiguration does not
 require restarting repeatedly to discover the next fault.
 
-> [!WARNING]
-> **Not every variable is honoured yet.** All of them are parsed and validated,
-> so an invalid value fails at startup, and storage now opens for real — but the
-> server has no web client, so uploads and downloads must be driven by a
-> client speaking the API directly.
+> [!NOTE]
+> **The transfer API is complete, and every variable below is honoured**, with
+> two exceptions named in the table. There is no web client and no command line
+> client yet, so a file can only be moved by a client speaking the API directly
+> — see [`docs/api.md`](api.md).
 >
 > | Variable | Effect today |
 > |---|---|
-> | `SENDAN_LISTEN`, `SENDAN_LOG_*` | applied |
-> | `SENDAN_DATABASE`, `SENDAN_STORAGE` | applied — the backend is opened at startup and the reaper sweeps it |
-> | `SENDAN_*_TTL`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | given to the lifecycle service, so they govern expiry and reaping — but nothing can be uploaded, so nothing yet reaches them |
-> | `SENDAN_INCOMPLETE_TTL` | applied by the reaper, which has no incomplete uploads to find until there is an upload endpoint |
-> | `SENDAN_SOURCE_URL` | applied — reported at `/api/source` |
-> | `SENDAN_RATE_LIMIT`, `SENDAN_RATE_BURST`, `SENDAN_TRUSTED_PROXIES` | applied to every request the server answers |
-> | `SENDAN_MAX_UPLOAD_SIZE` | applied — an upload declaring more than this is refused before any byte is written |
-> | `SENDAN_BASE_URL`, `SENDAN_SERVE_UI` | validated and logged only. Nothing builds links or serves a client yet |
+> | `SENDAN_SERVE_UI` | no effect; there is no web client to serve |
 > | `SENDAN_SEND_COMPAT` | no endpoints; the compatibility layer is M7. It does log a warning at startup when enabled |
 >
-> This page describes the intended behaviour of each setting. Where the two
-> differ, the table above is what is true.
+> Everything else applies: storage opens at startup, uploads are accepted and
+> bounded, downloads are served and counted, expiry and reaping run, and every
+> request is rate limited.
 
 ## Server
 

@@ -215,6 +215,11 @@ revocation**. Whichever is reached first applies.
 
 ## 4. Transfer
 
+> [!NOTE]
+> This section is the reasoning. The endpoint reference — paths, methods, status
+> codes and what each returns — is [`docs/api.md`](api.md).
+
+
 **Upload** uses two paths, because `fetch` request streaming (`duplex: 'half'`
 over HTTP/2) is supported by Chromium and not by Firefox:
 
