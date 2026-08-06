@@ -4,11 +4,18 @@
 package httpapi
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Serraniel/sendan/internal/webui"
 )
 
 // requiredHeaders must appear on every response the instance produces.
@@ -192,7 +199,7 @@ func TestHeadersSurviveAHandlerThatWritesImmediately(t *testing.T) {
 	})
 
 	rec := httptest.NewRecorder()
-	secureHeaders(true, inner).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	secureHeaders(true, contentSecurityPolicy, inner).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
 	if rec.Code != http.StatusTeapot {
 		t.Fatalf("status %d, want %d", rec.Code, http.StatusTeapot)
@@ -232,3 +239,52 @@ func TestNewToleratesAnAbsentBaseURL(t *testing.T) {
 		t.Errorf("HSTS = %q without a configured origin", got)
 	}
 }
+
+// The client's bootstrap is inline and the policy forbids inline scripts, so
+// the policy has to carry its hash. Without it a browser refuses to run the
+// script and the application never starts - which no test that serves the page
+// without executing it can see.
+//
+// The hash is computed here independently rather than by calling the function
+// that produces it. Asking that function what the answer is and then checking
+// the answer against itself would pass whatever convention it used: hashing the
+// script tags along with the body is self-consistent, and rejected by every
+// browser. What a browser hashes is the text between the tags, and that is what
+// this reproduces.
+func TestThePolicyCarriesTheHashOfTheServedInlineScript(t *testing.T) {
+	if _, ok := webui.Assets(); !ok {
+		t.Skip("this build embeds no client; run with -tags embedui")
+	}
+
+	handler := New(Options{
+		BaseURL: mustURL(t, "https://sendan.example"),
+		ServeUI: true,
+		Log:     slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200", rec.Code)
+	}
+
+	scripts := inlineScriptRE.FindAllStringSubmatch(rec.Body.String(), -1)
+	if len(scripts) == 0 {
+		t.Skip("the served shell has no inline script, so there is nothing to allow")
+	}
+
+	csp := rec.Header().Get("Content-Security-Policy")
+	for _, m := range scripts {
+		sum := sha256.Sum256([]byte(m[1]))
+		want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+		if !strings.Contains(csp, want) {
+			t.Errorf("the policy does not allow the inline script it served.\nwant %s\nin   %s", want, csp)
+		}
+	}
+	if strings.Contains(csp, "'unsafe-inline'") {
+		t.Error("the policy allows every inline script rather than the one it serves")
+	}
+}
+
+// inlineScriptRE matches a script element with no src, capturing its body.
+var inlineScriptRE = regexp.MustCompile(`(?s)<script(?:\s[^>]*)?>(.*?)</script>`)

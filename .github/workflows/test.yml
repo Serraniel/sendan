@@ -190,6 +190,12 @@ jobs:
           # with no client in it.
           go build -tags embedui -o /tmp/sendan-ui ./cmd/sendan
 
+      # Tests that need the client present cannot run in the job above, which
+      # deliberately has no JavaScript toolchain. They run here, where it has
+      # just been built - otherwise they skip everywhere and prove nothing.
+      - name: Test what only a build with the client can test
+        run: go test -tags embedui ./internal/httpapi/ ./internal/webui/
+
       # A binary that compiled but embedded nothing would start, serve the API,
       # and answer every page with an explanation nobody reads until a user
       # complains.

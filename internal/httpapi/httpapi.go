@@ -118,8 +118,19 @@ func New(opts Options) http.Handler {
 	// Registered last and at the root, so it answers only what nothing above
 	// claimed. The API and the health endpoint keep their paths whatever the
 	// client contains.
+	policy := contentSecurityPolicy
 	if opts.ServeUI {
 		if assets, ok := webui.Assets(); ok {
+			// The shell's bootstrap is inline, and the policy forbids inline
+			// scripts. Without its hash the client is served and then refused
+			// by the browser, which no test that does not execute the page can
+			// see.
+			hashes, err := webui.InlineScriptHashes(assets)
+			if err != nil {
+				panic("httpapi: reading the client shell: " + err.Error())
+			}
+			policy = withScriptHashes(policy, hashes)
+
 			mux.Handle("/", webui.Handler(assets))
 		} else {
 			opts.Log.Warn("the web client is enabled but not built into this binary; " +
@@ -131,5 +142,5 @@ func New(opts Options) http.Handler {
 
 	// The limit is outside the header middleware so that a refused request
 	// still carries the security headers: a 429 is a response like any other.
-	return secureHeaders(https, rateLimit(opts.RateLimit, opts.TrustedProxies, mux))
+	return secureHeaders(https, policy, rateLimit(opts.RateLimit, opts.TrustedProxies, mux))
 }

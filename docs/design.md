@@ -800,6 +800,24 @@ Three carry most of the weight, for reasons specific to this design:
   equivalent to changing the server.
 
 > [!IMPORTANT]
+> **The policy carries the hash of the client's inline bootstrap.** SvelteKit
+> emits one inline script: the few hundred bytes that tell the application where
+> it was served from, which differ per build and so cannot be a separate file.
+> The policy forbids `'unsafe-inline'`, so without its hash a browser refuses to
+> run it and the application never starts.
+>
+> The hash is computed at startup from the shell actually embedded in the
+> binary, rather than written down or emitted by the client. A value written
+> down goes stale on the next build; a policy emitted by the client would be a
+> second policy, and two policies both apply — the intersection of a header
+> without the hash and a meta tag with it still blocks the script.
+>
+> This is the failure that no test which serves the page without executing it
+> can see. The test that guards it recomputes the hash from the served document
+> independently, because asking the implementation what the answer is and then
+> checking that answer against itself passes whatever convention it used.
+
+> [!IMPORTANT]
 > **`script-src` must permit `'wasm-unsafe-eval'`.** WebCrypto offers no
 > Argon2id, so password derivation runs in WebAssembly, and instantiating a
 > module counts as evaluation. Removing the directive — an obvious-looking
@@ -810,6 +828,15 @@ Three carry most of the weight, for reasons specific to this design:
 HSTS is sent only when `SENDAN_BASE_URL` is `https`. The decision is taken from
 configuration rather than `X-Forwarded-Proto`, which is written by whatever
 spoke last and, on a deployment without a proxy, is the client.
+
+> [!WARNING]
+> The built client is also audited: `scripts/audit-assets.sh` fails the build if
+> the output would load anything from a third party. It looks for references
+> that cause a load — `src` and `href` in markup, `url()` in stylesheets, and
+> imports of absolute URLs — rather than for the text of a URL, because an
+> earlier version grepped every script for `https://` and fired on the
+> documentation links inside Svelte's own error messages. A check that fires on
+> those is one somebody turns off.
 
 > [!WARNING]
 > A reverse proxy that sets its own security headers may replace these rather
