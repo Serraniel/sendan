@@ -19,6 +19,7 @@ require restarting repeatedly to discover the next fault.
 > | `SENDAN_LISTEN`, `SENDAN_LOG_*` | applied |
 > | `SENDAN_DATABASE`, `SENDAN_STORAGE` | applied — the backend is opened at startup and the reaper sweeps it |
 > | `SENDAN_*_TTL`, `SENDAN_DEFAULT_MAX_DOWNLOADS` | given to the lifecycle service, so they govern expiry and reaping — but nothing can be uploaded, so nothing yet reaches them |
+> | `SENDAN_INCOMPLETE_TTL` | applied by the reaper, which has no incomplete uploads to find until there is an upload endpoint |
 > | `SENDAN_SOURCE_URL` | applied — reported at `/api/source` |
 > | `SENDAN_RATE_LIMIT`, `SENDAN_RATE_BURST`, `SENDAN_TRUSTED_PROXIES` | applied to every request the server answers |
 > | `SENDAN_BASE_URL`, `SENDAN_MAX_UPLOAD_SIZE`, `SENDAN_SERVE_UI` | validated and logged only. Nothing builds links, measures an upload, or serves a client yet |
@@ -57,6 +58,7 @@ require restarting repeatedly to discover the next fault.
 | `SENDAN_DEFAULT_TTL` | `24h` | Applied when an uploader does not choose one |
 | `SENDAN_MAX_TTL` | `168h` | Upper bound an uploader may choose |
 | `SENDAN_ALLOW_INFINITE_TTL` | `false` | Permit uploads that never expire |
+| `SENDAN_INCOMPLETE_TTL` | `24h` | How long an upload may remain unfinished before it is treated as abandoned and removed |
 | `SENDAN_DEFAULT_MAX_DOWNLOADS` | `0` | Download limit when the uploader does not choose one. `0` means no limit |
 
 > [!IMPORTANT]

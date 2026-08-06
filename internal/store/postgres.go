@@ -100,7 +100,7 @@ func (p *Postgres) Create(ctx context.Context, u *Upload) error {
 		u.ID, u.WrappedFileKey, u.WrapNonce, u.MetadataEnvelope, u.MetadataNonce,
 		u.AuthTokenHash, u.OwnerTokenHash, u.AtRestKey,
 		salt, memory, iterations, parallelism,
-		u.Size, u.CreatedAt.Unix(), nullableUnix(u.ExpiresAt), u.MaxDownloads, u.DownloadCount, u.BytesServed,
+		u.Size, u.CreatedAt.Unix(), nullableUnix(u.ExpiresAt), u.MaxDownloads, u.DownloadCount, u.BytesServed, nullableUnix(u.CompletedAt),
 	)
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -172,11 +172,11 @@ func (p *Postgres) Delete(ctx context.Context, id string) error {
 }
 
 // ListDead returns identifiers of uploads the reaper should remove.
-func (p *Postgres) ListDead(ctx context.Context, now time.Time, limit int) ([]string, error) {
+func (p *Postgres) ListDead(ctx context.Context, now, abandoned time.Time, limit int) ([]string, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
-	rows, err := p.db.QueryContext(ctx, rebind(selectDead), now.Unix(), limit)
+	rows, err := p.db.QueryContext(ctx, rebind(selectDead), now.Unix(), abandoned.Unix(), limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: list dead: %w", err)
 	}
@@ -213,6 +213,16 @@ func (p *Postgres) Close() error {
 func (p *Postgres) TruncateForTesting(ctx context.Context) error {
 	if _, err := p.db.ExecContext(ctx, `TRUNCATE TABLE uploads`); err != nil {
 		return fmt.Errorf("store: truncate: %w", err)
+	}
+	return nil
+}
+
+// Complete marks an upload as finished being written, which is what makes it
+// reachable. Completing one that is already complete is not an error: a client
+// may retry the final request without knowing the first succeeded.
+func (p *Postgres) Complete(ctx context.Context, id string, now time.Time) error {
+	if _, err := p.db.ExecContext(ctx, rebind(completeUpload), now.Unix(), id); err != nil {
+		return fmt.Errorf("store: complete: %w", err)
 	}
 	return nil
 }

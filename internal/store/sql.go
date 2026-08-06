@@ -27,14 +27,16 @@ const (
 		id, wrapped_file_key, wrap_nonce, metadata_envelope, metadata_nonce,
 		auth_token_hash, owner_token_hash, at_rest_key,
 		password_salt, argon2_memory_kib, argon2_iterations, argon2_parallelism,
-		size, created_at, expires_at, max_downloads, download_count, bytes_served`
+		size, created_at, expires_at, max_downloads, download_count, bytes_served,
+		completed_at`
 
 	insertUpload = `INSERT INTO uploads (
 		id, wrapped_file_key, wrap_nonce, metadata_envelope, metadata_nonce,
 		auth_token_hash, owner_token_hash, at_rest_key,
 		password_salt, argon2_memory_kib, argon2_iterations, argon2_parallelism,
-		size, created_at, expires_at, max_downloads, download_count, bytes_served
-	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+		size, created_at, expires_at, max_downloads, download_count, bytes_served,
+		completed_at
+	) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 
 	selectUpload = `SELECT` + uploadColumns + ` FROM uploads WHERE id = ?`
 
@@ -56,10 +58,18 @@ const (
 
 	deleteUpload = `DELETE FROM uploads WHERE id = ?`
 
+	// An upload that was never completed is reaped too. It holds an at-rest key
+	// and a partial blob, and nothing will ever finish it, so leaving it would
+	// keep exactly the leftover this project promises not to keep. The deadline
+	// is separate from the expiry one because an abandoned upload has no
+	// meaningful expiry: it was never given one the uploader agreed to.
 	selectDead = `SELECT id FROM uploads
-	  WHERE (expires_at IS NOT NULL AND expires_at <= ?)
-	     OR (max_downloads > 0 AND download_count >= max_downloads)
+	  WHERE (completed_at IS NOT NULL AND expires_at IS NOT NULL AND expires_at <= ?)
+	     OR (completed_at IS NOT NULL AND max_downloads > 0 AND download_count >= max_downloads)
+	     OR (completed_at IS NULL AND created_at <= ?)
 	  LIMIT ?`
+
+	completeUpload = `UPDATE uploads SET completed_at = ? WHERE id = ? AND completed_at IS NULL`
 )
 
 // scannable is satisfied by both *sql.Row and *sql.Rows.

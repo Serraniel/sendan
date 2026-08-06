@@ -99,6 +99,14 @@ type Upload struct {
 
 	// BytesServed is the total content served for this upload.
 	BytesServed int64
+
+	// CompletedAt is zero while the upload is still being written.
+	//
+	// An upload exists before it is complete, because chunks are encrypted with
+	// this row's at-rest key as they arrive. Until it is finished, the content
+	// is only partly written and decrypts to nothing past the point the
+	// uploader stopped, so it must not be reachable.
+	CompletedAt time.Time
 }
 
 // Expired reports whether the upload has passed its deadline at now.
@@ -111,9 +119,17 @@ func (u *Upload) Exhausted() bool {
 	return u.MaxDownloads > 0 && u.DownloadCount >= u.MaxDownloads
 }
 
+// Complete reports whether the upload finished being written.
+func (u *Upload) Complete() bool { return !u.CompletedAt.IsZero() }
+
 // Live reports whether the upload may still be downloaded.
+//
+// Completeness is checked here rather than at each call site, so that an
+// incomplete upload is unreachable by the same mechanism that already makes an
+// expired one unreachable. A second rule kept somewhere else is a rule some
+// path will not apply.
 func (u *Upload) Live(now time.Time) bool {
-	return !u.Expired(now) && !u.Exhausted()
+	return u.Complete() && !u.Expired(now) && !u.Exhausted()
 }
 
 // Store persists upload metadata.
@@ -147,9 +163,17 @@ type Store interface {
 	// other won.
 	Delete(ctx context.Context, id string) error
 
-	// ListDead returns identifiers of uploads that have expired or are
-	// exhausted at now, for the reaper to remove. At most limit are returned.
-	ListDead(ctx context.Context, now time.Time, limit int) ([]string, error)
+	// Complete marks an upload as finished being written, making it reachable.
+	// Completing one that is already complete is not an error.
+	Complete(ctx context.Context, id string, now time.Time) error
+
+	// ListDead returns identifiers of uploads the reaper should remove: those
+	// expired or exhausted at now, and those still incomplete that were created
+	// at or before abandoned. At most limit are returned.
+	//
+	// An abandoned upload holds an at-rest key and a partial blob that nothing
+	// will ever finish, so it is a leftover like any other.
+	ListDead(ctx context.Context, now, abandoned time.Time, limit int) ([]string, error)
 
 	// Checkpoint retires any write-ahead log, so that deleted rows do not
 	// survive on disk in pages the log still holds. Implementations without a

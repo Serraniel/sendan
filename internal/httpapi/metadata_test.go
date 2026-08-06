@@ -110,6 +110,11 @@ func (h *apiHarness) put(t *testing.T, u *store.Upload) {
 	if u.CreatedAt.IsZero() {
 		u.CreatedAt = h.clock
 	}
+	// Complete by default: an incomplete upload is unreachable, so a fixture
+	// without this would make most cases test nothing.
+	if u.CompletedAt.IsZero() {
+		u.CompletedAt = h.clock
+	}
 	if u.ExpiresAt.IsZero() {
 		u.ExpiresAt = h.clock.Add(time.Hour)
 	}
