@@ -198,3 +198,62 @@ func TestRecordServedToleratesAVanishedUpload(t *testing.T) {
 		t.Fatalf("recording against a removed upload failed: %v", err)
 	}
 }
+
+// The reaper must not collect an upload that is still being written. Getting
+// this wrong deletes work in progress, and the uploader sees a transfer that
+// fails partway with no explanation.
+func TestReapSparesUploadsStillInProgress(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+
+	const fresh = "INPROGRESSAAAAAAAAAAAA"
+	const stale = "ABANDONEDAAAAAAAAAAAAA"
+
+	h.putWith(t, fresh, "half", h.clock.Add(time.Hour), 0, func(u *store.Upload) {
+		u.CompletedAt = time.Time{}
+		u.CreatedAt = h.clock.Add(-time.Minute)
+	})
+	h.putWith(t, stale, "half", h.clock.Add(time.Hour), 0, func(u *store.Upload) {
+		u.CompletedAt = time.Time{}
+		u.CreatedAt = h.clock.Add(-2 * DefaultIncompleteTTL)
+	})
+
+	n, err := h.svc.Reap(t.Context(), 100)
+	if err != nil {
+		t.Fatalf("reap: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("reaped %d uploads, want 1", n)
+	}
+
+	// The fresh one is still there, still incomplete.
+	if _, err := h.svc.Metadata(t.Context(), fresh); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("an incomplete upload became readable: %v", err)
+	}
+	if _, err := h.store.RecordServed(t.Context(), fresh, 0); errors.Is(err, store.ErrNotFound) {
+		t.Error("an upload still in progress was reaped")
+	}
+	if _, err := h.store.RecordServed(t.Context(), stale, 0); !errors.Is(err, store.ErrNotFound) {
+		t.Error("an abandoned upload survived the reaper")
+	}
+}
+
+// An upload still being written must not be reaped by its own expiry. The
+// deadline the uploader chose describes how long the file should be available
+// once it exists, not how long they have to finish sending it.
+func TestAnInProgressUploadIsNotReapedByItsExpiry(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+
+	const id = "SLOWUPLOADAAAAAAAAAAAA"
+	h.putWith(t, id, "half", h.clock.Add(-time.Hour), 0, func(u *store.Upload) {
+		u.CompletedAt = time.Time{}
+		u.CreatedAt = h.clock.Add(-time.Minute)
+	})
+
+	n, err := h.svc.Reap(t.Context(), 100)
+	if err != nil {
+		t.Fatalf("reap: %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("reaped %d uploads: an upload in progress was collected by its own deadline", n)
+	}
+}

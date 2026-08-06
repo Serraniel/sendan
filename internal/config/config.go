@@ -27,6 +27,7 @@ const (
 	DefaultMaxTTL        = 7 * 24 * time.Hour
 	DefaultMaxUploadSize = 1 << 30 // 1 GiB
 	DefaultMaxDownloads  = 0       // unlimited unless the uploader sets one
+	DefaultIncompleteTTL = 24 * time.Hour
 	DefaultSourceURL     = "https://github.com/Serraniel/sendan"
 	DefaultRateLimit     = 120 // requests per minute per address
 	DefaultRateBurst     = 30
@@ -83,6 +84,11 @@ type Config struct {
 	// AllowInfiniteTTL permits uploads that never expire. Off by default.
 	AllowInfiniteTTL bool
 
+	// IncompleteTTL is how long an upload may remain unfinished before the
+	// reaper treats it as abandoned and removes it, measured from when it was
+	// created. It therefore also bounds how long a single upload may take.
+	IncompleteTTL time.Duration
+
 	// DefaultMaxDownloads applies when an uploader does not choose one. Zero
 	// means no download limit.
 	DefaultMaxDownloads int
@@ -120,6 +126,7 @@ func Load(getenv Getenv) (*Config, error) {
 		DefaultTTL:       l.duration("SENDAN_DEFAULT_TTL", DefaultTTL),
 		MaxTTL:           l.duration("SENDAN_MAX_TTL", DefaultMaxTTL),
 		AllowInfiniteTTL: l.boolean("SENDAN_ALLOW_INFINITE_TTL", false),
+		IncompleteTTL:    l.duration("SENDAN_INCOMPLETE_TTL", DefaultIncompleteTTL),
 
 		RateLimit:      l.integer("SENDAN_RATE_LIMIT", DefaultRateLimit),
 		RateBurst:      l.integer("SENDAN_RATE_BURST", DefaultRateBurst),
@@ -309,6 +316,14 @@ func (l *loader) validate(cfg *Config) {
 		l.errs = append(l.errs, errors.New(
 			"SENDAN_DEFAULT_TTL=0 requests unlimited retention, which requires SENDAN_ALLOW_INFINITE_TTL=true"))
 	}
+	// An upload that may never be treated as abandoned is an upload whose
+	// partial blob is kept for ever, which is the leftover the project exists
+	// to avoid.
+	if cfg.IncompleteTTL <= 0 {
+		l.errs = append(l.errs, errors.New(
+			"SENDAN_INCOMPLETE_TTL must be positive: an upload that is never abandoned leaves its partial content behind for ever"))
+	}
+
 	// A limit with no burst refuses every request, including the first, which
 	// would look like an outage rather than a misconfiguration.
 	if cfg.RateLimit > 0 && cfg.RateBurst <= 0 {

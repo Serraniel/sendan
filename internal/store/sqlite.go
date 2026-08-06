@@ -88,7 +88,7 @@ func (s *SQLite) Create(ctx context.Context, u *Upload) error {
 		u.ID, u.WrappedFileKey, u.WrapNonce, u.MetadataEnvelope, u.MetadataNonce,
 		u.AuthTokenHash, u.OwnerTokenHash, u.AtRestKey,
 		salt, memory, iterations, parallelism,
-		u.Size, u.CreatedAt.Unix(), nullableUnix(u.ExpiresAt), u.MaxDownloads, u.DownloadCount, u.BytesServed,
+		u.Size, u.CreatedAt.Unix(), nullableUnix(u.ExpiresAt), u.MaxDownloads, u.DownloadCount, u.BytesServed, nullableUnix(u.CompletedAt),
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -166,11 +166,11 @@ func (s *SQLite) Delete(ctx context.Context, id string) error {
 
 // ListDead returns identifiers of uploads the reaper should remove, at most
 // limit of them.
-func (s *SQLite) ListDead(ctx context.Context, now time.Time, limit int) ([]string, error) {
+func (s *SQLite) ListDead(ctx context.Context, now, abandoned time.Time, limit int) ([]string, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
-	rows, err := s.db.QueryContext(ctx, selectDead, now.Unix(), limit)
+	rows, err := s.db.QueryContext(ctx, selectDead, now.Unix(), abandoned.Unix(), limit)
 	if err != nil {
 		return nil, fmt.Errorf("store: list dead: %w", err)
 	}
@@ -208,12 +208,13 @@ func scanUpload(row scannable) (*Upload, error) {
 		memory, iters, par sql.NullInt64
 		createdAt          int64
 		expiresAt          sql.NullInt64
+		completedAt        sql.NullInt64
 	)
 	err := row.Scan(
 		&u.ID, &u.WrappedFileKey, &u.WrapNonce, &u.MetadataEnvelope, &u.MetadataNonce,
 		&u.AuthTokenHash, &u.OwnerTokenHash, &u.AtRestKey,
 		&salt, &memory, &iters, &par,
-		&u.Size, &createdAt, &expiresAt, &u.MaxDownloads, &u.DownloadCount, &u.BytesServed,
+		&u.Size, &createdAt, &expiresAt, &u.MaxDownloads, &u.DownloadCount, &u.BytesServed, &completedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNotFound
@@ -223,6 +224,9 @@ func scanUpload(row scannable) (*Upload, error) {
 	}
 
 	u.CreatedAt = time.Unix(createdAt, 0).UTC()
+	if completedAt.Valid {
+		u.CompletedAt = time.Unix(completedAt.Int64, 0).UTC()
+	}
 	if expiresAt.Valid {
 		u.ExpiresAt = time.Unix(expiresAt.Int64, 0).UTC()
 	}
@@ -279,6 +283,16 @@ func validate(u *Upload) error {
 func ensureDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("store: create directory: %w", err)
+	}
+	return nil
+}
+
+// Complete marks an upload as finished being written, which is what makes it
+// reachable. Completing one that is already complete is not an error: a client
+// may retry the final request without knowing the first succeeded.
+func (s *SQLite) Complete(ctx context.Context, id string, now time.Time) error {
+	if _, err := s.db.ExecContext(ctx, completeUpload, now.Unix(), id); err != nil {
+		return fmt.Errorf("store: complete: %w", err)
 	}
 	return nil
 }

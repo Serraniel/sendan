@@ -260,3 +260,15 @@ func TestTrustedProxiesDefaultsToNone(t *testing.T) {
 		t.Errorf("rate limit %d: an instance is unmetered by default", cfg.RateLimit)
 	}
 }
+
+// An upload that is never treated as abandoned keeps its partial content for
+// ever, which is the leftover the whole project exists to avoid.
+func TestIncompleteTTLMustBePositive(t *testing.T) {
+	_, err := Load(env(map[string]string{"SENDAN_INCOMPLETE_TTL": "0"}))
+	if err == nil {
+		t.Fatal("an incomplete TTL of zero must be rejected")
+	}
+	if !strings.Contains(err.Error(), "SENDAN_INCOMPLETE_TTL") {
+		t.Fatalf("the error does not name the setting at fault: %v", err)
+	}
+}

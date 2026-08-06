@@ -86,8 +86,11 @@ func (h *harness) put(t *testing.T, id, content string, expiresAt time.Time, max
 		AtRestKey:        atRest,
 		Size:             int64(len(content)),
 		CreatedAt:        h.clock,
-		ExpiresAt:        expiresAt,
-		MaxDownloads:     maxDownloads,
+		// Complete by default: an incomplete upload is unreachable, so a
+		// fixture without this would make most cases test nothing.
+		CompletedAt:  h.clock,
+		ExpiresAt:    expiresAt,
+		MaxDownloads: maxDownloads,
 	}
 	if err := h.store.Create(t.Context(), u); err != nil {
 		t.Fatalf("create: %v", err)
@@ -177,8 +180,11 @@ func (h *harness) putWith(t *testing.T, id, content string, expiresAt time.Time,
 		AtRestKey:        atRest,
 		Size:             int64(len(content)),
 		CreatedAt:        h.clock,
-		ExpiresAt:        expiresAt,
-		MaxDownloads:     maxDownloads,
+		// Complete by default: an incomplete upload is unreachable, so a
+		// fixture without this would make most cases test nothing.
+		CompletedAt:  h.clock,
+		ExpiresAt:    expiresAt,
+		MaxDownloads: maxDownloads,
 	}
 	if adjust != nil {
 		adjust(u)
@@ -526,12 +532,12 @@ type sweepSignal struct {
 	sweeps chan struct{}
 }
 
-func (s *sweepSignal) ListDead(ctx context.Context, now time.Time, limit int) ([]string, error) {
+func (s *sweepSignal) ListDead(ctx context.Context, now, abandoned time.Time, limit int) ([]string, error) {
 	select {
 	case s.sweeps <- struct{}{}:
 	default:
 	}
-	return s.Store.ListDead(ctx, now, limit)
+	return s.Store.ListDead(ctx, now, abandoned, limit)
 }
 
 // A backlog larger than one batch must be cleared within a single tick rather

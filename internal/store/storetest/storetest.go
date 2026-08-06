@@ -45,6 +45,9 @@ func Run(t *testing.T, newStore Factory) {
 		"PartialTransfersChargedByVolume":  testPartialTransfersAreChargedByVolume,
 		"RepeatedNearCompleteReadsCharged": testRepeatedNearCompleteReadsAreCharged,
 		"ConcurrentServedBytesNotLost":     testConcurrentServedBytesAreNotLost,
+		"IncompleteUploadIsUnreachable":    testIncompleteUploadIsUnreachable,
+		"CompleteMakesAnUploadReachable":   testCompleteMakesAnUploadReachable,
+		"AbandonedUploadsAreReaped":        testAbandonedUploadsAreReaped,
 		"DeleteIsHardAndIdempotent":        testDeleteIsHardAndIdempotent,
 		"ListDeadFindsExpired":             testListDeadFindsExpired,
 		"ListDeadFindsExhausted":           testListDeadFindsExhausted,
@@ -66,6 +69,10 @@ func NewID(t *testing.T) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+// notAbandoned is a deadline before any fixture was created, so no incomplete
+// upload qualifies. Cases that are about abandonment pass their own.
+var notAbandoned = time.Unix(0, 0)
+
 // Sample returns a complete, valid upload.
 func Sample(t *testing.T, id string) *store.Upload {
 	t.Helper()
@@ -80,6 +87,9 @@ func Sample(t *testing.T, id string) *store.Upload {
 		AtRestKey:        bytes.Repeat([]byte{0x07}, 32),
 		Size:             1024,
 		CreatedAt:        time.Now().UTC().Truncate(time.Second),
+		// Complete by default: an incomplete upload is unreachable, so a
+		// fixture that omitted this would make every case test nothing.
+		CompletedAt: time.Now().UTC().Truncate(time.Second),
 	}
 }
 
@@ -233,7 +243,7 @@ func testNoDeadlineNeverExpires(t *testing.T, newStore Factory) {
 	if _, err := s.Get(t.Context(), u.ID, far); err != nil {
 		t.Fatalf("an upload with no deadline expired: %v", err)
 	}
-	dead, err := s.ListDead(t.Context(), far, 10)
+	dead, err := s.ListDead(t.Context(), far, notAbandoned, 10)
 	if err != nil {
 		t.Fatalf("list dead: %v", err)
 	}
@@ -440,7 +450,7 @@ func testListDeadFindsExpired(t *testing.T, newStore Factory) {
 		}
 	}
 
-	ids, err := s.ListDead(t.Context(), now, 10)
+	ids, err := s.ListDead(t.Context(), now, notAbandoned, 10)
 	if err != nil {
 		t.Fatalf("list dead: %v", err)
 	}
@@ -460,7 +470,7 @@ func testListDeadFindsExhausted(t *testing.T, newStore Factory) {
 	if _, err := s.RecordServed(t.Context(), u.ID, u.Size); err != nil {
 		t.Fatalf("serve: %v", err)
 	}
-	ids, err := s.ListDead(t.Context(), now, 10)
+	ids, err := s.ListDead(t.Context(), now, notAbandoned, 10)
 	if err != nil {
 		t.Fatalf("list dead: %v", err)
 	}
@@ -479,14 +489,14 @@ func testListDeadRespectsLimit(t *testing.T, newStore Factory) {
 			t.Fatalf("create: %v", err)
 		}
 	}
-	ids, err := s.ListDead(t.Context(), now, 2)
+	ids, err := s.ListDead(t.Context(), now, notAbandoned, 2)
 	if err != nil {
 		t.Fatalf("list dead: %v", err)
 	}
 	if len(ids) != 2 {
 		t.Fatalf("got %d identifiers, want 2", len(ids))
 	}
-	none, err := s.ListDead(t.Context(), now, 0)
+	none, err := s.ListDead(t.Context(), now, notAbandoned, 0)
 	if err != nil || none != nil {
 		t.Fatalf("a limit of zero returned %v, %v", none, err)
 	}
@@ -533,5 +543,96 @@ func testLargeValuesRoundTrip(t *testing.T, newStore Factory) {
 	}
 	if got.Size != u.Size {
 		t.Fatalf("size %d came back as %d", u.Size, got.Size)
+	}
+}
+
+// An upload exists before it is complete, because chunks are encrypted with its
+// at-rest key as they arrive. Until it finishes, the content is only partly
+// written and decrypts to nothing past the point the uploader stopped, so
+// serving it would hand a recipient a corrupt file.
+func testIncompleteUploadIsUnreachable(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	now := time.Now()
+
+	u := Sample(t, NewID(t))
+	u.CompletedAt = time.Time{}
+	u.ExpiresAt = now.Add(time.Hour)
+	if err := s.Create(t.Context(), u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if _, err := s.Get(t.Context(), u.ID, now); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("a half-written upload is readable: %v", err)
+	}
+}
+
+func testCompleteMakesAnUploadReachable(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	now := time.Now()
+
+	u := Sample(t, NewID(t))
+	u.CompletedAt = time.Time{}
+	u.ExpiresAt = now.Add(time.Hour)
+	if err := s.Create(t.Context(), u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	if err := s.Complete(t.Context(), u.ID, now); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	got, err := s.Get(t.Context(), u.ID, now)
+	if err != nil {
+		t.Fatalf("a completed upload is still unreachable: %v", err)
+	}
+	if !got.Complete() {
+		t.Error("the upload does not report itself complete")
+	}
+
+	// A client may retry the final request without knowing the first succeeded.
+	// The recorded time must not move: it is when the upload finished, not when
+	// something last asked about it.
+	if err := s.Complete(t.Context(), u.ID, now.Add(time.Hour)); err != nil {
+		t.Fatalf("completing twice: %v", err)
+	}
+	again, err := s.Get(t.Context(), u.ID, now)
+	if err != nil {
+		t.Fatalf("completing twice made the upload unreachable: %v", err)
+	}
+	if !again.CompletedAt.Equal(got.CompletedAt) {
+		t.Errorf("completing twice moved the recorded time from %s to %s",
+			got.CompletedAt, again.CompletedAt)
+	}
+}
+
+// An upload that was never finished holds an at-rest key and a partial blob
+// that nothing will ever complete. Leaving it would keep exactly the leftover
+// this project promises not to keep.
+func testAbandonedUploadsAreReaped(t *testing.T, newStore Factory) {
+	s := newStore(t)
+	now := time.Now()
+
+	old := Sample(t, NewID(t))
+	old.CompletedAt = time.Time{}
+	old.CreatedAt = now.Add(-2 * time.Hour)
+	old.ExpiresAt = now.Add(time.Hour)
+
+	fresh := Sample(t, NewID(t))
+	fresh.CompletedAt = time.Time{}
+	fresh.CreatedAt = now
+	fresh.ExpiresAt = now.Add(time.Hour)
+
+	for _, u := range []*store.Upload{old, fresh} {
+		if err := s.Create(t.Context(), u); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+	}
+
+	// Anything still unfinished an hour after it began is abandoned.
+	ids, err := s.ListDead(t.Context(), now, now.Add(-time.Hour), 10)
+	if err != nil {
+		t.Fatalf("list dead: %v", err)
+	}
+	if len(ids) != 1 || ids[0] != old.ID {
+		t.Fatalf("got %v, want only the abandoned upload - an upload still in progress must not be reaped", ids)
 	}
 }

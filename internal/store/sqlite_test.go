@@ -37,6 +37,9 @@ func sample(id string) *Upload {
 		AtRestKey:        bytes.Repeat([]byte{0x07}, 32),
 		Size:             1024,
 		CreatedAt:        time.Now().UTC().Truncate(time.Second),
+		// Complete by default: an incomplete upload is unreachable, so a
+		// fixture without this would make most cases test nothing.
+		CompletedAt: time.Now().UTC().Truncate(time.Second),
 	}
 }
 
@@ -118,7 +121,7 @@ func TestExpiredUploadIsUnreachableBeforeReaping(t *testing.T) {
 
 	// The row is still present until the reaper removes it, which is exactly
 	// why lazy expiry has to exist.
-	dead, err := s.ListDead(t.Context(), now, 10)
+	dead, err := s.ListDead(t.Context(), now, time.Unix(0, 0), 10)
 	if err != nil {
 		t.Fatalf("list dead: %v", err)
 	}
@@ -137,7 +140,7 @@ func TestUploadWithoutExpiryNeverExpires(t *testing.T) {
 	if _, err := s.Get(t.Context(), u.ID, far); err != nil {
 		t.Fatalf("an upload with no deadline expired: %v", err)
 	}
-	dead, err := s.ListDead(t.Context(), far, 10)
+	dead, err := s.ListDead(t.Context(), far, time.Unix(0, 0), 10)
 	if err != nil {
 		t.Fatalf("list dead: %v", err)
 	}
@@ -377,14 +380,14 @@ func TestListDeadRespectsLimit(t *testing.T) {
 			t.Fatalf("create: %v", err)
 		}
 	}
-	dead, err := s.ListDead(t.Context(), now, 2)
+	dead, err := s.ListDead(t.Context(), now, time.Unix(0, 0), 2)
 	if err != nil {
 		t.Fatalf("list dead: %v", err)
 	}
 	if len(dead) != 2 {
 		t.Fatalf("got %d identifiers, want 2", len(dead))
 	}
-	if none, err := s.ListDead(t.Context(), now, 0); err != nil || none != nil {
+	if none, err := s.ListDead(t.Context(), now, time.Unix(0, 0), 0); err != nil || none != nil {
 		t.Fatalf("a limit of zero returned %v, %v", none, err)
 	}
 }
@@ -400,7 +403,7 @@ func TestListDeadFindsExhaustedUploads(t *testing.T) {
 	if _, err := s.RecordServed(t.Context(), u.ID, u.Size); err != nil {
 		t.Fatalf("serve: %v", err)
 	}
-	dead, err := s.ListDead(t.Context(), now, 10)
+	dead, err := s.ListDead(t.Context(), now, time.Unix(0, 0), 10)
 	if err != nil {
 		t.Fatalf("list dead: %v", err)
 	}
@@ -529,5 +532,58 @@ func TestUpgradeFromTheInitialSchema(t *testing.T) {
 	}
 	if _, err := second.RecordServed(t.Context(), u.ID, u.Size); err != nil {
 		t.Fatalf("record served after upgrade: %v", err)
+	}
+}
+
+// Rows that predate the completion column were only ever created complete, so
+// the migration dates them by their creation. Getting this wrong would make
+// every existing upload on an upgraded instance unreachable - a silent, total
+// outage that looks like data loss.
+func TestUpgradePreservesExistingUploads(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "upgrade3.db")
+
+	first, err := OpenSQLite(t.Context(), path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	u := sample("PRE0003AAAAAAAAAAAAAAA")
+	if err := first.Create(t.Context(), u); err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	// Rewind to the state an instance running the previous release is in.
+	if _, err := first.db.ExecContext(t.Context(),
+		`DELETE FROM schema_migrations WHERE name LIKE '0003%'`); err != nil {
+		t.Fatalf("rewind: %v", err)
+	}
+	if _, err := first.db.ExecContext(t.Context(),
+		`ALTER TABLE uploads DROP COLUMN completed_at`); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	second, err := OpenSQLite(t.Context(), path)
+	if err != nil {
+		t.Fatalf("the upgrade failed: %v", err)
+	}
+	defer func() { _ = second.Close() }()
+
+	got, err := second.Get(t.Context(), u.ID, time.Now())
+	if err != nil {
+		t.Fatalf("an upload that predates the migration became unreachable: %v", err)
+	}
+	if !got.Complete() {
+		t.Error("an upload that predates the migration is not marked complete")
+	}
+	// And it is not mistaken for abandoned by the reaper.
+	dead, err := second.ListDead(t.Context(), time.Now(), time.Now(), 10)
+	if err != nil {
+		t.Fatalf("list dead: %v", err)
+	}
+	for _, id := range dead {
+		if id == u.ID {
+			t.Fatal("an upload that predates the migration would be reaped as abandoned")
+		}
 	}
 }

@@ -43,6 +43,16 @@ type Policy struct {
 	MaxTTL              time.Duration
 	AllowInfiniteTTL    bool
 	DefaultMaxDownloads int
+
+	// IncompleteTTL is how long an upload may remain unfinished before the
+	// reaper treats it as abandoned. Zero selects DefaultIncompleteTTL.
+	//
+	// It is measured from creation rather than from the last chunk, so it also
+	// bounds how long a single upload may take. A day is generous for any size
+	// an instance accepts by default, and the alternative - tracking activity -
+	// would add a column written on every chunk to answer a question the reaper
+	// asks once every few minutes.
+	IncompleteTTL time.Duration
 }
 
 // Service ties the metadata store and the blob store together.
@@ -178,7 +188,10 @@ func (s *Service) Checkpoint(ctx context.Context) error {
 // It is safe to call concurrently with downloads: an upload the reaper has not
 // reached yet is already unreachable, because liveness is evaluated on read.
 func (s *Service) Reap(ctx context.Context, limit int) (int, error) {
-	ids, err := s.store.ListDead(ctx, s.now(), limit)
+	// An upload still being written after this long is abandoned: nothing will
+	// finish it, and it holds an at-rest key and a partial blob.
+	abandoned := s.now().Add(-s.incompleteTTL())
+	ids, err := s.store.ListDead(ctx, s.now(), abandoned, limit)
 	if err != nil {
 		return 0, fmt.Errorf("upload: list dead: %w", err)
 	}
@@ -240,4 +253,15 @@ func (s *Service) RunReaper(ctx context.Context, interval time.Duration, batch i
 			}
 		}
 	}
+}
+
+// DefaultIncompleteTTL is how long an upload may remain unfinished before it is
+// treated as abandoned.
+const DefaultIncompleteTTL = 24 * time.Hour
+
+func (s *Service) incompleteTTL() time.Duration {
+	if s.policy.IncompleteTTL > 0 {
+		return s.policy.IncompleteTTL
+	}
+	return DefaultIncompleteTTL
 }

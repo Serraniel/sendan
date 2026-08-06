@@ -266,6 +266,35 @@ A partial upload holds the same content a finished one would, so it is encrypted
 the same way and deleted the same way: `Delete` discards it whether or not a
 blob was ever finished.
 
+### 4.0.1 An upload before it is complete
+
+Chunks are encrypted with the row's at-rest key as they arrive, so the row has
+to exist from the moment an upload is created rather than from the moment it
+finishes. That leaves a window in which a row describes content that is only
+partly written.
+
+`completed_at` is null until the upload finishes, and **completeness is part of
+liveness**. An incomplete upload is therefore unreachable by the same mechanism
+that already makes an expired one unreachable, rather than by a second rule kept
+somewhere else — a rule kept somewhere else is a rule some path will not apply.
+
+Two consequences follow, and both are deliberate:
+
+- **An upload still being written is not reaped by its own expiry.** The
+  deadline the uploader chose describes how long the file should be available
+  once it exists, not how long they have to finish sending it. A slow transfer
+  would otherwise be collected mid-flight by a deadline that had not yet begun
+  to mean anything.
+- **An upload still being written *is* reaped once abandoned.** It holds an
+  at-rest key and a partial blob that nothing will ever finish, which is exactly
+  the leftover this project promises not to keep. `SENDAN_INCOMPLETE_TTL`
+  governs how long that takes, measured from creation.
+
+Measuring from creation rather than from the last chunk also bounds how long a
+single upload may take. A day is generous for any size an instance accepts by
+default, and the alternative — a column written on every chunk — would be paid
+on every request to answer a question the reaper asks once every few minutes.
+
 ### 4.1 Metadata
 
 `GET /api/uploads/{id}/metadata` returns what a client needs before deciding

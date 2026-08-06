@@ -133,6 +133,7 @@ func run() error {
 		DefaultTTL:          cfg.DefaultTTL,
 		MaxTTL:              cfg.MaxTTL,
 		AllowInfiniteTTL:    cfg.AllowInfiniteTTL,
+		IncompleteTTL:       cfg.IncompleteTTL,
 		DefaultMaxDownloads: cfg.DefaultMaxDownloads,
 	}, log).WithPasswordAttempts(attempts)
 
