@@ -440,6 +440,18 @@ func (failingStore) Delete(context.Context, string) error {
 	return errors.New("blob store unavailable")
 }
 
+func (failingStore) WriteChunk(context.Context, string, int64, io.Reader) (int64, error) {
+	return 0, errors.New("blob store unavailable")
+}
+
+func (failingStore) Length(context.Context, string) (int64, error) {
+	return 0, errors.New("blob store unavailable")
+}
+
+func (failingStore) Finish(context.Context, string) error {
+	return errors.New("blob store unavailable")
+}
+
 func readAll(path string) ([]byte, error) {
 	return os.ReadFile(path) //nolint:gosec // walking a temporary directory in a test
 }

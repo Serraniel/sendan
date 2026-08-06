@@ -20,7 +20,7 @@
 
 internal/crypto      85.0
 internal/store       78.0
-internal/blob        81.0
+internal/blob        82.0
 internal/upload      82.0
 # internal/httpapi cannot reach 100: debug.ReadBuildInfo reporting failure and a
 # marshal error on a struct of strings and a bool are both unreachable from a

@@ -148,6 +148,16 @@ func (s *FS) Delete(_ context.Context, id string) error {
 		return fmt.Errorf("blob: delete: %w", err)
 	}
 
+	// A partial upload that was never finished is a leftover like any other,
+	// and it holds the same ciphertext the finished blob would have.
+	sp, err := s.spool(id)
+	if err != nil {
+		return err
+	}
+	if err := sp.remove(id); err != nil {
+		return err
+	}
+
 	dir := filepath.Dir(path)
 	for range 2 {
 		if dir == s.root {
@@ -174,4 +184,56 @@ func (c *contextReader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 	return c.r.Read(p)
+}
+
+// spool returns the partial-upload area, which for the filesystem store sits
+// beside the blob so that finishing is a rename rather than a copy.
+func (s *FS) spool(id string) (spool, error) {
+	final, err := s.path(id)
+	if err != nil {
+		return spool{}, err
+	}
+	return spool{dir: filepath.Dir(final)}, nil
+}
+
+// WriteChunk appends to a partial upload.
+func (s *FS) WriteChunk(ctx context.Context, id string, offset int64, r io.Reader) (int64, error) {
+	sp, err := s.spool(id)
+	if err != nil {
+		return 0, err
+	}
+	return sp.writeChunk(ctx, id, offset, r)
+}
+
+// Length reports how many bytes of a partial upload are stored.
+func (s *FS) Length(_ context.Context, id string) (int64, error) {
+	sp, err := s.spool(id)
+	if err != nil {
+		return 0, err
+	}
+	return sp.length(id)
+}
+
+// Finish renames the partial upload into place, which is what makes it
+// readable. A rename is atomic, so a reader never observes a half-written blob.
+func (s *FS) Finish(_ context.Context, id string) error {
+	sp, err := s.spool(id)
+	if err != nil {
+		return err
+	}
+	partial, err := sp.path(id)
+	if err != nil {
+		return err
+	}
+	final, err := s.path(id)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(partial); errors.Is(err, os.ErrNotExist) {
+		return ErrNotFound
+	}
+	if err := os.Rename(partial, final); err != nil {
+		return fmt.Errorf("blob: finish: %w", err)
+	}
+	return nil
 }

@@ -213,3 +213,40 @@ func (d *decryptingReader) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (d *decryptingReader) Close() error { return d.inner.Close() }
+
+// WriteChunk encrypts a chunk at its offset and appends it to a partial upload.
+//
+// The keystream is positioned at the offset rather than run from the start, so
+// a chunk costs work proportional to itself. That is what CTR buys here: a mode
+// without seekable keystream would make each resumed chunk cost a pass over
+// everything before it.
+//
+// The offset is the plaintext offset, which is also the ciphertext offset: CTR
+// does not change length.
+func (s *Shredder) WriteChunk(ctx context.Context, id string, key []byte, offset int64, r io.Reader) (int64, error) {
+	if offset < 0 {
+		return 0, fmt.Errorf("blob: negative offset %d", offset)
+	}
+	ctr, skip, err := stream(key, offset)
+	if err != nil {
+		return 0, err
+	}
+	// stream positions on a block boundary and reports how far into that block
+	// the offset falls. Discarding that many keystream bytes aligns it, which
+	// is what lets a chunk begin part-way through a block.
+	if skip > 0 {
+		ctr.XORKeyStream(make([]byte, skip), make([]byte, skip))
+	}
+	return s.inner.WriteChunk(ctx, id, offset, &cipher.StreamReader{S: ctr, R: r})
+}
+
+// Length reports how many bytes of a partial upload are stored, which is where
+// a resuming client continues from.
+func (s *Shredder) Length(ctx context.Context, id string) (int64, error) {
+	return s.inner.Length(ctx, id)
+}
+
+// Finish promotes a partial upload to a readable blob.
+func (s *Shredder) Finish(ctx context.Context, id string) error {
+	return s.inner.Finish(ctx, id)
+}
