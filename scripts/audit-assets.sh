@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Asserts that the built web client loads nothing from a third party.
+# Asserts that the built web client can run under the policy it is served with.
 #
-# A single external origin in the output breaks the guarantee the strict
-# Content-Security-Policy exists to make, and reintroduces a third party into a
-# page that performs end-to-end encryption. The policy is the enforcement; this
-# is the check that says so at build time rather than in a browser console.
+# Two things are checked, both of which the Content-Security-Policy enforces at
+# run time and neither of which any test that does not execute the page can see.
+#
+# First, that nothing is loaded from a third party. A single external origin in
+# the output breaks the guarantee the policy exists to make, and reintroduces a
+# third party into a page that performs end-to-end encryption.
+#
+# Second, that nothing depends on an inline style. style-src 'self' carries no
+# 'unsafe-inline', and style-src-attr falls back to style-src, so a style
+# attribute is refused - silently, since a blocked style is not a broken page.
+# The development server sends no policy, so this fails only on a real instance,
+# and only as something rendering wrongly rather than as an error. A progress
+# bar whose width is set inline is exactly this: correct everywhere it is
+# looked at, and empty everywhere it matters.
 #
 # It looks for references that cause a load, not for the text of a URL. An
 # earlier version grepped every script for https:// and failed on the
@@ -55,11 +65,34 @@ while IFS= read -r hit; do
 done < <(grep -rInoP '(?:\bfrom\s*|\bimport\s*\(\s*)["'"'"']https?://(?!localhost|127\.0\.0\.1)[^"'"'"']*' \
   "$out" --include='*.js' || true)
 
+external=$found
+
+# A style attribute in the shell. Svelte extracts component <style> blocks into
+# a stylesheet, which is served from this origin and is fine; an attribute is
+# not, whether it was written by hand or produced by a style: directive.
+while IFS= read -r hit; do
+  echo "  markup carries an inline style, which the policy refuses: $hit"
+  found=1
+done < <(grep -rInoP '<[^>]+\sstyle\s*=\s*["'"'"']' "$out" --include='*.html' || true)
+
+# The same thing at run time. setAttribute("style", …) and cssText are refused
+# for the same reason; assigning an individual property such as style.width is
+# not, so it is deliberately not matched here.
+while IFS= read -r hit; do
+  echo "  script sets an inline style, which the policy refuses: $hit"
+  found=1
+done < <(grep -rInoP '(?:setAttribute\(\s*["'"'"']style["'"'"']|\.style\.cssText\s*=)' \
+  "$out" --include='*.js' || true)
+
 if [ "$found" -ne 0 ]; then
   echo
-  echo "audit: the built client would load something from a third party."
-  echo "This breaks the Content-Security-Policy guarantee: see docs/design.md §8.2."
+  if [ "$external" -ne 0 ]; then
+    echo "audit: the built client would load something from a third party."
+  else
+    echo "audit: the built client would be rendered wrongly by its own policy."
+  fi
+  echo "See docs/design.md §8.2 for the policy this checks against."
   exit 1
 fi
 
-echo "audit: the built client loads nothing from a third party."
+echo "audit: the built client loads nothing external and needs no inline style."

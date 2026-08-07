@@ -134,6 +134,17 @@ export function randomBytes(n: number): Uint8Array {
 }
 
 /**
+ * A random file identifier.
+ *
+ * The client generates it, and must do so before anything else: it is the salt
+ * of the key schedule, so every key an upload has derives from it and none can
+ * exist until it does. See spec §3.
+ */
+export function newFileID(): Uint8Array {
+  return randomBytes(FILE_ID_SIZE);
+}
+
+/**
  * A random link secret.
  *
  * 32 bytes rather than 16 because it is the sole credential protecting an

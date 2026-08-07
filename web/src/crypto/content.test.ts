@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   CONTENT_SALT_SIZE,
   decryptBytes,
+  encodedContentLength,
   encryptBytes,
   encryptStream,
   HEADER_SIZE,
@@ -205,6 +206,62 @@ describe("content encoding", () => {
       MAX_RECORD_PLAINTEXT + 1,
     ]) {
       expect(hex(await run(chunk)), `chunk ${chunk}`).toBe(want);
+    }
+  });
+});
+
+/**
+ * The uploader declares the total length before it has produced a single byte
+ * of it, and the server enforces that declaration. So the calculation is
+ * checked against the encoder itself rather than against a second copy of the
+ * arithmetic, which would agree with a wrong answer just as readily.
+ */
+describe("encoded length", () => {
+  it("is what the encoder produces, at every boundary", async () => {
+    const sizes = [
+      0,
+      1,
+      HEADER_SIZE,
+      MAX_RECORD_PLAINTEXT - 1,
+      MAX_RECORD_PLAINTEXT,
+      MAX_RECORD_PLAINTEXT + 1,
+      2 * MAX_RECORD_PLAINTEXT - 1,
+      2 * MAX_RECORD_PLAINTEXT,
+      2 * MAX_RECORD_PLAINTEXT + 1,
+      3 * MAX_RECORD_PLAINTEXT + 4321,
+    ];
+    for (const size of sizes) {
+      const actual = (await encryptBytes(fileKey(), filled(size))).length;
+      expect(encodedContentLength(size), `plaintext of ${size} bytes`).toBe(actual);
+    }
+  });
+
+  it("is what the encoder produces for arbitrary sizes", async () => {
+    // Sizes nobody would have thought to enumerate. A calculation that is right
+    // only at the boundaries someone wrote down is right by coincidence.
+    for (let i = 0; i < 24; i++) {
+      const size = Math.floor(Math.random() * 3 * MAX_RECORD_PLAINTEXT);
+      const actual = (await encryptBytes(fileKey(), filled(size))).length;
+      expect(encodedContentLength(size), `plaintext of ${size} bytes`).toBe(actual);
+    }
+  });
+
+  it("grows by exactly one record per record", () => {
+    const one = encodedContentLength(MAX_RECORD_PLAINTEXT);
+    expect(encodedContentLength(2 * MAX_RECORD_PLAINTEXT) - one).toBe(RECORD_SIZE);
+    expect(encodedContentLength(3 * MAX_RECORD_PLAINTEXT) - one).toBe(2 * RECORD_SIZE);
+  });
+
+  it("charges an empty file for the final record it still emits", () => {
+    // The terminating delimiter is what distinguishes a complete stream from a
+    // truncated one, so even nothing is encoded as something.
+    expect(encodedContentLength(0)).toBe(HEADER_SIZE + 17);
+    expect(encodedContentLength(0)).toBeGreaterThan(HEADER_SIZE);
+  });
+
+  it("refuses a length that is not a byte count", () => {
+    for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2 ** 53]) {
+      expect(() => encodedContentLength(bad), `${bad}`).toThrow(ContentError);
     }
   });
 });

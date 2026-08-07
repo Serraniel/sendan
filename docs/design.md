@@ -847,6 +847,15 @@ spoke last and, on a deployment without a proxy, is the client.
 > earlier version grepped every script for `https://` and fired on the
 > documentation links inside Svelte's own error messages. A check that fires on
 > those is one somebody turns off.
+>
+> It also fails the build if the client would depend on an **inline style**.
+> `style-src 'self'` carries no `'unsafe-inline'`, and `style-src-attr` falls
+> back to `style-src`, so a `style` attribute is refused. Nothing reports this:
+> a blocked style is not a broken page, the development server sends no policy,
+> and the result renders correctly everywhere it is looked at. The upload
+> progress bar is the case that prompted the check — written the obvious way,
+> `style="width: {percent}%"`, it compiles to `style.cssText` and would be an
+> empty bar on every real instance. It is a `<progress>` element instead.
 
 > [!WARNING]
 > A reverse proxy that sets its own security headers may replace these rather
