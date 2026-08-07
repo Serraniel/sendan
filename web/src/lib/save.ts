@@ -188,11 +188,18 @@ export async function offerViaWorker(
   timeoutMs = 5000,
 ): Promise<string | null> {
   const token = newSaveToken();
+  // Copied field by field rather than passed through. postMessage structure-
+  // clones its argument and a Proxy cannot be cloned, so anything reactive -
+  // a Svelte $state object is a proxy - throws DataCloneError here. The throw
+  // escapes as an unclassified error and surfaces as "the instance could not
+  // be reached", which is the last place anybody would look.
+  //
+  // Copying at the boundary means a caller does not have to know this.
   const handover: Handover = {
     id,
     authToken: toBase64Url(opened.keys.authToken),
-    fileKey: opened.fileKey,
-    file: opened.file,
+    fileKey: Uint8Array.from(opened.fileKey),
+    file: { name: opened.file.name, type: opened.file.type, size: opened.file.size },
     origin,
   };
 

@@ -57,3 +57,7 @@ web/coverage/
 # embedded from there. Generated, so not tracked; a build without it compiles
 # and serves an explanation, because the embed is behind a build tag.
 /internal/webui/dist/
+
+# Playwright output. Reports and traces are artefacts of a run, not of the tree.
+web/test-results/
+web/playwright-report/

@@ -413,7 +413,11 @@ describe("handing a download to the worker", () => {
     const seen: { message: unknown } = { message: null };
     const worker = {
       postMessage(message: unknown, transfer: Transferable[]) {
-        seen.message = message;
+        // Cloned rather than kept by reference. A real worker receives a
+        // structured clone, and an earlier version of this double simply
+        // stored the object - so it never noticed that the payload could not
+        // be cloned at all. That defect reached a browser.
+        seen.message = structuredClone(message);
         const port = transfer[0] as MessagePort;
         port.start?.();
         queueMicrotask(() => port.postMessage(reply));
@@ -454,6 +458,27 @@ describe("handing a download to the worker", () => {
    * claim each other's handover, and a token that could be guessed would be a
    * file key another page on this origin could ask for.
    */
+  /**
+   * A Svelte $state object is a Proxy, and a Proxy cannot be structure-cloned.
+   * Passing one through would throw DataCloneError out of postMessage, escape
+   * as an unclassified error, and be reported as "the instance could not be
+   * reached" - which is the last place anybody would look. Only a browser
+   * found it; this is the test that would have.
+   */
+  it("sends something a worker can actually receive, even from reactive state", async () => {
+    const opened = await anOpened();
+    // What Svelte hands the caller: it proxies plain objects and arrays, so
+    // the description is a proxy and the key, being a typed array, is not.
+    const reactive = { ...opened, file: new Proxy(opened.file, {}) };
+    const { worker, seen } = acknowledging();
+
+    expect(await offerViaWorker(worker, "an-upload-id", reactive)).not.toBeNull();
+    expect(() => structuredClone(seen.message)).not.toThrow();
+    expect(seen.message).toMatchObject({
+      handover: { file: { name: opened.file.name, size: opened.file.size } },
+    });
+  });
+
   it("uses a fresh token each time", () => {
     const tokens = new Set(Array.from({ length: 200 }, () => newSaveToken()));
     expect(tokens.size).toBe(200);
