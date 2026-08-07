@@ -6,6 +6,7 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"io"
@@ -26,7 +27,12 @@ import (
 // Values are base64 of the raw bytes, which is what the protocol specifies and
 // what tus decodes for the data store.
 func uploadMetadata(extra map[string]string) string {
+	id := make([]byte, crypto.FileIDSize)
+	if _, err := rand.Read(id); err != nil {
+		panic(err)
+	}
 	fields := map[string]string{
+		"fileID":           string(id),
 		"wrappedFileKey":   string(bytes.Repeat([]byte{0x01}, crypto.WrappedFileKeySize)),
 		"wrapNonce":        string(bytes.Repeat([]byte{0x02}, crypto.NonceSize)),
 		"metadataEnvelope": string(bytes.Repeat([]byte{0x03}, 256+crypto.TagSize)),

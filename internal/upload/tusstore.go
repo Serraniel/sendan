@@ -33,6 +33,7 @@ import (
 //
 //nolint:gosec // G101: these are metadata field names, not credentials. The
 const (
+	metaFileID           = "fileID"
 	metaWrappedFileKey   = "wrappedFileKey"
 	metaWrapNonce        = "wrapNonce"
 	metaEnvelope         = "metadataEnvelope"
@@ -110,11 +111,6 @@ func (t *TusStore) NewUpload(ctx context.Context, info tus.FileInfo) (tus.Upload
 // and an upload nobody will ever open. Rejecting it at creation is better than
 // storing it and discovering the problem at download.
 func (t *TusStore) newRow(info tus.FileInfo) (*store.Upload, error) {
-	id, err := crypto.NewFileID()
-	if err != nil {
-		return nil, fmt.Errorf("upload: identifier: %w", err)
-	}
-
 	atRest, err := blob.NewAtRestKey()
 	if err != nil {
 		return nil, fmt.Errorf("upload: at-rest key: %w", err)
@@ -122,7 +118,7 @@ func (t *TusStore) newRow(info tus.FileInfo) (*store.Upload, error) {
 
 	m := newMetadata(info.MetaData)
 	u := &store.Upload{
-		ID:               base64.RawURLEncoding.EncodeToString(id),
+		ID:               m.fileID(),
 		WrappedFileKey:   m.bytes(metaWrappedFileKey, crypto.WrappedFileKeySize),
 		WrapNonce:        m.bytes(metaWrapNonce, crypto.NonceSize),
 		MetadataEnvelope: m.blob(metaEnvelope),
@@ -370,6 +366,47 @@ func (m *metadata) integer64(key string, fallback int64) int64 {
 		return fallback
 	}
 	return n
+}
+
+// fileID reads the identifier the client generated.
+//
+// The client generates it because it is the salt in the key schedule (spec §3),
+// so every key an upload has depends on it and none can exist before it does.
+// The server therefore validates rather than produces it.
+//
+// What it can validate is the length, the alphabet, and that the value is not a
+// single byte repeated. That last case is not a weak generator but an absent
+// one - an uninitialised buffer, or a stub returning zeroes. Nothing further is
+// possible: sixteen bytes cannot be distinguished from good randomness, and
+// spec §13.1 records why a server cannot judge key strength at all.
+//
+// A duplicate is refused by the store, which reports a conflict.
+func (m *metadata) fileID() string {
+	raw := m.bytes(metaFileID, crypto.FileIDSize)
+	if raw == nil {
+		return ""
+	}
+	if allOneByte(raw) {
+		m.fail(metaFileID + " is a single repeated byte, which is an absent generator rather than a weak one")
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(raw)
+}
+
+// allOneByte reports whether every byte of b is the same.
+//
+// The case worth catching is an uninitialised buffer or a stub returning
+// zeroes. It is not a test of randomness and must not be read as one.
+func allOneByte(b []byte) bool {
+	if len(b) == 0 {
+		return false
+	}
+	for _, c := range b[1:] {
+		if c != b[0] {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *metadata) fail(reason string) { m.faults = append(m.faults, reason) }

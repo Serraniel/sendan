@@ -6,6 +6,7 @@ package upload
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"io"
 	"strings"
@@ -22,7 +23,12 @@ import (
 
 // validMeta is the metadata a conforming client sends.
 func validMeta() tus.MetaData {
+	id, err := crypto.NewFileID()
+	if err != nil {
+		panic(err)
+	}
 	return tus.MetaData{
+		metaFileID:         string(id),
 		metaWrappedFileKey: string(bytes.Repeat([]byte{0x01}, crypto.WrappedFileKeySize)),
 		metaWrapNonce:      string(bytes.Repeat([]byte{0x02}, crypto.NonceSize)),
 		metaEnvelope:       string(bytes.Repeat([]byte{0x03}, 256+crypto.TagSize)),
@@ -366,5 +372,218 @@ func TestArgon2MemoryIsBounded(t *testing.T) {
 
 	if _, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta}); err == nil {
 		t.Fatal("an out-of-range memory parameter was accepted")
+	}
+}
+
+// The identifier is the salt in the key schedule, so the client generates it:
+// every key an upload has depends on it, and none can exist before it does. A
+// server-assigned identifier would leave a client with nothing to derive from
+// when it builds the values creation requires.
+//
+// This is the test the original design lacked. Every other upload test supplies
+// the cryptographic material as fixed byte patterns of the right length, which
+// is all the server validates - so none of them noticed that no client could
+// have produced those patterns.
+func TestTheClientSuppliesTheIdentifier(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	ts := NewTusStore(h.svc, 0)
+
+	id, err := crypto.NewFileID()
+	if err != nil {
+		t.Fatalf("identifier: %v", err)
+	}
+	meta := validMeta()
+	meta[metaFileID] = string(id)
+
+	up, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta})
+	if err != nil {
+		t.Fatalf("new upload: %v", err)
+	}
+	info, _ := up.GetInfo(t.Context())
+
+	if want := base64.RawURLEncoding.EncodeToString(id); info.ID != want {
+		t.Fatalf("the upload was given identifier %q, want the one the client derived from: %q", info.ID, want)
+	}
+	if _, err := h.store.Pending(t.Context(), info.ID); err != nil {
+		t.Errorf("the row is not under the client's identifier: %v", err)
+	}
+}
+
+// Two uploads cannot share an identifier: the second would otherwise replace
+// the first, and its recipient would receive content encrypted under keys they
+// cannot derive.
+func TestADuplicateIdentifierIsRefused(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	ts := NewTusStore(h.svc, 0)
+
+	meta := validMeta()
+	if _, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta}); err != nil {
+		t.Fatalf("first upload: %v", err)
+	}
+
+	second := validMeta()
+	second[metaFileID] = meta[metaFileID]
+	if _, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: second}); err == nil {
+		t.Fatal("a second upload reused an identifier, replacing the first")
+	}
+}
+
+// A value that is one byte repeated is an absent generator rather than a weak
+// one - an uninitialised buffer, or a stub returning zeroes. That is the only
+// thing a server can detect here, and it must not be mistaken for a test of
+// randomness.
+func TestADegenerateIdentifierIsRefused(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	ts := NewTusStore(h.svc, 0)
+
+	for _, b := range []byte{0x00, 0xFF, 0x41} {
+		meta := validMeta()
+		meta[metaFileID] = string(bytes.Repeat([]byte{b}, crypto.FileIDSize))
+		if _, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta}); err == nil {
+			t.Errorf("an identifier of repeated %#x was accepted", b)
+		}
+	}
+
+	// One byte differing is enough to be indistinguishable from randomness,
+	// which is the point: this catches an absent generator, not a poor one.
+	nearly := bytes.Repeat([]byte{0x00}, crypto.FileIDSize)
+	nearly[crypto.FileIDSize-1] = 0x01
+	meta := validMeta()
+	meta[metaFileID] = string(nearly)
+	if _, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta}); err != nil {
+		t.Errorf("a value the server cannot judge was refused, which overstates what it can check: %v", err)
+	}
+}
+
+func TestAMissingOrMalformedIdentifierIsRefused(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	ts := NewTusStore(h.svc, 0)
+
+	for name, value := range map[string]string{
+		"absent":    "",
+		"too short": "short",
+		"too long":  string(bytes.Repeat([]byte{0x01}, crypto.FileIDSize+1)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			meta := validMeta()
+			if value == "" {
+				delete(meta, metaFileID)
+			} else {
+				meta[metaFileID] = value
+			}
+			if _, err := ts.NewUpload(t.Context(), tus.FileInfo{Size: 4, MetaData: meta}); err == nil {
+				t.Error("accepted")
+			}
+		})
+	}
+}
+
+func TestAllOneByte(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []byte
+		want bool
+	}{
+		{"empty", nil, false},
+		{"single byte", []byte{0x00}, true},
+		{"repeated zero", bytes.Repeat([]byte{0x00}, 16), true},
+		{"repeated other", bytes.Repeat([]byte{0x7F}, 16), true},
+		{"one differs at the end", append(bytes.Repeat([]byte{0x00}, 15), 0x01), false},
+		{"one differs at the start", append([]byte{0x01}, bytes.Repeat([]byte{0x00}, 15)...), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := allOneByte(tc.in); got != tc.want {
+				t.Errorf("allOneByte(%x) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// A conforming client's whole creation sequence, with keys actually derived
+// rather than fabricated.
+//
+// This is what the upload path lacked. Its other tests supply the cryptographic
+// material as byte patterns of the right length, and length is all the server
+// checks - so they passed against a design in which no client could have
+// produced those values at all, because the identifier they derive from did not
+// exist until the request that had to contain them.
+//
+// The assertion is not that the bytes are correct, which the server cannot
+// know. It is that the sequence is possible: derive, then create, in that
+// order, with nothing needed that does not yet exist.
+func TestAConformingClientCanCreateAnUpload(t *testing.T) {
+	h := newHarness(t, defaultPolicy())
+	ts := NewTusStore(h.svc, 0)
+
+	// Step one: everything the client generates for itself.
+	fileID, err := crypto.NewFileID()
+	if err != nil {
+		t.Fatalf("identifier: %v", err)
+	}
+	linkSecret := bytes.Repeat([]byte{0x11}, crypto.LinkSecretSize)
+	fileKey := bytes.Repeat([]byte{0x22}, crypto.FileKeySize)
+	ownerToken := bytes.Repeat([]byte{0x33}, crypto.OwnerTokenSize)
+
+	// Step two: the key schedule, salted with the identifier from step one.
+	keys, err := crypto.DeriveKeys(fileID, linkSecret)
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+
+	// Step three: the values creation requires, all of them derived above.
+	wrapNonce, wrappedFileKey, err := crypto.WrapFileKey(keys.Wrapping, fileKey)
+	if err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	metaNonce, envelope, err := crypto.SealMetadata(keys.Metadata, crypto.Metadata{
+		Name: "report.pdf", Type: "application/pdf", Size: 4,
+	})
+	if err != nil {
+		t.Fatalf("seal metadata: %v", err)
+	}
+	ownerSum := sha256.Sum256(ownerToken)
+
+	up, err := ts.NewUpload(t.Context(), tus.FileInfo{
+		Size: 4,
+		MetaData: tus.MetaData{
+			metaFileID:         string(fileID),
+			metaWrappedFileKey: string(wrappedFileKey),
+			metaWrapNonce:      string(wrapNonce),
+			metaEnvelope:       string(envelope),
+			metaEnvelopeNonce:  string(metaNonce),
+			metaAuthTokenHash:  string(crypto.AuthTokenHash(keys.AuthToken)),
+			metaOwnerTokenHash: string(ownerSum[:]),
+		},
+	})
+	if err != nil {
+		t.Fatalf("a conforming client was refused: %v", err)
+	}
+
+	info, _ := up.GetInfo(t.Context())
+	if want := base64.RawURLEncoding.EncodeToString(fileID); info.ID != want {
+		t.Fatalf("upload identifier %q, want %q", info.ID, want)
+	}
+
+	// The stored token hash is what the download endpoint will compare against,
+	// so the token the client derived has to authenticate.
+	row, err := h.store.Pending(t.Context(), info.ID)
+	if err != nil {
+		t.Fatalf("pending: %v", err)
+	}
+	if !bytes.Equal(row.AuthTokenHash, crypto.AuthTokenHash(keys.AuthToken)) {
+		t.Error("the stored token hash is not the one the client derived")
+	}
+
+	if _, err := up.WriteChunk(t.Context(), 0, bytes.NewReader([]byte("data"))); err != nil {
+		t.Fatalf("chunk: %v", err)
+	}
+	if err := up.FinishUpload(t.Context()); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+
+	// And the token authenticates against the completed upload.
+	if err := h.svc.Authenticate(t.Context(), info.ID, keys.AuthToken); err != nil {
+		t.Fatalf("the token the client derived does not open its own upload: %v", err)
 	}
 }
