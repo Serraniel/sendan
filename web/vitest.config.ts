@@ -17,10 +17,10 @@ export default defineConfig({
       // reduces coverage fails rather than being noticed later. Raise them in
       // the same pull request that raises coverage.
       thresholds: {
-        statements: 90,
-        branches: 85,
-        functions: 95,
-        lines: 90,
+        statements: 95,
+        branches: 91,
+        functions: 100,
+        lines: 95,
       },
     },
   },

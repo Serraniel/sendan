@@ -111,14 +111,18 @@ jobs:
           npm run test:coverage
           npm run build
 
-      # A single external origin in the built output breaks the strict CSP and
-      # silently reintroduces a third party into an end-to-end encrypted page.
-      # The policy is the enforcement; this says so at build time rather than in
-      # a browser console. It checks for references that cause a load, not for
-      # the text of a URL: an earlier version grepped every script for https://
-      # and failed on the documentation links inside Svelte's own error
-      # messages.
-      - name: Assert the client loads nothing from a third party
+      # Two failures the policy causes at run time and nothing else reports. A
+      # single external origin breaks the strict CSP and silently reintroduces a
+      # third party into an end-to-end encrypted page. An inline style is
+      # refused outright, and a refused style is not a broken page - it renders
+      # correctly in development, which sends no policy, and wrongly everywhere
+      # that matters. The policy is the enforcement; this says so at build time
+      # rather than in a browser console.
+      #
+      # It checks for references that cause a load, not for the text of a URL:
+      # an earlier version grepped every script for https:// and failed on the
+      # documentation links inside Svelte's own error messages.
+      - name: Assert the client runs under its own Content-Security-Policy
         run: ./scripts/audit-assets.sh
 
   test-vectors:

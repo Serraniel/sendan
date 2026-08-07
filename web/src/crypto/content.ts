@@ -17,6 +17,35 @@ export const MAX_RECORD_PLAINTEXT = RECORD_SIZE - 16 - 1;
 const DELIMITER_NON_FINAL = 0x01;
 const DELIMITER_FINAL = 0x02;
 
+/** A record's ciphertext less its plaintext: the delimiter and the GCM tag. */
+const RECORD_OVERHEAD = 1 + 16;
+
+/**
+ * The encoded length of a plaintext of the given size.
+ *
+ * An uploader must declare the total length before sending the first byte, and
+ * what it sends is the encoding rather than the file, so it has to know this
+ * without having produced it. Being wrong is not a rounding error: too small
+ * and the server refuses the tail, too large and the upload never completes.
+ *
+ * The encoding is fully determined by the length, which is what makes this
+ * possible. Records hold {@link MAX_RECORD_PLAINTEXT} bytes; the final one is
+ * short, and is emitted even for an empty file because the terminating
+ * delimiter is what distinguishes a complete stream from a truncated one.
+ */
+export function encodedContentLength(plaintextLength: number): number {
+  if (!Number.isSafeInteger(plaintextLength) || plaintextLength < 0) {
+    throw new ContentError(`plaintext length ${plaintextLength} is not a byte count`);
+  }
+  // A whole multiple of the record size fills its last record exactly, and that
+  // record is the final one. Rounding up would claim a further empty record
+  // that the encoder never emits.
+  const nonFinal =
+    plaintextLength === 0 ? 0 : Math.ceil(plaintextLength / MAX_RECORD_PLAINTEXT) - 1;
+  const finalPlaintext = plaintextLength - nonFinal * MAX_RECORD_PLAINTEXT;
+  return HEADER_SIZE + nonFinal * RECORD_SIZE + finalPlaintext + RECORD_OVERHEAD;
+}
+
 /**
  * Bounds the record counter well below the point at which the 96-bit nonce
  * space could wrap. Exceeding it would risk nonce reuse, which discloses the

@@ -14,7 +14,7 @@ Pull requests, and pushes to `main`.
 |---|---|
 | `lint-go` | golangci-lint |
 | `test-go` | `go vet`, then unit and integration tests with the race detector, then the per-package coverage floors in `.coverage-floors` |
-| `test-web` | lint, type-check, unit tests, production build, and an audit asserting no external origin appears in the built output |
+| `test-web` | lint, type-check, unit tests, production build, and an audit asserting the built client can run under the policy it is served with |
 | `test-vectors` | the shared cryptographic vectors, run against **both** the Go and TypeScript implementations |
 | `build` | builds the web client, then the binary with assets embedded |
 
@@ -28,9 +28,18 @@ TypeScript implementations disagree about the cryptographic scheme — that a fi
 written by the CLI may not be readable in the browser, or the reverse. It is
 never a flake, and it must never be made non-blocking.
 
-The external-origin audit in `test-web` failing means a dependency or asset
-reached outside the origin. That breaks the strict CSP and reintroduces a third
-party into a page performing end-to-end encryption.
+The asset audit in `test-web` fails for two reasons, and the message says which.
+
+An **external origin** means a dependency or asset reached outside the origin.
+That breaks the strict CSP and reintroduces a third party into a page performing
+end-to-end encryption.
+
+An **inline style** means something in the client sets a `style` attribute,
+which `style-src 'self'` refuses. This is worth stating plainly because nothing
+else catches it: a blocked style is not an error, the development server sends
+no policy, and the page therefore renders correctly in every place it is looked
+at and wrongly on every real instance. Move the rule into a component
+stylesheet, or use an element that does not need one.
 
 ### The coverage gate
 

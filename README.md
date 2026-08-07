@@ -18,13 +18,12 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > against each other by shared test vectors; metadata storage on SQLite and
 > PostgreSQL; blob storage on the filesystem and S3-compatible object stores,
 > with encryption at rest; the expiry, revocation and reaping lifecycle;
-> configuration, structured logging and abuse controls.
+> configuration, structured logging and abuse controls; and the web client's
+> upload flow, with per-upload password, expiry and download limit.
 >
-> **Not built:** the web client, the command line client, and the container
-> image. The transfer API is complete — resumable upload, metadata,
-> authentication and ranged download — but nothing yet speaks it, so a file can
-> only be moved by a client written against
-> [the API](docs/api.md) directly.
+> **Not built:** the web client's download flow, the command line client, and
+> the container image. A file can be sent from a browser today, but opening the
+> resulting link still means speaking [the API](docs/api.md) directly.
 
 ## Features
 
