@@ -103,8 +103,22 @@ Under this scheme a link without its password decrypts nothing, and the property
 holds cryptographically rather than by policy. Wrapping also means that changing
 a password re-wraps 32 bytes rather than re-encrypting the content.
 
-Argon2id runs in the browser via `hash-wasm`. PBKDF2 is a degraded fallback, not
-the default, and the interface reports which was used.
+Argon2id runs in the browser via `hash-wasm`, and it is the only password
+stretching function. There is no PBKDF2 fallback, and there must not be one.
+
+> [!IMPORTANT]
+> **A choice of key derivation function would be a downgrade the instance could
+> make.** The parameters travel in the upload's metadata, which the instance
+> serves; if the function travelled with them, an instance could name a weaker
+> one and a client would comply. That is spec §13 invariant 1 — no algorithm is
+> ever selected by input a client did not fix — applied to the one place it
+> would be most tempting to relax it. The wire format fixes Argon2id in §4, and
+> the shared test vectors fix it in both implementations.
+>
+> The *parameters* are per-upload, and are stored so they can be raised later
+> without invalidating existing links. The interface reports the ones an upload
+> actually used, not the current defaults: an old link is protected by what it
+> was created with, and saying otherwise would overstate it.
 
 ### 2.4 Quantum resistance
 
@@ -652,10 +666,28 @@ cipher, key derivation function, whether a password contributed to the key, the
 expiry rules in force, and whether the upload used native or compatibility
 endpoints.
 
+Every value is read from what was used rather than written down. The key size
+and record size come from the constants the code encrypts with; the Argon2id
+parameters come from the upload rather than from the defaults; a
+password-protected upload reports the parameters its own derivation ran with. A
+card that named a cipher because somebody typed it would keep naming it after
+the code stopped using it, and a reassurance that cannot become wrong is worth
+less than none. A test asserts the derivation at the level of the source,
+because a literal `256` and `FILE_KEY_SIZE * 8` are the same value and no
+behaviour can tell them apart.
+
 > [!NOTE]
 > This report reflects what the delivered client code states it did. It is a
 > transparency measure for well-behaved instances, not a defence against a
-> hostile one, and must be worded so as not to imply otherwise.
+> hostile one, and must be worded so as not to imply otherwise. The wording is
+> in one place, `CAVEAT` in `web/src/lib/protection.ts`, so a second interface
+> that shows the card cannot quietly omit it.
+
+An upload made through the compatibility endpoints carries its caution beside
+the fact it qualifies rather than at the foot of the card. Those uploads use
+another protocol's server-enforced password model and are genuinely less
+protected; showing one next to a native upload without saying so would claim
+protection the file does not have.
 
 Every instance additionally reports its running version and commit at
 `/api/source` and in the client footer, satisfying AGPL §13 and making a fork

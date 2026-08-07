@@ -20,6 +20,9 @@
     readySaveWorker,
   } from "$lib/save";
   import { fragmentIsPresent, parseLink } from "$lib/link";
+  import { describeDownload, type Protection } from "$lib/protection";
+  import { fetchBuild } from "$lib/source";
+  import TransparencyCard from "$lib/TransparencyCard.svelte";
 
   type Phase = "reading" | "password" | "ready" | "downloading" | "saved";
 
@@ -33,6 +36,8 @@
   let progress = $state<DownloadProgress | null>(null);
   let offered = $state<{ url: string; revoke(): void } | null>(null);
   let via = $state<"disk" | "worker" | "memory" | null>(null);
+  let protection = $state<Protection | null>(null);
+  let source = $state<string | null>(null);
 
   let link: { fileID: Uint8Array; linkSecret: Uint8Array } | null = null;
 
@@ -72,6 +77,10 @@
     await open("");
   });
 
+  onMount(async () => {
+    source = (await fetchBuild())?.source ?? null;
+  });
+
   function fail(which: DownloadFault, seconds: number | null = null) {
     fault = which;
     retryAfter = seconds;
@@ -94,6 +103,7 @@
 
     try {
       opened = await openUpload(link.fileID, link.linkSecret, published, candidate);
+      protection = describeDownload(published);
       // Not needed again, and there is no reason to keep it.
       password = "";
       phase = "ready";
@@ -254,6 +264,10 @@
       remaining.
     </p>
   {/if}
+{/if}
+
+{#if protection && opened !== null}
+  <TransparencyCard {protection} {source} />
 {/if}
 
 {#if phase === "ready"}

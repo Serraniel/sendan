@@ -82,6 +82,23 @@ Contributors retain copyright in their own contributions; the collective notice
 identifies the licensor without transferring anything. Do not add individual
 copyright lines to existing files — authorship is recorded in the git history.
 
+## Before opening a pull request
+
+```sh
+./scripts/verify.sh
+```
+
+It runs every gate continuous integration runs — build, vet, lint, tests,
+coverage, the client build and the asset audit — and reports each by **exit
+status**.
+
+> [!IMPORTANT]
+> **Read exit codes, not output.** `npm run lint | tail -1` prints
+> `Checked 40 files. No fixes applied.` and hides the `Found 1 error.` above it;
+> the pipe discards the status, and a lint failure reaches CI looking like a
+> success. This has happened. The script exists so that checking is one command
+> whose answer is a single word.
+
 ## Testing requirements
 
 Sendan is a security product, and test coverage is treated as a correctness

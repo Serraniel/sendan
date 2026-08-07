@@ -23,6 +23,7 @@ import {
   newOwnerToken,
   newPasswordParams,
   ownerTokenHash,
+  type PasswordParams,
   sealMetadata,
   wrapFileKey,
 } from "../crypto/index.js";
@@ -69,6 +70,14 @@ export interface UploadResult {
   fileID: Uint8Array;
   linkSecret: Uint8Array;
   ownerToken: Uint8Array;
+  /**
+   * The password parameters this upload was created with, or null if none.
+   *
+   * Returned because only this function knows them: they are generated here,
+   * and asking for them again would produce a different salt. An interface
+   * reporting what protected the file has to have the values that were used.
+   */
+  passwordParams: PasswordParams | null;
 }
 
 export interface UploadRequest {
@@ -175,7 +184,7 @@ export async function uploadFile(req: UploadRequest): Promise<UploadResult> {
   }
 
   report("done", total);
-  return { fileID, linkSecret, ownerToken };
+  return { fileID, linkSecret, ownerToken, passwordParams };
 }
 
 /**
