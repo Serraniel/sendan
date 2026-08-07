@@ -19,11 +19,12 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > PostgreSQL; blob storage on the filesystem and S3-compatible object stores,
 > with encryption at rest; the expiry, revocation and reaping lifecycle;
 > configuration, structured logging and abuse controls; and the web client's
-> upload flow, with per-upload password, expiry and download limit.
+> upload and download flows, with per-upload password, expiry and download
+> limit.
 >
-> **Not built:** the web client's download flow, the command line client, and
-> the container image. A file can be sent from a browser today, but opening the
-> resulting link still means speaking [the API](docs/api.md) directly.
+> **Not built:** streaming a download to disk, so a file large enough to exhaust
+> tab memory cannot yet be received in a browser. The command line client and
+> the container image are also outstanding.
 
 ## Features
 
