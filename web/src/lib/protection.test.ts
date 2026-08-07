@@ -39,7 +39,7 @@ const metadata = (over: Partial<UploadMetadata> = {}): UploadMetadata =>
     ...over,
   }) as UploadMetadata;
 
-const valueOf = (lines: ReturnType<typeof protectionLines>, label: string) =>
+const lineFor = (lines: ReturnType<typeof protectionLines>, label: string) =>
   lines.find((line) => line.label === label)?.value ?? "";
 
 describe("what the card reports", () => {
@@ -51,7 +51,7 @@ describe("what the card reports", () => {
    */
   it("takes the content parameters from the code, not from prose", () => {
     const lines = protectionLines(describeUpload({ password: null }));
-    const content = valueOf(lines, "Content");
+    const content = lineFor(lines, "Content");
 
     expect(content).toContain(`${FILE_KEY_SIZE * 8}-bit key`);
     expect(content).toContain(`${RECORD_SIZE} bytes`);
@@ -104,7 +104,7 @@ describe("what the card reports", () => {
     expect(described.memoryKiB).not.toBe(DEFAULT_MEMORY_KIB);
     expect(described.iterations).not.toBe(DEFAULT_ITERATIONS);
 
-    const shown = valueOf(protectionLines(describeUpload({ password: older })), "Password");
+    const shown = lineFor(protectionLines(describeUpload({ password: older })), "Password");
     expect(shown).toContain("16384 KiB");
     expect(shown).toContain("1 pass");
     expect(shown).not.toContain(`${DEFAULT_MEMORY_KIB} KiB`);
@@ -112,7 +112,7 @@ describe("what the card reports", () => {
 
   it("reports a download's parameters from what the instance published", () => {
     const kdf = params({ memoryKiB: 262_144, iterations: 5, parallelism: 4 });
-    const shown = valueOf(
+    const shown = lineFor(
       protectionLines(describeDownload(metadata({ passwordRequired: true, kdf }))),
       "Password",
     );
@@ -128,7 +128,7 @@ describe("what the card reports", () => {
    */
   it("says plainly when there is no password", () => {
     for (const protection of [describeUpload({ password: null }), describeDownload(metadata())]) {
-      const shown = valueOf(protectionLines(protection), "Password");
+      const shown = lineFor(protectionLines(protection), "Password");
       expect(shown).toContain("None");
       expect(shown.toLowerCase()).toContain("anyone with the link");
     }
@@ -137,14 +137,14 @@ describe("what the card reports", () => {
   it("describes the lifetime that is actually in force", () => {
     const deadline = new Date("2026-08-09T10:00:00Z");
 
-    const limited = valueOf(
+    const limited = lineFor(
       protectionLines(describeUpload({ password: null, expiresAt: deadline, maxDownloads: 3 })),
       "Lifetime",
     );
     expect(limited).toContain("3 downloads remaining");
     expect(limited).toContain("Whichever comes first");
 
-    const unlimited = valueOf(protectionLines(describeDownload(metadata())), "Lifetime");
+    const unlimited = lineFor(protectionLines(describeDownload(metadata())), "Lifetime");
     expect(unlimited).toContain("No deadline and no download limit");
   });
 
@@ -154,7 +154,7 @@ describe("what the card reports", () => {
    */
   it("does not show an unlimited upload as having no downloads left", () => {
     for (const maxDownloads of [0, null, undefined]) {
-      const shown = valueOf(
+      const shown = lineFor(
         protectionLines(describeUpload({ password: null, maxDownloads })),
         "Lifetime",
       );
@@ -164,14 +164,14 @@ describe("what the card reports", () => {
   });
 
   it("counts in singulars where there is one", () => {
-    const one = valueOf(
+    const one = lineFor(
       protectionLines(describeUpload({ password: null, maxDownloads: 1 })),
       "Lifetime",
     );
     expect(one).toContain("1 download remaining");
     expect(one).not.toContain("1 downloads");
 
-    const once = valueOf(
+    const once = lineFor(
       protectionLines(describeUpload({ password: params({ iterations: 1 }) })),
       "Password",
     );
@@ -183,11 +183,11 @@ describe("what the card reports", () => {
    * the card must not offer them a control they do not have.
    */
   it("offers deletion only to the sender", () => {
-    expect(valueOf(protectionLines(describeUpload({ password: null })), "Lifetime")).toContain(
+    expect(lineFor(protectionLines(describeUpload({ password: null })), "Lifetime")).toContain(
       "management secret",
     );
     expect(
-      valueOf(protectionLines(describeDownload(metadata({ downloadsRemaining: 2 }))), "Lifetime"),
+      lineFor(protectionLines(describeDownload(metadata({ downloadsRemaining: 2 }))), "Lifetime"),
     ).not.toContain("management secret");
   });
 });
