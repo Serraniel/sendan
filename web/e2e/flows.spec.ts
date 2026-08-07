@@ -474,3 +474,98 @@ test.describe("the policy the instance serves", () => {
     expect(box?.height ?? 0).toBeLessThanOrEqual(1);
   });
 });
+
+test.describe("a browser that cannot do this", () => {
+  /**
+   * What somebody saw before this check existed, on an instance served over
+   * plain HTTP, verified by hand at a LAN address:
+   *
+   *   Cannot read properties of undefined (reading 'importKey')
+   *
+   * Reproducing the real insecure context in a browser test is not possible
+   * here - browsers treat all of 127.0.0.0/8 as a secure context, so a test
+   * server is always trusted. What is reproduced instead is the consequence:
+   * crypto.subtle absent. The client cannot tell the difference, which is the
+   * point.
+   */
+  test("is told so, rather than shown an exception", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window.crypto, "subtle", { get: () => undefined });
+    });
+
+    await page.goto("/");
+
+    const alert = page.locator('[role="alert"]');
+    await expect(alert).toBeVisible();
+    await expect(alert).toContainText("cannot be used here");
+    await expect(alert).toContainText("cryptography");
+    // Blamed on the browser, because here it genuinely is the browser: the
+    // context is secure and WebCrypto is still absent.
+    await expect(alert).not.toContainText("not set up");
+    // The exception must not be what anybody reads.
+    await expect(alert).not.toContainText("undefined");
+    await expect(alert).not.toContainText("importKey");
+
+    // And the interface is not offered, so there is nothing to press that
+    // would fail.
+    await expect(page.locator("#file")).toHaveCount(0);
+  });
+
+  /**
+   * Missing WebAssembly costs password-protected files and nothing else, so
+   * the interface stays. Refusing everything would withhold a service the
+   * browser can perform.
+   */
+  test("still works where only passwords are impossible", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "WebAssembly", { get: () => undefined });
+    });
+
+    await page.goto("/");
+
+    await expect(page.locator('[role="alert"]')).toContainText("Some things will not work");
+    await expect(page.locator('[role="alert"]')).toContainText("password");
+    // Still offered, and still usable for a file without a password.
+    await expect(page.locator("#file")).toBeVisible();
+
+    const link = await uploadThrough(page, "notes.txt", filled(1000), "text/plain");
+    expect(link).toContain("#");
+  });
+
+  test("says nothing at all on a browser that can", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#file")).toBeVisible();
+    await expect(page.locator('[role="alert"]')).toHaveCount(0);
+  });
+});
+
+test.describe("an instance without HTTPS", () => {
+  /**
+   * The operator's configuration, not the browser's fault. A browser
+   * withholding WebCrypto outside a secure context is behaving correctly, and a
+   * message blaming it would send the reader to change browsers over something
+   * only the operator can fix.
+   *
+   * The real case cannot be reproduced here - browsers treat all of
+   * 127.0.0.0/8 as a secure context, so a test server is always trusted. This
+   * asserts what the client does when told the context is insecure; the real
+   * one was verified by hand against an instance at a LAN address.
+   */
+  test("is named as the instance's problem, not the browser's", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "isSecureContext", { get: () => false });
+    });
+
+    await page.goto("/");
+
+    const alert = page.locator('[role="alert"]');
+    await expect(alert).toContainText("This instance is not set up");
+    await expect(alert).toContainText("HTTPS");
+    await expect(alert).toContainText("Nothing was sent");
+    await expect(alert).not.toContainText("This browser cannot");
+
+    // Only the actionable one, not a list led by a browser complaint that is
+    // a consequence of it.
+    await expect(alert).not.toContainText("does not offer the cryptography");
+  });
+});
