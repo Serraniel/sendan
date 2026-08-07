@@ -3,6 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import { encryptBytes, MAX_RECORD_PLAINTEXT, newFileKey } from "../crypto/index.js";
+import { expectBytes } from "../testing/bytes.js";
 import {
   buildSaveResponse,
   contentDisposition,
@@ -219,7 +220,7 @@ describe("the response the browser saves", () => {
 
       expect(response.status, `${pieces} pieces`).toBe(200);
       const got = new Uint8Array(await response.arrayBuffer());
-      expect(got, `${pieces} pieces`).toEqual(plaintext);
+      expectBytes(got, plaintext, `${pieces} pieces`);
     }
   });
 

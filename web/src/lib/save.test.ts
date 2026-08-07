@@ -11,6 +11,7 @@ import {
   sealMetadata,
   wrapFileKey,
 } from "../crypto/index.js";
+import { expectBytes } from "../testing/bytes.js";
 import {
   DownloadError,
   openUpload,
@@ -126,7 +127,7 @@ describe("writing to a file", () => {
       file.stream,
     );
 
-    expect(file.contents).toEqual(plaintext);
+    expectBytes(file.contents, plaintext);
     expect(file.state.closed).toBe(true);
     expect(file.state.aborted).toBe(false);
   });

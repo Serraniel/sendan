@@ -10,7 +10,13 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       // index.ts is a re-export barrel with no logic; counting it would only
       // measure whether something happens to import it.
-      exclude: ["src/**/*.test.ts", "src/crypto/index.ts", "src/crypto/vectors/**"],
+      exclude: [
+        "src/**/*.test.ts",
+        "src/crypto/index.ts",
+        "src/crypto/vectors/**",
+        // Test scaffolding rather than client code.
+        "src/testing/**",
+      ],
       reporter: ["text", "lcov"],
       // A ratchet rather than a target, matching .coverage-floors on the Go
       // side: each threshold sits just below what is achieved, so a change that
