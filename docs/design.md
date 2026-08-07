@@ -573,7 +573,50 @@ The client is registered at the root, so it answers only what nothing else
 claimed; the API and the health endpoint keep their paths. Hashed asset names
 are content-addressed and cached for a year, while the shell is never cached —
 it names the assets of the build that produced it, and a stale one would load
-files that no longer exist.
+files that no longer exist. The service worker is not cached either, for a
+sharper reason: its name never changes, so a long lifetime would pin a browser
+to one version of it indefinitely, and it is the code that decrypts downloads.
+
+### 4.6 Saving a decrypted file
+
+Decryption happens in the tab, so the plaintext has to get from there to the
+disk without being held whole. Three ways, tried in order, because which are
+available depends on the browser.
+
+| | How | Bound |
+|---|---|---|
+| **File System Access API** | `showSaveFilePicker()` returns a writable; records are written as they decrypt | the disk |
+| **Service worker** | the worker answers a request the page makes to itself with a stream of plaintext, and the browser's own download machinery writes it | the disk |
+| **Blob** | the whole file is assembled in memory and offered as an object URL | the tab |
+
+The second exists because the first is absent in Firefox and Safari, where the
+third would otherwise be the only option — and a multi-gigabyte file in tab
+memory does not fail gracefully, it fails as a tab that stops responding.
+
+> [!IMPORTANT]
+> **The picker must be opened from the click, before anything is awaited.** It
+> requires a user gesture and a gesture does not survive a round trip, so
+> prompting after the transfer had begun is refused by the browser. This can
+> only fail against a real browser, which is to say never in a test.
+
+The worker holds a file key for as long as one download takes. The page sends it
+by `postMessage`, keyed by a random token; the worker deletes it when the
+download starts and discards it after a minute if nothing claims it. It is never
+written anywhere a worker can persist, because that would outlive the tab that
+produced it.
+
+Two details of the response are deliberate. Its media type is always
+`application/octet-stream` rather than the envelope's — the response is
+same-origin, so an upload claiming `text/html` would otherwise be a document
+rendering itself inside the client's own origin. And the filename comes from
+whoever uploaded the file, so it is encoded rather than emitted: percent-encoded
+in the RFC 5987 form and reduced to unreserved characters in the ASCII one, so
+no input can introduce the newline that would end the header and begin another.
+
+The worker caches nothing else. A cached client would mean a browser running
+code an instance served at some point in the past, which is exactly what the
+source report and the asset manifest exist to make checkable. An offline client
+is not worth an unverifiable one.
 
 ## 5. Third-party client compatibility
 

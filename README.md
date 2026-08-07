@@ -22,10 +22,7 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > upload and download flows, with per-upload password, expiry and download
 > limit.
 >
-> **Not built:** streaming a download to disk in browsers without the File
-> System Access API — Firefox and Safari fall back to holding the whole file in
-> memory, so a large file cannot yet be received there. The command line client
-> and the container image are also outstanding.
+> **Not built:** the command line client and the container image.
 
 ## Features
 

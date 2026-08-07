@@ -12,6 +12,9 @@
  */
 
 import type { Metadata } from "../crypto/index.js";
+import type { OpenedUpload } from "./download.js";
+import { toBase64Url } from "./link.js";
+import { type Handover, SAVE_PATH } from "./saveworker.js";
 
 /** The part of the File System Access API this uses. */
 interface SaveFilePicker {
@@ -105,4 +108,112 @@ export function offerAsBlob(
   const blob = new Blob([plaintext as BufferSource], { type: file.type });
   const url = URL.createObjectURL(blob);
   return { url, revoke: () => URL.revokeObjectURL(url) };
+}
+
+/**
+ * Whether the browser can save through a Service Worker.
+ *
+ * The path that matters for Firefox and Safari, which have no way to hand a
+ * page a file to write. It needs a secure context, which localhost counts as.
+ */
+export function canStreamViaWorker(target: unknown = globalThis): boolean {
+  const scope = target as { navigator?: { serviceWorker?: unknown }; isSecureContext?: boolean };
+  return scope?.isSecureContext === true && scope?.navigator?.serviceWorker !== undefined;
+}
+
+/**
+ * Registers the worker and waits until it is the one in charge.
+ *
+ * Registration alone is not enough: a worker that is installed but not yet
+ * controlling this page will not see its requests, and the save would fall
+ * through to the network as a 404. Resolves to null if any of that fails, which
+ * means the caller falls back rather than the download failing.
+ */
+export async function readySaveWorker(
+  target: unknown = globalThis,
+  timeoutMs = 5000,
+): Promise<ServiceWorker | null> {
+  if (!canStreamViaWorker(target)) return null;
+  const container = (target as { navigator: { serviceWorker: ServiceWorkerContainer } }).navigator
+    .serviceWorker;
+
+  try {
+    // An absolute path, and scope "/". The download page lives at /d/<id>, and
+    // a relative registration from there would ask for /d/service-worker.js and
+    // take a scope that does not cover the save path.
+    await container.register("/service-worker.js", { scope: "/" });
+    await container.ready;
+    if (container.controller !== null) return container.controller;
+
+    // First visit: the worker is active but is not yet controlling this page.
+    // clients.claim() in the worker fixes that, and this waits for it rather
+    // than assuming how long it takes.
+    return await new Promise<ServiceWorker | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), timeoutMs);
+      container.addEventListener(
+        "controllerchange",
+        () => {
+          clearTimeout(timer);
+          resolve(container.controller);
+        },
+        { once: true },
+      );
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** A token for one handover: unguessable, and long enough not to collide. */
+export function newSaveToken(): string {
+  return toBase64Url(crypto.getRandomValues(new Uint8Array(18)));
+}
+
+/**
+ * Hands the worker what it needs, and returns the URL that starts the download.
+ *
+ * The file key crosses to the worker here. It goes by postMessage to this
+ * origin's own worker, never over the network, and the worker forgets it the
+ * moment the download begins.
+ *
+ * Resolves to null if the worker does not acknowledge, so a caller falls back
+ * to holding the file in memory rather than navigating to a URL that nothing
+ * will answer.
+ */
+export async function offerViaWorker(
+  worker: ServiceWorker,
+  id: string,
+  opened: OpenedUpload,
+  origin = "",
+  timeoutMs = 5000,
+): Promise<string | null> {
+  const token = newSaveToken();
+  const handover: Handover = {
+    id,
+    authToken: toBase64Url(opened.keys.authToken),
+    fileKey: opened.fileKey,
+    file: opened.file,
+    origin,
+  };
+
+  const acknowledged = await new Promise<boolean>((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => {
+      channel.port1.close();
+      resolve(false);
+    }, timeoutMs);
+
+    channel.port1.onmessage = (event: MessageEvent) => {
+      clearTimeout(timer);
+      channel.port1.close();
+      resolve((event.data as { type?: string } | null)?.type === "sendan/ready");
+    };
+
+    // Acknowledged before navigating, because a navigation that arrives before
+    // the handover was stored is answered as "no longer waiting" - a download
+    // that fails for a reason nobody could diagnose.
+    worker.postMessage({ type: "sendan/save", token, handover }, [channel.port2]);
+  });
+
+  return acknowledged ? `${SAVE_PATH}${token}` : null;
 }

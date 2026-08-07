@@ -19,7 +19,17 @@ import {
   type UploadMetadata,
 } from "./download.js";
 import { toBase64Url } from "./link.js";
-import { canWriteToDisk, chooseDestination, extensionOf, offerAsBlob } from "./save.js";
+import {
+  canStreamViaWorker,
+  canWriteToDisk,
+  chooseDestination,
+  extensionOf,
+  newSaveToken,
+  offerAsBlob,
+  offerViaWorker,
+  readySaveWorker,
+} from "./save.js";
+import { SAVE_PATH, tokenOf } from "./saveworker.js";
 
 const filled = (n: number) => new Uint8Array(n).map((_, i) => (i * 31 + 7) % 256);
 
@@ -388,5 +398,182 @@ describe("offering a blob", () => {
       URL.createObjectURL = originalCreate;
       URL.revokeObjectURL = originalRevoke;
     }
+  });
+});
+
+describe("handing a download to the worker", () => {
+  const anOpened = async () => (await anUpload(filled(10))).opened;
+
+  /**
+   * A worker that acknowledges. The handover is captured so a test can check
+   * what actually crossed - this is where the file key leaves the page.
+   */
+  function acknowledging(reply: unknown = { type: "sendan/ready" }) {
+    const seen: { message: unknown } = { message: null };
+    const worker = {
+      postMessage(message: unknown, transfer: Transferable[]) {
+        seen.message = message;
+        const port = transfer[0] as MessagePort;
+        port.start?.();
+        queueMicrotask(() => port.postMessage(reply));
+      },
+    } as unknown as ServiceWorker;
+    return { worker, seen };
+  }
+
+  it("returns the URL that starts the download", async () => {
+    const { worker } = acknowledging();
+    const url = await offerViaWorker(worker, "an-upload-id", await anOpened());
+
+    expect(url).not.toBeNull();
+    expect(url?.startsWith(SAVE_PATH)).toBe(true);
+    // The worker recognises what the page produced. These two agree or the
+    // download reaches the network and 404s.
+    expect(tokenOf(`https://send.example${url}`)).not.toBeNull();
+  });
+
+  it("sends the key, the token and the description, and nothing else", async () => {
+    const opened = await anOpened();
+    const { worker, seen } = acknowledging();
+
+    await offerViaWorker(worker, "an-upload-id", opened);
+
+    expect(seen.message).toMatchObject({
+      type: "sendan/save",
+      handover: {
+        id: "an-upload-id",
+        fileKey: opened.fileKey,
+        file: opened.file,
+      },
+    });
+  });
+
+  /**
+   * A different token every time. Two downloads in one tab must not be able to
+   * claim each other's handover, and a token that could be guessed would be a
+   * file key another page on this origin could ask for.
+   */
+  it("uses a fresh token each time", () => {
+    const tokens = new Set(Array.from({ length: 200 }, () => newSaveToken()));
+    expect(tokens.size).toBe(200);
+    for (const token of tokens) {
+      expect(tokenOf(`https://send.example${SAVE_PATH}${token}`), token).toBe(token);
+    }
+  });
+
+  /**
+   * The acknowledgement is what makes this safe to navigate to. Without it the
+   * page could navigate before the worker had stored anything, and the download
+   * would fail as "no longer waiting" - for a reason nobody could diagnose.
+   */
+  it("gives up rather than navigating to a URL nothing will answer", async () => {
+    const silent = { postMessage() {} } as unknown as ServiceWorker;
+
+    expect(await offerViaWorker(silent, "an-upload-id", await anOpened(), "", 20)).toBeNull();
+  });
+
+  it("gives up when the worker answers something else", async () => {
+    const { worker } = acknowledging({ type: "sendan/something-else" });
+    expect(await offerViaWorker(worker, "an-upload-id", await anOpened(), "", 50)).toBeNull();
+  });
+});
+
+describe("deciding whether the worker is available", () => {
+  it("requires a secure context and a service worker container", () => {
+    expect(canStreamViaWorker({ isSecureContext: true, navigator: { serviceWorker: {} } })).toBe(
+      true,
+    );
+    // Not over plain HTTP: the API is absent, and pretending otherwise would
+    // mean a download that fails instead of falling back.
+    expect(canStreamViaWorker({ isSecureContext: false, navigator: { serviceWorker: {} } })).toBe(
+      false,
+    );
+    expect(canStreamViaWorker({ isSecureContext: true, navigator: {} })).toBe(false);
+    expect(canStreamViaWorker({})).toBe(false);
+    expect(canStreamViaWorker(undefined)).toBe(false);
+  });
+
+  it("reports no worker where there is none, rather than throwing", async () => {
+    expect(await readySaveWorker({ isSecureContext: false, navigator: {} })).toBeNull();
+  });
+
+  it("reports no worker when registration fails", async () => {
+    const failing = {
+      isSecureContext: true,
+      navigator: {
+        serviceWorker: {
+          register: async () => {
+            throw new Error("refused");
+          },
+          ready: Promise.resolve({}),
+          controller: null,
+          addEventListener() {},
+        },
+      },
+    };
+    expect(await readySaveWorker(failing)).toBeNull();
+  });
+
+  /**
+   * Registered is not the same as in charge. A worker that is active but not
+   * controlling this page does not see its requests, so the save URL would go
+   * to the network and 404.
+   */
+  it("waits for the worker to take control, and returns it", async () => {
+    const controller = { id: "the-worker" } as unknown as ServiceWorker;
+    const listeners: (() => void)[] = [];
+    const container = {
+      register: async () => ({}),
+      ready: Promise.resolve({}),
+      controller: null as ServiceWorker | null,
+      addEventListener(_: string, fn: () => void) {
+        listeners.push(fn);
+      },
+    };
+
+    const pending = readySaveWorker({
+      isSecureContext: true,
+      navigator: { serviceWorker: container },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    container.controller = controller;
+    for (const fn of listeners) fn();
+
+    expect(await pending).toBe(controller);
+  });
+
+  /**
+   * A worker that never takes control must not leave the page waiting for
+   * ever. Giving up falls back to holding the file in memory, which is worse
+   * but finite; waiting is a download that never starts and never says why.
+   */
+  it("gives up if the worker never takes control", async () => {
+    const container = {
+      register: async () => ({}),
+      ready: Promise.resolve({}),
+      controller: null,
+      addEventListener() {},
+    };
+
+    const got = await readySaveWorker(
+      { isSecureContext: true, navigator: { serviceWorker: container } },
+      30,
+    );
+    expect(got).toBeNull();
+  });
+
+  it("uses the controller already in charge", async () => {
+    const controller = { id: "already-controlling" } as unknown as ServiceWorker;
+    const container = {
+      register: async () => ({}),
+      ready: Promise.resolve({}),
+      controller,
+      addEventListener() {},
+    };
+
+    expect(
+      await readySaveWorker({ isSecureContext: true, navigator: { serviceWorker: container } }),
+    ).toBe(controller);
   });
 });
