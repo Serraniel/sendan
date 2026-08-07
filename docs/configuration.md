@@ -29,6 +29,17 @@ require restarting repeatedly to discover the next fault.
 |---|---|---|
 | `SENDAN_LISTEN` | `:8080` | Address the HTTP server binds to |
 | `SENDAN_BASE_URL` | `http://localhost:8080` | Externally visible origin, used to build download links. Must be absolute `http` or `https` |
+
+> [!IMPORTANT]
+> **Serve the client over HTTPS, or it cannot encrypt anything.** Browsers
+> withhold WebCrypto outside a secure context, so an instance reached over plain
+> `http` at anything other than `localhost` produces a client that refuses to
+> run — on every browser, for every upload. The client says so plainly, and
+> names the instance rather than the browser, but the only fix is a certificate.
+>
+> `SENDAN_BASE_URL` being `https` is also what causes HSTS to be sent. It is
+> taken from configuration rather than from `X-Forwarded-Proto`, which is
+> written by whatever spoke last.
 | `SENDAN_SERVE_UI` | `true` | Serve the embedded web client. `false` gives a backend-only instance from the same binary |
 
 > [!NOTE]

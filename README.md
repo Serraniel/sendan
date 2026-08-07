@@ -75,6 +75,27 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 > binary obtained independently of any instance. Where the threat model includes
 > the operator, use the CLI. See [SECURITY.md](SECURITY.md).
 
+## Browser requirements
+
+The encryption happens in the browser, so the browser has to be able to perform
+it. A recent Firefox, Chrome, Edge or Safari can; the build targets roughly
+Chrome and Edge 107, Firefox 104, and Safari 16.
+
+> [!IMPORTANT]
+> **An instance must be served over HTTPS.** Browsers withhold WebCrypto outside
+> a secure context, so an instance on plain HTTP cannot encrypt anything at all
+> — on any browser. `localhost` counts as secure, which is why a local build
+> works without a certificate and a deployment does not.
+
+Required, with no fallback: a secure context, WebCrypto, the Streams API,
+reading a file as a stream, and — for password-protected files only —
+WebAssembly. A browser missing any of these is told which, rather than being
+shown an error from inside the cryptography.
+
+Saving a download uses whichever of three paths the browser offers, in order:
+the File System Access API, a service worker, or holding the file in memory.
+Only the last is bounded by the size of a tab.
+
 ## Documentation
 
 | Document | Contents |

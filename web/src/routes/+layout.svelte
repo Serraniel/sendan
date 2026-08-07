@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import BrowserCheck from "$lib/BrowserCheck.svelte";
   import { type Build, fetchBuild, shortCommit, sourceIsExact } from "$lib/source";
 
   let { children } = $props();
@@ -14,7 +15,9 @@
 </script>
 
 <main>
-  {@render children()}
+  <BrowserCheck>
+    {@render children()}
+  </BrowserCheck>
 </main>
 
 <footer>
