@@ -43,6 +43,25 @@
 </footer>
 
 <style>
+  /*
+    SvelteKit's screen-reader announcer carries its hiding rules in a style
+    attribute, which style-src 'self' refuses - the framework's markup, not
+    ours, and not something this side can stop it emitting. The same rules are
+    given here so the element is hidden by a stylesheet the policy allows,
+    rather than by an attribute it may block. Without this a blocked attribute
+    would put a live region in the middle of the page.
+  */
+  :global(#svelte-announcer) {
+    position: absolute;
+    left: 0;
+    top: 0;
+    clip-path: inset(50%);
+    overflow: hidden;
+    white-space: nowrap;
+    width: 1px;
+    height: 1px;
+  }
+
   footer {
     font-size: 0.85rem;
   }

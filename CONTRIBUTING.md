@@ -92,6 +92,15 @@ It runs every gate continuous integration runs — build, vet, lint, tests,
 coverage, the client build and the asset audit — and reports each by **exit
 status**.
 
+The browser flows are separate, because they need browsers installed:
+
+```sh
+cd web && npx playwright install && npm run test:e2e
+```
+
+They are advisory rather than a merge gate; `docs/workflows/e2e-test.md` says
+why.
+
 > [!IMPORTANT]
 > **Read exit codes, not output.** `npm run lint | tail -1` prints
 > `Checked 40 files. No fixes applied.` and hides the `Found 1 error.` above it;
