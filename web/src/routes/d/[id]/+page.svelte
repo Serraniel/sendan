@@ -13,7 +13,12 @@
     openUpload,
     saveContent,
   } from "$lib/download";
-  import { chooseDestination, offerAsBlob } from "$lib/save";
+  import {
+    chooseDestination,
+    offerAsBlob,
+    offerViaWorker,
+    readySaveWorker,
+  } from "$lib/save";
   import { fragmentIsPresent, parseLink } from "$lib/link";
 
   type Phase = "reading" | "password" | "ready" | "downloading" | "saved";
@@ -27,7 +32,7 @@
   let retryAfter = $state<number | null>(null);
   let progress = $state<DownloadProgress | null>(null);
   let offered = $state<{ url: string; revoke(): void } | null>(null);
-  let wroteToDisk = $state(false);
+  let via = $state<"disk" | "worker" | "memory" | null>(null);
 
   let link: { fileID: Uint8Array; linkSecret: Uint8Array } | null = null;
 
@@ -132,14 +137,31 @@
         // fails the write is aborted rather than closed, and the chosen path is
         // left untouched rather than holding a truncated file.
         await saveContent({ id, opened, onProgress: track }, await handle.createWritable());
-        wroteToDisk = true;
-      } else {
-        // No picker, or the dialog was declined. The whole file is held in
-        // memory, which is what bounds this path: a file too large for the tab
-        // fails here, and issue #37 is the portable way out.
-        const plaintext = await downloadContent({ id, opened, onProgress: track });
-        offered = offerAsBlob(plaintext, opened.file);
+        via = "disk";
+        phase = "saved";
+        return;
       }
+
+      // No picker: Firefox and Safari. A Service Worker answers a request this
+      // page makes to itself with a stream of plaintext, and the browser's own
+      // download machinery writes it - so nothing is held here either.
+      const worker = await readySaveWorker();
+      const saveUrl = worker === null ? null : await offerViaWorker(worker, id, opened);
+      if (saveUrl !== null) {
+        via = "worker";
+        phase = "saved";
+        // Navigating rather than fetching: the response is an attachment, so
+        // this hands it to the browser instead of bringing it back into the tab.
+        window.location.href = saveUrl;
+        return;
+      }
+
+      // Neither. The whole file is held in memory, which is what bounds this
+      // path - a file too large for the tab fails here, with nothing better
+      // available in this browser.
+      const plaintext = await downloadContent({ id, opened, onProgress: track });
+      offered = offerAsBlob(plaintext, opened.file);
+      via = "memory";
       phase = "saved";
     } catch (error) {
       report(error);
@@ -246,13 +268,19 @@
   </p>
   <p id="stage" aria-live="polite">Downloading and decrypting… {percent}%</p>
 {:else if phase === "saved" && opened !== null}
-  {#if wroteToDisk}
+  {#if via === "disk"}
     <p>Saved {opened.file.name}.</p>
     <p class="note">
       Written straight to the file you chose as it arrived, so the size was
       never limited by this tab.
     </p>
-  {:else if offered !== null}
+  {:else if via === "worker"}
+    <p>Saving {opened.file.name}…</p>
+    <p class="note">
+      Handed to your browser's downloads, decrypted piece by piece as it
+      arrives, so the size was never limited by this tab.
+    </p>
+  {:else if via === "memory" && offered !== null}
     <p>
       <a href={offered.url} download={opened.file.name}>Save {opened.file.name}</a>
     </p>

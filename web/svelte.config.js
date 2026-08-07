@@ -27,5 +27,14 @@ export default {
     // The link secret lives in the URL fragment. SvelteKit must not be told to
     // send anything to a server it does not already send.
     paths: { relative: true },
+
+    serviceWorker: {
+      // Registered by hand instead, from src/lib/save.ts. The automatic
+      // registration is relative, and the download page lives at /d/<id>, so it
+      // would ask for /d/service-worker.js and take a scope that does not cover
+      // the path the worker exists to answer. It is also registered only when a
+      // download needs it, rather than on every visit to a page that may not.
+      register: false,
+    },
   },
 };

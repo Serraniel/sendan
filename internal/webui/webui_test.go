@@ -19,6 +19,7 @@ func testAssets() fstest.MapFS {
 		"_app/immutable/entry/app.js":   {Data: []byte("export const app = 1;")},
 		"_app/immutable/assets/app.css": {Data: []byte("body{}")},
 		"favicon.png":                   {Data: []byte("\x89PNG")},
+		"service-worker.js":             {Data: []byte("self.addEventListener('fetch', () => {})")},
 	}
 }
 
@@ -86,6 +87,28 @@ func TestTheShellIsNotCachedButHashedAssetsAre(t *testing.T) {
 	got := get(t, h, "/_app/immutable/entry/app.js").Header().Get("Cache-Control")
 	if !strings.Contains(got, "immutable") {
 		t.Errorf("a hashed asset has Cache-Control %q, want an immutable lifetime", got)
+	}
+}
+
+// The service worker's name never changes, so a long lifetime would pin a
+// browser to one version of it for a year. It is the one asset that can outlive
+// a deployment while still being the thing that answers requests, and a stale
+// one would keep decrypting downloads with code nobody is running any more.
+func TestTheServiceWorkerIsNotCached(t *testing.T) {
+	h := Handler(testAssets())
+
+	rec := get(t, h, "/service-worker.js")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d, want 200", rec.Code)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Errorf("Cache-Control %q, want no-cache", got)
+	}
+	// Served as script rather than as the shell: a worker delivered as
+	// text/html is refused by the browser, and the save path would silently
+	// fall back to holding whole files in memory.
+	if got := rec.Header().Get("Content-Type"); !strings.Contains(got, "javascript") {
+		t.Errorf("Content-Type %q, want a script type", got)
 	}
 }
 

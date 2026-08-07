@@ -14,6 +14,7 @@ import {
   sealMetadata,
   wrapFileKey,
 } from "../crypto/index.js";
+import { expectBytes } from "../testing/bytes.js";
 import {
   DownloadError,
   type DownloadFault,
@@ -374,7 +375,7 @@ describe("fetching the content", () => {
       opened,
       transport: { fetch: served(upload.ciphertext) },
     });
-    expect(got).toEqual(plaintext);
+    expectBytes(got, plaintext);
   });
 
   it("decrypts an empty file", async () => {
@@ -709,7 +710,8 @@ describe("a file sent and then received", () => {
       type: "application/pdf",
       size: plaintext.length,
     });
-    expect(await downloadContent({ id: "abc", opened, transport: { fetch: instance } })).toEqual(
+    expectBytes(
+      await downloadContent({ id: "abc", opened, transport: { fetch: instance } }),
       plaintext,
     );
   }, 30_000);

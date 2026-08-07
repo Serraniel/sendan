@@ -16,6 +16,7 @@ import {
   ownerTokenHash,
   unwrapFileKey,
 } from "../crypto/index.js";
+import { expectBytes } from "../testing/bytes.js";
 import { TusError } from "./tus.js";
 import { DEFAULT_CHUNK_SIZE, type UploadProgress, uploadFile } from "./upload.js";
 
@@ -117,7 +118,7 @@ describe("uploading", () => {
       server.metadata.wrappedFileKey as Uint8Array,
     );
 
-    expect(await decryptBytes(fileKey, server.body)).toEqual(plaintext);
+    expectBytes(await decryptBytes(fileKey, server.body), plaintext);
 
     const metadata = await openMetadata(
       keys.metadata,
@@ -300,7 +301,7 @@ describe("uploading with a password", () => {
       server.metadata.wrapNonce as Uint8Array,
       server.metadata.wrappedFileKey as Uint8Array,
     );
-    expect(await decryptBytes(fileKey, server.body)).toEqual(plaintext);
+    expectBytes(await decryptBytes(fileKey, server.body), plaintext);
 
     // The link alone is not enough, and neither is the wrong password.
     for (const wrong of [
@@ -445,7 +446,7 @@ describe("chunking", () => {
       server.metadata.wrapNonce as Uint8Array,
       server.metadata.wrappedFileKey as Uint8Array,
     );
-    expect(await decryptBytes(fileKey, server.body)).toEqual(plaintext);
+    expectBytes(await decryptBytes(fileKey, server.body), plaintext);
   });
 
   it("produces the same bytes at any chunk size", async () => {
@@ -466,9 +467,7 @@ describe("chunking", () => {
         server.metadata.wrapNonce as Uint8Array,
         server.metadata.wrappedFileKey as Uint8Array,
       );
-      expect(await decryptBytes(fileKey, server.body), `chunk size ${chunkSize}`).toEqual(
-        plaintext,
-      );
+      expectBytes(await decryptBytes(fileKey, server.body), plaintext, `chunk size ${chunkSize}`);
       bodies.push(`${server.body.length}`);
     }
 
