@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { page } from "$app/state";
   import {
     type DownloadFault,
@@ -11,7 +11,9 @@
     explain,
     fetchMetadata,
     openUpload,
+    saveContent,
   } from "$lib/download";
+  import { chooseDestination, offerAsBlob } from "$lib/save";
   import { fragmentIsPresent, parseLink } from "$lib/link";
 
   type Phase = "reading" | "password" | "ready" | "downloading" | "saved";
@@ -24,7 +26,8 @@
   let fault = $state<DownloadFault | null>(null);
   let retryAfter = $state<number | null>(null);
   let progress = $state<DownloadProgress | null>(null);
-  let saveUrl = $state<string | null>(null);
+  let offered = $state<{ url: string; revoke(): void } | null>(null);
+  let wroteToDisk = $state(false);
 
   let link: { fileID: Uint8Array; linkSecret: Uint8Array } | null = null;
 
@@ -106,24 +109,37 @@
 
   async function download() {
     if (opened === null) return;
+
+    // Asked for before anything else, and specifically before any await on the
+    // network. The picker needs the user gesture that this click is, and a
+    // gesture does not survive a round trip - prompting once the transfer had
+    // started would be refused by the browser, on a path only reachable with a
+    // real click against a real instance.
+    const handle = await chooseDestination(opened.file);
+
     working = true;
     fault = null;
     phase = "downloading";
 
-    try {
-      const plaintext = await downloadContent({
-        id,
-        opened,
-        onProgress: (p) => {
-          progress = p;
-        },
-      });
+    const track = (p: DownloadProgress) => {
+      progress = p;
+    };
 
-      // Held in memory, then handed to the browser as a blob. This bounds what
-      // can be downloaded; streaming to disk is issue #38 and the Service
-      // Worker fallback for browsers without that API is issue #37.
-      const blob = new Blob([plaintext as BufferSource], { type: opened.file.type });
-      saveUrl = URL.createObjectURL(blob);
+    try {
+      if (handle !== null) {
+        // Nothing accumulates: each record is decrypted and written as it
+        // arrives, so the size of the file is bounded by the disk. If anything
+        // fails the write is aborted rather than closed, and the chosen path is
+        // left untouched rather than holding a truncated file.
+        await saveContent({ id, opened, onProgress: track }, await handle.createWritable());
+        wroteToDisk = true;
+      } else {
+        // No picker, or the dialog was declined. The whole file is held in
+        // memory, which is what bounds this path: a file too large for the tab
+        // fails here, and issue #37 is the portable way out.
+        const plaintext = await downloadContent({ id, opened, onProgress: track });
+        offered = offerAsBlob(plaintext, opened.file);
+      }
       phase = "saved";
     } catch (error) {
       report(error);
@@ -132,6 +148,10 @@
       working = false;
     }
   }
+
+  // The object URL holds the whole file until it is released, and the anchor
+  // has been used by the time the page is left.
+  onDestroy(() => offered?.revoke());
 
   const percent = $derived(
     progress === null || progress.total === 0
@@ -225,10 +245,18 @@
     </progress>
   </p>
   <p id="stage" aria-live="polite">Downloading and decrypting… {percent}%</p>
-{:else if phase === "saved" && saveUrl !== null && opened !== null}
-  <p>
-    <a href={saveUrl} download={opened.file.name}>Save {opened.file.name}</a>
-  </p>
+{:else if phase === "saved" && opened !== null}
+  {#if wroteToDisk}
+    <p>Saved {opened.file.name}.</p>
+    <p class="note">
+      Written straight to the file you chose as it arrived, so the size was
+      never limited by this tab.
+    </p>
+  {:else if offered !== null}
+    <p>
+      <a href={offered.url} download={opened.file.name}>Save {opened.file.name}</a>
+    </p>
+  {/if}
   <p class="note">
     Decrypted in this tab. Nothing that could open it was sent to the instance.
   </p>

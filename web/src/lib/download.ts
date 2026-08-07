@@ -300,15 +300,14 @@ export interface DownloadRequest {
 }
 
 /**
- * Fetches and decrypts the content.
+ * Opens the content as a stream of plaintext.
  *
- * Decryption is streamed, so a modified or truncated stream fails rather than
- * yielding partial plaintext (spec §13 invariant 3). The result is assembled in
- * memory, which bounds what can be downloaded; streaming it to disk instead is
- * issue #38, and the Service Worker fallback for browsers without that API is
- * issue #37.
+ * A stream rather than a buffer, so a caller that can write to disk never has
+ * the whole file in memory. Decryption is streamed either way, so a modified or
+ * truncated stream fails rather than yielding partial plaintext (spec §13
+ * invariant 3).
  */
-export async function downloadContent(req: DownloadRequest): Promise<Uint8Array> {
+export async function plaintextStream(req: DownloadRequest): Promise<ReadableStream<Uint8Array>> {
   const { id, opened, transport = {}, onProgress, origin = "" } = req;
   const doFetch = transport.fetch ?? fetch;
 
@@ -339,53 +338,127 @@ export async function downloadContent(req: DownloadRequest): Promise<Uint8Array>
     throw new DownloadError("unreachable", `The instance answered ${response.status}.`);
   }
 
-  return collect(response.body, opened, onProgress, transport.signal);
+  const { signal } = transport;
+  return response.body
+    .pipeThrough(decryptStream(opened.fileKey), signal ? { signal } : {})
+    .pipeThrough(measured(opened.file.size, onProgress), signal ? { signal } : {});
 }
 
-async function collect(
-  body: ReadableStream<Uint8Array>,
-  opened: OpenedUpload,
+/**
+ * Counts plaintext through, and refuses a length the envelope did not declare.
+ *
+ * The envelope is authenticated and states the size, so content that does not
+ * match it means the instance is serving something other than what was sealed.
+ * Too long is refused rather than buffered - otherwise the instance decides how
+ * much memory this page uses - and too short is refused at the end, because a
+ * file that is silently truncated looks like a file.
+ *
+ * Sitting in the pipeline rather than in a collector means a caller writing to
+ * disk gets the same guarantee as one building a buffer.
+ */
+function measured(
+  total: number,
   onProgress: ((progress: DownloadProgress) => void) | undefined,
-  signal: AbortSignal | undefined,
-): Promise<Uint8Array> {
-  const total = opened.file.size;
-  const plaintext = new Uint8Array(total);
+): TransformStream<Uint8Array, Uint8Array> {
   let received = 0;
-
-  const reader = body
-    .pipeThrough(decryptStream(opened.fileKey), signal ? { signal } : {})
-    .getReader();
-
   onProgress?.({ received: 0, total });
 
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      if (received + chunk.length > total) {
+        throw new DownloadError("corrupt", "The file is longer than its description says.");
+      }
+      received += chunk.length;
+      controller.enqueue(chunk);
+      onProgress?.({ received, total });
+    },
+    flush() {
+      if (received !== total) {
+        throw new DownloadError("corrupt", "The file is shorter than its description says.");
+      }
+    },
+  });
+}
+
+/**
+ * The whole file, in memory.
+ *
+ * Fine for what a tab can hold, and the only option where nothing can be
+ * written to disk. {@link saveContent} is the path that does not need this much
+ * room.
+ */
+export async function downloadContent(req: DownloadRequest): Promise<Uint8Array> {
+  const plaintext = new Uint8Array(req.opened.file.size);
+  let at = 0;
+
+  await consume(await plaintextStream(req), (chunk) => {
+    plaintext.set(chunk, at);
+    at += chunk.length;
+  });
+  return plaintext;
+}
+
+/**
+ * Writes the file straight to its destination.
+ *
+ * Nothing accumulates: each record is decrypted, checked and written. The
+ * destination is aborted rather than closed if anything fails, which is what
+ * keeps a failed download from leaving a file that looks complete. With the
+ * File System Access API that discards the whole write, so the chosen path is
+ * either the finished file or untouched - never a truncated one.
+ */
+export async function saveContent(
+  req: DownloadRequest,
+  destination: WritableStream<Uint8Array>,
+): Promise<void> {
+  let stream: ReadableStream<Uint8Array>;
+  try {
+    stream = await plaintextStream(req);
+  } catch (error) {
+    // Nothing was written, but the destination is open and would otherwise be
+    // left as an empty file at the path somebody chose.
+    await destination.abort(error).catch(() => {});
+    throw error;
+  }
+
+  try {
+    // pipeTo aborts the destination if the source errors, which is exactly the
+    // wanted behaviour and the reason this is not a manual read-write loop.
+    await stream.pipeTo(destination, req.transport?.signal ? { signal: req.transport.signal } : {});
+  } catch (error) {
+    throw asFault(error);
+  }
+}
+
+/** Drains a plaintext stream, translating stream failures into faults. */
+async function consume(
+  stream: ReadableStream<Uint8Array>,
+  onChunk: (chunk: Uint8Array) => void,
+): Promise<void> {
+  const reader = stream.getReader();
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      // The envelope declares the size, and the envelope is authenticated. More
-      // plaintext than it declares means the two disagree, which is a fault
-      // rather than something to grow a buffer for.
-      if (received + value.length > total) {
-        throw new DownloadError("corrupt", "The file is longer than its description says.");
-      }
-      plaintext.set(value, received);
-      received += value.length;
-      onProgress?.({ received, total });
+      onChunk(value);
     }
   } catch (error) {
-    if (error instanceof DownloadError) throw error;
-    if (error instanceof DOMException && error.name === "AbortError") throw error;
-    // A truncated, reordered or modified stream lands here, which is invariant
-    // 3 holding rather than an unexpected condition.
-    throw new DownloadError("corrupt", "The file failed its integrity check.");
+    throw asFault(error);
   } finally {
     reader.releaseLock();
   }
+}
 
-  if (received !== total) {
-    throw new DownloadError("corrupt", "The file is shorter than its description says.");
-  }
-  return plaintext;
+/**
+ * A stream failure as something a person can be told.
+ *
+ * A truncated, reordered or modified stream lands here, which is invariant 3
+ * holding rather than an unexpected condition.
+ */
+function asFault(error: unknown): unknown {
+  if (error instanceof DownloadError) return error;
+  if (error instanceof DOMException && error.name === "AbortError") return error;
+  return new DownloadError("corrupt", "The file failed its integrity check.");
 }
 
 /**
