@@ -24,7 +24,7 @@ export default defineConfig({
       // the same pull request that raises coverage.
       thresholds: {
         statements: 97,
-        branches: 92,
+        branches: 93,
         functions: 100,
         lines: 97,
       },

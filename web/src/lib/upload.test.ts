@@ -336,6 +336,38 @@ describe("uploading with a password", () => {
     }
   }, 30_000);
 
+  /**
+   * The parameters come back because only this function knows them: they are
+   * generated here, and asking for them again would produce a different salt.
+   * An interface reporting what protected the file needs the ones that were
+   * used, so they are checked against what the instance was actually sent.
+   */
+  it("returns the parameters it used, and they are the ones it sent", async () => {
+    const server = new FakeServer();
+    const result = await uploadFile({
+      file: fileOf(filled(10)),
+      options: { password: "hunter2" },
+      transport: { fetch: server.fetch },
+    });
+
+    expect(result.passwordParams).not.toBeNull();
+    const used = result.passwordParams as NonNullable<typeof result.passwordParams>;
+
+    expect(used.salt).toEqual(server.metadata.passwordSalt);
+    expect(`${used.memoryKiB}`).toBe(text(server.metadata, "argon2MemoryKiB"));
+    expect(`${used.iterations}`).toBe(text(server.metadata, "argon2Iterations"));
+    expect(`${used.parallelism}`).toBe(text(server.metadata, "argon2Parallelism"));
+  }, 30_000);
+
+  it("returns no parameters where no password was set", async () => {
+    const server = new FakeServer();
+    const result = await uploadFile({
+      file: fileOf(filled(10)),
+      transport: { fetch: server.fetch },
+    });
+    expect(result.passwordParams).toBeNull();
+  });
+
   it("treats an empty password as no password", async () => {
     // An interface with an untouched password field must not produce an upload
     // that demands a password nobody set.

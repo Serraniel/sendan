@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { page } from "$app/state";
   import { downloadLink, toBase64Url } from "$lib/link";
   import { TusError } from "$lib/tus";
   import { type UploadProgress, type UploadResult, uploadFile } from "$lib/upload";
+  import TransparencyCard from "$lib/TransparencyCard.svelte";
+  import { describeUpload, type Protection } from "$lib/protection";
+  import { fetchBuild } from "$lib/source";
 
   let file = $state<File | null>(null);
   let password = $state("");
@@ -14,6 +18,11 @@
   let failure = $state<string | null>(null);
   let copied = $state(false);
   let controller: AbortController | null = null;
+  // What actually protected the file, recorded as it was sent rather than
+  // rebuilt from the form afterwards - the form can be edited, and what
+  // happened cannot.
+  let protection = $state<Protection | null>(null);
+  let source = $state<string | null>(null);
 
   const busy = $derived(progress !== null && result === null);
 
@@ -57,6 +66,16 @@
     controller = new AbortController();
 
     try {
+      // Captured before the upload, because these are the parameters it will
+      // use; reading them back off the form afterwards would report what the
+      // form says now rather than what the file got.
+      const applied = {
+        password,
+        ttlSeconds,
+        maxDownloads,
+        startedAt: Date.now(),
+      };
+
       result = await uploadFile({
         file,
         options: { password, ttlSeconds, maxDownloads },
@@ -64,6 +83,19 @@
         onProgress: (p) => {
           progress = p;
         },
+      });
+
+      protection = describeUpload({
+        password: result.passwordParams,
+        // The instance decides the deadline from the requested lifetime, so
+        // this is what was asked for rather than what was granted. Where
+        // nothing was asked for, the instance's default applies and this side
+        // does not know it.
+        expiresAt:
+          applied.ttlSeconds > 0
+            ? new Date(applied.startedAt + applied.ttlSeconds * 1000)
+            : null,
+        maxDownloads: applied.maxDownloads,
       });
       // The password is not needed again and there is no reason to keep it in
       // memory, or in a field the next upload would silently reuse.
@@ -125,6 +157,10 @@
     ttlSeconds = 0;
     maxDownloads = 0;
   }
+
+  onMount(async () => {
+    source = (await fetchBuild())?.source ?? null;
+  });
 
   const percent = $derived(
     progress === null || progress.total === 0
@@ -246,6 +282,10 @@
         allows {maxDownloads} download{maxDownloads === 1 ? "" : "s"}{/if}. Whichever
       comes first removes it.
     </p>
+  {/if}
+
+  {#if protection}
+    <TransparencyCard {protection} {source} />
   {/if}
 
   <details>
