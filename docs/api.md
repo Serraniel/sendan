@@ -56,6 +56,7 @@ again.
 
 | Key | Size | Meaning |
 |---|---|---|
+| `fileID` | 16 | The identifier the client generated, and the salt its keys derive from |
 | `wrappedFileKey` | 48 | The file key sealed under the KEK (spec §6) |
 | `wrapNonce` | 12 | Its nonce |
 | `metadataEnvelope` | multiple of 256, plus 16 | Encrypted filename, type and size (spec §7) |
@@ -71,10 +72,29 @@ The sizes are checked. A value of the wrong length means a client that cannot be
 interoperable and an upload nobody will ever open, so it is refused at creation
 rather than discovered at download. Every fault is reported at once.
 
+> [!IMPORTANT]
+> **The client generates `fileID`, and the order this implies is not optional.**
+> It is the salt in the key schedule (spec §4), so every value above derives
+> from it and none of them can exist before it does. A client therefore
+> generates the identifier first, derives, and only then creates:
+>
+> ```
+> fileID     = random(16)
+> keys       = derive(fileID, linkSecret [, password])
+> wrappedFK  = seal(keys.wrapping, fileKey)
+> envelope   = seal(keys.metadata, {name, type, size})
+> POST /api/uploads  with all of the above
+> ```
+>
+> The server validates the length and alphabet, refuses a duplicate with `409`,
+> and refuses a value that is a single repeated byte — an absent generator
+> rather than a weak one. It can do no more, and spec §13.1 records why.
+
 | Status | When |
 |---|---|
 | `201` | Created. `Location` names the upload |
 | `400` | Malformed metadata, an undeclared length, or a lifetime the instance does not permit |
+| `409` | The identifier is already in use |
 | `413` | Larger than `SENDAN_MAX_UPLOAD_SIZE` |
 | `429` | Rate limited |
 
