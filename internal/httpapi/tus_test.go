@@ -598,3 +598,32 @@ func TestTheLocationDoesNotDescribeTheConnectionItCannotSee(t *testing.T) {
 		t.Errorf("Location %q names no upload", location)
 	}
 }
+
+// A taken identifier is a client-side condition and must say so.
+//
+// The client generates the identifier (spec §3), so a collision means
+// generating another and trying again. A 500 says the instance is broken and
+// invites a retry of the same request, which cannot succeed, and puts an error
+// in the operator's log for something that is not theirs.
+//
+// The existing tests assert the refusal at the store, so the status the
+// protocol handler produced was never checked and had been 500 since the
+// identifier moved to the client.
+func TestADuplicateIdentifierIsAConflictAtTheHTTPSurface(t *testing.T) {
+	h := newAPIHarness(t)
+	meta := uploadMetadata(nil)
+
+	first, _ := h.create(t, 100, meta)
+	if first.Code != http.StatusCreated {
+		t.Fatalf("first create: status %d, want 201: %s", first.Code, first.Body.String())
+	}
+
+	second, _ := h.create(t, 100, meta)
+	if second.Code != http.StatusConflict {
+		t.Errorf("second create: status %d, want 409 (%s)", second.Code, second.Body.String())
+	}
+	// And no upload was made: a conflict must not have written anything.
+	if location := second.Header().Get("Location"); location != "" {
+		t.Errorf("a refused creation named an upload at %q", location)
+	}
+}

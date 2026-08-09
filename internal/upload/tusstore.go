@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -95,6 +96,15 @@ func (t *TusStore) NewUpload(ctx context.Context, info tus.FileInfo) (tus.Upload
 		return nil, err
 	}
 	if err := t.svc.store.Create(ctx, u); err != nil {
+		// A taken identifier is the client's to resolve, not a fault here. The
+		// client generates it (spec §3), so a collision means generating
+		// another and trying again - which a 500 does not say, and which a
+		// retry of the same request cannot achieve. It would also put an
+		// error in the operator's log for something that is not theirs.
+		if errors.Is(err, store.ErrConflict) {
+			return nil, tus.NewError("ERR_UPLOAD_EXISTS",
+				"an upload with this identifier already exists", http.StatusConflict)
+		}
 		return nil, fmt.Errorf("upload: create: %w", err)
 	}
 
