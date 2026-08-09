@@ -667,7 +667,14 @@ describe("a file sent and then received", () => {
         return new Response(null, { status: 201, headers: { Location: "/api/uploads/abc" } });
       }
       if (method === "PATCH") {
-        const chunk = new Uint8Array(init?.body as ArrayBuffer);
+        // A buffer or a stream, the same as the real server: the client sends
+        // one request body where the browser allows it and several where it
+        // does not, and the server does not distinguish them.
+        const sent = init?.body;
+        const chunk =
+          sent instanceof ReadableStream
+            ? new Uint8Array(await new Response(sent).arrayBuffer())
+            : new Uint8Array(sent as ArrayBuffer);
         const next = new Uint8Array(stored.body.length + chunk.length);
         next.set(stored.body, 0);
         next.set(chunk, stored.body.length);

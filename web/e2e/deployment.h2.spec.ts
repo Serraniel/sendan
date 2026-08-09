@@ -11,6 +11,7 @@
  */
 
 import { expect, test } from "@playwright/test";
+import { saveThroughInterface } from "./save.js";
 
 function filled(n: number): Buffer {
   const b = Buffer.alloc(n);
@@ -60,23 +61,5 @@ test("an upload survives the proxy, and its link opens", async ({ page }) => {
   await page.goto(link);
   await expect(page.locator("text=Download and decrypt")).toBeVisible({ timeout: 30_000 });
 
-  // Either save path is accepted here. Which one a browser takes depends on
-  // whether it will register a service worker, and Chromium is stricter about
-  // that behind a certificate it was told to ignore. What this file is about is
-  // the upload surviving the proxy; which mechanism writes the file is
-  // e2e/flows.spec.ts.
-  const started = page.waitForEvent("download", { timeout: 30_000 }).catch(() => null);
-  await page.click("text=Download and decrypt");
-
-  let saved = await started;
-  if (saved === null) {
-    const anchor = page.locator(`a[download="proxied.bin"]`);
-    await expect(anchor).toBeVisible({ timeout: 60_000 });
-    const viaLink = page.waitForEvent("download", { timeout: 30_000 });
-    await anchor.click();
-    saved = await viaLink;
-  }
-
-  const { readFile } = await import("node:fs/promises");
-  expect(await readFile((await saved.path()) as string)).toEqual(contents);
+  expect(await saveThroughInterface(page, "proxied.bin")).toEqual(contents);
 });

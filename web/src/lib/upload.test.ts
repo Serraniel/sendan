@@ -51,7 +51,14 @@ class FakeServer {
       if (offset !== this.body.length) {
         return new Response(null, { status: 409 });
       }
-      const chunk = new Uint8Array(init?.body as ArrayBuffer);
+      // A buffer or a stream, the same as the real server: a streamed write
+      // arrives with no Content-Length and is otherwise the same PATCH. A fake
+      // that understood only one of them would let the other go untested.
+      const body = init?.body;
+      const chunk =
+        body instanceof ReadableStream
+          ? new Uint8Array(await new Response(body).arrayBuffer())
+          : new Uint8Array(body as ArrayBuffer);
       if (this.body.length + chunk.length > this.declaredLength) {
         return new Response(null, { status: 413 });
       }
@@ -391,6 +398,7 @@ describe("progress", () => {
     await uploadFile({
       file: fileOf(filled(20 * 65536)),
       chunkSize: 65536,
+      stream: false,
       transport: { fetch: server.fetch },
       onProgress: (p) => seen.push({ ...p }),
     });
@@ -466,6 +474,7 @@ describe("chunking", () => {
     const result = await uploadFile({
       file: fileOf(plaintext),
       chunkSize: 65536,
+      stream: false,
       transport: { fetch: server.fetch },
     });
 
@@ -513,11 +522,222 @@ describe("chunking", () => {
         uploadFile({
           file: fileOf(filled(10)),
           chunkSize: bad,
+          stream: false,
           transport: { fetch: new FakeServer().fetch },
         }),
         `${bad}`,
       ).rejects.toThrow(TypeError);
     }
+  });
+});
+
+describe("the two ways of sending a body", () => {
+  /**
+   * Both, on purpose, and with the same assertion. Two upload paths means the
+   * one a given environment does not take is the one that rots - and which one
+   * that is depends on the deployment, not on the code: request streaming
+   * needs HTTP/2, so an instance behind a proxy that speaks HTTP/1.1 takes the
+   * chunked path however new the browser is.
+   */
+  it("produce identical uploads", async () => {
+    const plaintext = filled(200_000);
+    const bodies: string[] = [];
+
+    for (const stream of [true, false]) {
+      const server = new FakeServer();
+      const result = await uploadFile({
+        file: fileOf(plaintext, "same.bin"),
+        chunkSize: 65536,
+        stream,
+        transport: { fetch: server.fetch },
+      });
+
+      const keys = await deriveKeys(result.fileID, result.linkSecret);
+      const fileKey = await unwrapFileKey(
+        keys.wrapping,
+        server.metadata.wrapNonce as Uint8Array,
+        server.metadata.wrappedFileKey as Uint8Array,
+      );
+      expectBytes(await decryptBytes(fileKey, server.body), plaintext, `stream=${stream}`);
+      expect(server.body.length, `stream=${stream}`).toBe(server.declaredLength);
+      bodies.push(`${server.body.length}`);
+    }
+
+    // The transport is a transport. It must not change the encoding.
+    expect(new Set(bodies).size).toBe(1);
+  });
+
+  it("differ only in how many requests they take", async () => {
+    const plaintext = filled(300_000);
+
+    const streamed = new FakeServer();
+    await uploadFile({
+      file: fileOf(plaintext),
+      stream: true,
+      transport: { fetch: streamed.fetch },
+    });
+
+    const chunked = new FakeServer();
+    await uploadFile({
+      file: fileOf(plaintext),
+      chunkSize: 65536,
+      stream: false,
+      transport: { fetch: chunked.fetch },
+    });
+
+    expect(streamed.patches).toBe(1);
+    expect(chunked.patches).toBeGreaterThan(4);
+  });
+
+  /**
+   * Required by the platform, and only by the platform: a stream body without
+   * it is refused by the browser before the request is made. Node accepts the
+   * request either way, so no assertion about the *result* can see this - what
+   * is checked is the request that was made.
+   */
+  it("declare duplex on a streamed request, which the browser requires", async () => {
+    const server = new FakeServer();
+    const inits: RequestInit[] = [];
+
+    const watching = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "PATCH") inits.push(init as RequestInit);
+      return server.fetch(input, init);
+    }) as typeof fetch;
+
+    await uploadFile({
+      file: fileOf(filled(1000)),
+      stream: true,
+      transport: { fetch: watching },
+    });
+
+    expect(inits).toHaveLength(1);
+    expect((inits[0] as RequestInit & { duplex?: string }).duplex).toBe("half");
+    expect(inits[0]?.body).toBeInstanceOf(ReadableStream);
+  });
+
+  /**
+   * Detection is not enough. Request streaming also needs HTTP/2, which a
+   * browser only has over TLS, so a browser that supports it still cannot use
+   * it against an instance reached over HTTP/1.1 - an ordinary deployment. The
+   * fetch is refused before anything is sent, and the upload has to complete
+   * anyway rather than failing.
+   */
+  it("fall back to chunks when the browser refuses to stream", async () => {
+    const plaintext = filled(200_000);
+    const server = new FakeServer();
+    let refusals = 0;
+
+    const refusingToStream = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "PATCH" && init?.body instanceof ReadableStream) {
+        refusals++;
+        // What Chromium raises for a streamed body over HTTP/1.1.
+        throw new TypeError("Failed to fetch");
+      }
+      return server.fetch(input, init);
+    }) as typeof fetch;
+
+    const result = await uploadFile({
+      file: fileOf(plaintext),
+      chunkSize: 65536,
+      stream: true,
+      transport: { fetch: refusingToStream },
+    });
+
+    expect(refusals).toBe(1);
+    expect(server.patches).toBeGreaterThan(1);
+
+    const keys = await deriveKeys(result.fileID, result.linkSecret);
+    const fileKey = await unwrapFileKey(
+      keys.wrapping,
+      server.metadata.wrapNonce as Uint8Array,
+      server.metadata.wrappedFileKey as Uint8Array,
+    );
+    expectBytes(await decryptBytes(fileKey, server.body), plaintext);
+  });
+
+  /**
+   * A bar that walked forwards and then started again from zero would look
+   * like a fault. The streamed attempt counts bytes as it hands them over, so
+   * a refusal has to put that back before the chunked path starts.
+   */
+  it("do not let a refused stream leave progress ahead of itself", async () => {
+    const server = new FakeServer();
+    const seen: number[] = [];
+
+    const refusingLate = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "PATCH" && init?.body instanceof ReadableStream) {
+        // Drained first, so the counter has advanced before the refusal.
+        await new Response(init.body).arrayBuffer();
+        throw new TypeError("Failed to fetch");
+      }
+      return server.fetch(input, init);
+    }) as typeof fetch;
+
+    await uploadFile({
+      file: fileOf(filled(200_000)),
+      chunkSize: 65536,
+      stream: true,
+      transport: { fetch: refusingLate },
+      onProgress: (p) => {
+        if (p.stage === "sending") seen.push(p.sent);
+      },
+    });
+
+    // Exactly one step back, and it goes to zero. Asserting only that it went
+    // backwards would pass without the reset: the chunked path's first report
+    // is one chunk, which is already less than the streamed attempt reached.
+    const backwards: number[] = [];
+    let previous = -1;
+    for (const sent of seen) {
+      if (sent < previous) backwards.push(sent);
+      previous = sent;
+    }
+    expect(backwards).toEqual([0]);
+    expect(seen.at(-1)).toBe(server.declaredLength);
+  });
+
+  it("can be cancelled part way through a streamed body", async () => {
+    // Cancelling a streamed upload has to stop the stream itself, not only the
+    // request: the body is being produced as it is sent, so a signal that
+    // reached the fetch and not the pipeline would leave an encoder running
+    // with nowhere to write.
+    const server = new FakeServer();
+    const controller = new AbortController();
+
+    const aborting = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "PATCH") {
+        controller.abort();
+        throw new DOMException("aborted", "AbortError");
+      }
+      return server.fetch(input, init);
+    }) as typeof fetch;
+
+    await expect(
+      uploadFile({
+        file: fileOf(filled(300_000)),
+        stream: true,
+        transport: { fetch: aborting, signal: controller.signal },
+      }),
+    ).rejects.toThrow();
+
+    expect(server.body.length).toBeLessThan(server.declaredLength);
+  });
+
+  it("refuse a stream that was rejected after bytes were stored", async () => {
+    // Nothing to fall back to: writing from the beginning again would write
+    // over what the instance already holds.
+    const server = new FakeServer();
+    const rejecting = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if ((init?.method ?? "GET") === "PATCH") {
+        await new Response(init?.body as ReadableStream).arrayBuffer();
+        return new Response(null, { status: 409 });
+      }
+      return server.fetch(input, init);
+    }) as typeof fetch;
+
+    await expect(
+      uploadFile({ file: fileOf(filled(1000)), stream: true, transport: { fetch: rejecting } }),
+    ).rejects.toMatchObject({ status: 409 });
   });
 });
 
@@ -547,6 +767,7 @@ describe("when it goes wrong", () => {
       uploadFile({
         file: fileOf(filled(300_000)),
         chunkSize: 65536,
+        stream: false,
         transport: { fetch: failing },
       }),
     ).rejects.toThrow(TusError);
@@ -589,6 +810,7 @@ describe("when it goes wrong", () => {
       uploadFile({
         file: fileOf(filled(300_000)),
         chunkSize: 65536,
+        stream: false,
         transport: { fetch: aborting, signal: controller.signal },
       }),
     ).rejects.toThrow();

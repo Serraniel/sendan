@@ -27,7 +27,14 @@ import {
   sealMetadata,
   wrapFileKey,
 } from "../crypto/index.js";
-import { createUpload, type MetadataValue, patchChunk, type Transport } from "./tus.js";
+import {
+  canStreamRequests,
+  createUpload,
+  type MetadataValue,
+  patchChunk,
+  patchStream,
+  type Transport,
+} from "./tus.js";
 
 /** What the sender chose. Every field is optional; the defaults are the instance's. */
 export interface UploadOptions {
@@ -54,7 +61,15 @@ export type UploadStage = "deriving" | "sending" | "done";
 
 export interface UploadProgress {
   stage: UploadStage;
-  /** Encoded bytes the server has acknowledged. */
+  /**
+   * Encoded bytes sent so far.
+   *
+   * On the chunked path these have been acknowledged by the instance. On the
+   * streamed path the response does not arrive until the body has been sent,
+   * so they are bytes handed to the network - which may still be in a buffer.
+   * The distinction is not worth showing a person, but it is worth not
+   * pretending about.
+   */
   sent: number;
   /** Encoded bytes in total. Known before the first byte is sent. */
   total: number;
@@ -96,6 +111,15 @@ export interface UploadRequest {
    * where there is no document to resolve against.
    */
   endpoint?: string;
+  /**
+   * Whether to try sending the body as one stream.
+   *
+   * Defaults to whatever the browser supports. Set false to require the
+   * chunked path - which is what a test of the fallback needs, and the reason
+   * this is here at all: the fallback is the path that would otherwise rot
+   * unnoticed.
+   */
+  stream?: boolean;
 }
 
 /** Four mebibytes: a few seconds on a slow connection, which is the useful unit of progress. */
@@ -172,8 +196,14 @@ export async function uploadFile(req: UploadRequest): Promise<UploadResult> {
   );
 
   report("sending", 0);
-  const sent = await sendEncrypted(file, fileKey, location, chunkSize, transport, (n) =>
-    report("sending", n),
+  const sent = await sendEncrypted(
+    file,
+    fileKey,
+    location,
+    chunkSize,
+    transport,
+    (n) => report("sending", n),
+    req.stream ?? canStreamRequests(),
   );
 
   // The declared length is what the server enforces, so a disagreement means
@@ -195,6 +225,71 @@ export async function uploadFile(req: UploadRequest): Promise<UploadResult> {
  * as long as it took.
  */
 async function sendEncrypted(
+  file: File,
+  fileKey: Uint8Array,
+  location: string,
+  chunkSize: number,
+  transport: Transport,
+  onSent: (sent: number) => void,
+  tryStreaming: boolean,
+): Promise<number> {
+  if (tryStreaming) {
+    const streamed = await sendAsOneStream(file, fileKey, location, transport, onSent);
+    if (!streamed.refusedOutright) return streamed.offset;
+    // The browser would not send it: no HTTP/2 between here and the instance,
+    // which is an ordinary deployment rather than a fault. Nothing was written,
+    // so the chunked path starts from the beginning as usual.
+  }
+  return sendInChunks(file, fileKey, location, chunkSize, transport, onSent);
+}
+
+/**
+ * Sends the whole encoding as one request body.
+ *
+ * One round trip instead of one per chunk, and no buffer to fill. What it
+ * cannot do is report acknowledged bytes: the response arrives only when the
+ * body has been sent, so progress here counts what has been handed to the
+ * network. See {@link UploadProgress.sent}.
+ */
+async function sendAsOneStream(
+  file: File,
+  fileKey: Uint8Array,
+  location: string,
+  transport: Transport,
+  onSent: (sent: number) => void,
+): Promise<{ offset: number; refusedOutright: boolean }> {
+  let handed = 0;
+  const counting = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      handed += chunk.length;
+      controller.enqueue(chunk);
+      onSent(handed);
+    },
+  });
+
+  const body = file
+    .stream()
+    .pipeThrough(encryptStream(fileKey), transport.signal ? { signal: transport.signal } : {})
+    .pipeThrough(counting, transport.signal ? { signal: transport.signal } : {});
+
+  const result = await patchStream(location, 0, body, transport);
+  if (result.refusedOutright) {
+    // Progress advanced against a request that never left. Putting it back
+    // stops a bar that walked forwards from walking backwards when the chunked
+    // path starts again from zero.
+    onSent(0);
+  }
+  return result;
+}
+
+/**
+ * Streams the file through the encoder, sending whole chunks as they fill.
+ *
+ * Encryption and transmission are interleaved deliberately. Encrypting first
+ * would mean holding the whole ciphertext, and would leave progress at zero for
+ * as long as it took.
+ */
+async function sendInChunks(
   file: File,
   fileKey: Uint8Array,
   location: string,
