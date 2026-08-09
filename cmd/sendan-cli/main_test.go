@@ -4,6 +4,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -122,5 +123,106 @@ func TestHumanSizeReadsAsASize(t *testing.T) {
 		if got := humanSize(n); got != want {
 			t.Errorf("%d bytes reads as %q, want %q", n, got, want)
 		}
+	}
+}
+
+// Argument handling, which is the part a person meets first.
+//
+// A wrong argument must produce an explanation, not a transfer to somewhere
+// unintended. These run through run() rather than main() so a failure is an
+// error rather than an exit code.
+func TestArgumentsThatCannotWorkAreRefused(t *testing.T) {
+	t.Setenv("SENDAN_INSTANCE", "")
+
+	cases := []struct {
+		name string
+		args []string
+		says string
+	}{
+		{"nothing at all", nil, "no command"},
+		{"an unknown command", []string{"sideways"}, "unknown command"},
+		{"up with no instance", []string{"up", "f.txt"}, "no instance"},
+		{"up with an unknown option", []string{"up", "--nope", "x"}, "unknown option"},
+		{"up with two files", []string{"up", "--to", "http://x", "a", "b"}, "one file"},
+		{"--to with no value", []string{"up", "--to"}, "needs a value"},
+		{"down with no link", []string{"down"}, "no link"},
+		{"down with two links", []string{"down", "a", "b"}, "one link"},
+		{"-o with no value", []string{"down", "x", "-o"}, "needs a value"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := run(t.Context(), tc.args)
+			if err == nil {
+				t.Fatalf("%v was accepted", tc.args)
+			}
+			if !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("%v: %v, want it to mention %q", tc.args, err, tc.says)
+			}
+		})
+	}
+}
+
+func TestHelpIsNotAnError(t *testing.T) {
+	for _, arg := range []string{"help", "-h", "--help"} {
+		if err := run(t.Context(), []string{arg}); err != nil {
+			t.Errorf("%s: %v", arg, err)
+		}
+	}
+}
+
+// A pipe carries no filename, and an upload with no name is one a recipient
+// cannot save. Saying so beats inventing one.
+func TestAPipeWithoutANameIsRefused(t *testing.T) {
+	t.Setenv("SENDAN_INSTANCE", "http://127.0.0.1:1")
+
+	err := run(t.Context(), []string{"up", "-"})
+	if err == nil {
+		t.Fatal("a pipe with no name was accepted")
+	}
+	if !strings.Contains(err.Error(), "--name") {
+		t.Errorf("%v does not say what to do about it", err)
+	}
+}
+
+func TestADirectoryIsRefusedWithSomethingToDoAboutIt(t *testing.T) {
+	t.Setenv("SENDAN_INSTANCE", "http://127.0.0.1:1")
+
+	err := run(t.Context(), []string{"up", t.TempDir()})
+	if err == nil {
+		t.Fatal("a directory was accepted")
+	}
+	if !strings.Contains(err.Error(), "archive") {
+		t.Errorf("%v does not suggest what to do instead", err)
+	}
+}
+
+// The instance may come from the environment, which is what makes the command
+// usable without repeating it.
+func TestTheInstanceMayComeFromTheEnvironment(t *testing.T) {
+	t.Setenv("SENDAN_INSTANCE", "http://127.0.0.1:1")
+
+	file := filepath.Join(t.TempDir(), "a.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	// It will fail to connect, which is the point: it got far enough to try.
+	err := run(t.Context(), []string{"up", file})
+	if err == nil {
+		t.Fatal("an unreachable instance appeared to succeed")
+	}
+	if strings.Contains(err.Error(), "no instance") {
+		t.Errorf("the environment was not consulted: %v", err)
+	}
+}
+
+func TestALinkThatIsNotOneIsRefusedBeforeAnyRequest(t *testing.T) {
+	err := run(t.Context(), []string{"down", "https://example.org/not-a-download"})
+	if err == nil {
+		t.Fatal("a link that addresses nothing was accepted")
+	}
+	if !strings.Contains(err.Error(), "does not address an upload") {
+		t.Errorf("%v does not say what is wrong with it", err)
 	}
 }

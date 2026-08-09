@@ -15,6 +15,17 @@ cd "$(dirname "$0")/.."
 PATH="$PATH:$(go env GOPATH)/bin"
 export PATH
 
+# The coverage floors assume PostgreSQL and S3 are reachable, because they are
+# in continuous integration. Saying so before anything runs is the difference
+# between a failure somebody investigates and one they learn to ignore.
+if [ -z "${SENDAN_TEST_POSTGRES:-}" ] || [ -z "${SENDAN_TEST_S3:-}" ]; then
+  echo "note: SENDAN_TEST_POSTGRES or SENDAN_TEST_S3 is unset, so the coverage"
+  echo "      gate will report internal/store and internal/blob below their"
+  echo "      floors. That is the environment, not the change. CONTRIBUTING.md"
+  echo "      says how to start them."
+  echo
+fi
+
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT
 failed=0
@@ -36,6 +47,10 @@ dir=. check "go build"            go build ./...
 dir=. check "go vet"              go vet ./...
 dir=. check "golangci-lint"       golangci-lint run ./...
 dir=. check "go test"             go test -count=1 ./...
+# Not implied by `go test`: this enforces the per-package floors, and refuses to
+# run at all when .coverage-floors and the packages that exist disagree. Leaving
+# it out let a new package with no floor reach continuous integration.
+dir=. check "go coverage floors"  ./scripts/coverage.sh
 dir=web check "biome"             npm run --silent lint
 dir=web check "svelte-check"      npm run --silent check
 dir=web check "vitest"            npm run --silent test:coverage
