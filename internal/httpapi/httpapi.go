@@ -113,7 +113,12 @@ func New(opts Options) http.Handler {
 		// upload identifier from the whole request path, so it must see only
 		// the identifier. Its configured base path is used to build the
 		// Location header and is separate from what it receives.
-		mounted := http.StripPrefix("/api/uploads", tusHandler)
+		// The Location the protocol handler builds is absolute and takes its
+		// scheme from the connection this process sees, which behind a
+		// TLS-terminating proxy is plain HTTP. Rewritten to a path, so it
+		// describes the request the client actually made rather than the one
+		// the proxy made.
+		mounted := http.StripPrefix("/api/uploads", relativeLocation(tusHandler))
 		mux.Handle("POST /api/uploads", mounted)
 		mux.Handle("OPTIONS /api/uploads", mounted)
 		mux.Handle("HEAD /api/uploads/{id}", mounted)

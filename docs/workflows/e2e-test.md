@@ -25,6 +25,17 @@ The suite drives the real interface against a binary built with the client
 embedded — not the development server, which sends no policy at all. A run
 against a development server would pass on a client no instance could serve.
 
+A third project, `chromium-h2`, runs the `*.h2.spec.ts` files against the same
+instance **through a TLS-terminating proxy** (`tools/e2e-tlsproxy`), which is
+how it is actually deployed and the only way a browser will speak HTTP/2. The
+certificate is generated at startup and valid for an hour.
+
+That project exists because a whole class of fault is invisible without it. The
+instance infers its own scheme from the connection it can see, and reaching it
+directly over plain HTTP makes every such inference happen to be right. An
+upload `Location` naming `http` for a browser talking `https` went unnoticed
+until something reached the instance the way a deployment does.
+
 > [!NOTE]
 > **Transfers between the command line client and the browser are not covered
 > yet.** That is the case that catches divergence between the two

@@ -40,6 +40,12 @@ require restarting repeatedly to discover the next fault.
 > `SENDAN_BASE_URL` being `https` is also what causes HSTS to be sent. It is
 > taken from configuration rather than from `X-Forwarded-Proto`, which is
 > written by whatever spoke last.
+>
+> The instance does **not** need to be told it is behind a proxy in order to
+> address itself correctly. The upload endpoint answers with a path rather than
+> an absolute URL, so a client resolves it against the request it actually
+> made. Nothing about the deployment has to be configured for that to be right,
+> and no forwarded header is believed.
 | `SENDAN_SERVE_UI` | `true` | Serve the embedded web client. `false` gives a backend-only instance from the same binary |
 
 > [!NOTE]
