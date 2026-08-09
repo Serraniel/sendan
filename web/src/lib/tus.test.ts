@@ -2,7 +2,15 @@
 // Copyright (C) 2026 Serraniel and the Sendan contributors
 
 import { describe, expect, it } from "vitest";
-import { createUpload, currentOffset, encodeMetadata, patchChunk, TusError } from "./tus.js";
+import {
+  canStreamRequests,
+  createUpload,
+  currentOffset,
+  encodeMetadata,
+  patchChunk,
+  patchStream,
+  TusError,
+} from "./tus.js";
 
 /** A fetch that answers once, and records what it was asked. */
 function answering(response: Response): { fetch: typeof fetch; seen: Request[] } {
@@ -242,5 +250,106 @@ describe("resuming", () => {
   it("refuses an offset it cannot use", async () => {
     const { fetch } = answering(new Response(null, { status: 200 }));
     await expect(currentOffset("/api/uploads/abc", { fetch })).rejects.toThrow(TusError);
+  });
+});
+
+describe("whether the browser will stream a request", () => {
+  /**
+   * The canonical detection: a browser that supports it consults the duplex
+   * getter and does not infer a Content-Type from the body. Both facts together
+   * are what distinguish it, and either alone would be wrong about something.
+   */
+  it("says yes where the duplex option is read", () => {
+    expect(canStreamRequests()).toBe(true);
+  });
+
+  it("says no where it is not", () => {
+    // A constructor that ignores duplex, as an older browser's does.
+    const oblivious = class {
+      headers = new Headers({ "Content-Type": "text/plain" });
+      constructor(_url: string, _init: RequestInit) {}
+    } as unknown as typeof Request;
+
+    expect(canStreamRequests(oblivious)).toBe(false);
+  });
+
+  /**
+   * Older browsers throw rather than ignore: a stream body is not something
+   * they can construct a request from at all. Detection must answer the
+   * question rather than propagate that.
+   */
+  it("says no where constructing the probe throws", () => {
+    const refusing = class {
+      constructor() {
+        throw new TypeError("streaming bodies are not supported");
+      }
+    } as unknown as typeof Request;
+
+    expect(canStreamRequests(refusing)).toBe(false);
+  });
+});
+
+describe("streaming a body", () => {
+  const oneByte = () =>
+    new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new Uint8Array([1]));
+        c.close();
+      },
+    });
+
+  it("reports the offset the server holds afterwards", async () => {
+    const { fetch } = answering(
+      new Response(null, { status: 204, headers: { "Upload-Offset": "1" } }),
+    );
+    expect(await patchStream("/api/uploads/abc", 0, oneByte(), { fetch })).toEqual({
+      offset: 1,
+      refusedOutright: false,
+    });
+  });
+
+  it("refuses an acceptance with no offset", async () => {
+    const { fetch } = answering(new Response(null, { status: 204 }));
+    await expect(patchStream("/api/uploads/abc", 0, oneByte(), { fetch })).rejects.toThrow(
+      /without reporting an offset/,
+    );
+  });
+
+  /**
+   * A browser refuses a streamed body over HTTP/1.1, which is an ordinary
+   * deployment rather than a fault. Reported rather than thrown, so the caller
+   * can write chunks instead - nothing was sent.
+   */
+  it("reports a refusal before anything was sent, rather than throwing", async () => {
+    const refusing = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+
+    expect(await patchStream("/api/uploads/abc", 7, oneByte(), { fetch: refusing })).toEqual({
+      offset: 7,
+      refusedOutright: true,
+    });
+  });
+
+  /**
+   * A rejection is different from a refusal: the request was made, so bytes may
+   * already be stored and writing from the beginning again would write over
+   * them.
+   */
+  it("raises a rejection, which is not something to retry", async () => {
+    const { fetch } = answering(new Response(null, { status: 409 }));
+    await expect(patchStream("/api/uploads/abc", 0, oneByte(), { fetch })).rejects.toMatchObject({
+      status: 409,
+    });
+  });
+
+  it("lets a cancellation through as itself", async () => {
+    const aborting = (async () => {
+      throw new DOMException("aborted", "AbortError");
+    }) as typeof fetch;
+
+    await expect(
+      patchStream("/api/uploads/abc", 0, oneByte(), { fetch: aborting }),
+    ).rejects.toThrow(DOMException);
   });
 });

@@ -211,6 +211,103 @@ export async function patchChunk(
 }
 
 /**
+ * Whether this browser can send a request body as a stream.
+ *
+ * The canonical detection: constructing a Request with a stream body and a
+ * `duplex` getter, and seeing whether the getter was consulted. A browser
+ * without support never reads it, and infers a Content-Type from the body
+ * instead - so both facts together are what distinguishes them.
+ *
+ * Support is not sufficient. Request streaming also requires HTTP/2, which a
+ * browser only ever has over TLS, so a detection that passes still fails
+ * against an instance reached over HTTP/1.1. That is why {@link patchStream}
+ * reports whether it got anywhere rather than simply throwing.
+ */
+export function canStreamRequests(construct: typeof Request = Request): boolean {
+  let duplexAccessed = false;
+  try {
+    const probe = new construct("https://example.invalid/", {
+      method: "POST",
+      body: new ReadableStream(),
+      get duplex() {
+        duplexAccessed = true;
+        return "half";
+      },
+    } as RequestInit);
+    return duplexAccessed && !probe.headers.has("Content-Type");
+  } catch {
+    return false;
+  }
+}
+
+/** What a streamed write did. */
+export interface StreamResult {
+  /** The offset the server holds afterwards. */
+  offset: number;
+  /**
+   * Whether the request was refused before it carried anything.
+   *
+   * The caller can fall back to writing chunks in that case. Once bytes have
+   * been accepted a failure is a failure, because retrying from the beginning
+   * would write over what is already stored.
+   */
+  refusedOutright: boolean;
+}
+
+/**
+ * Writes the whole remaining upload as one streamed request.
+ *
+ * The body has no Content-Length, which is what the server means by a streamed
+ * write: it is the same PATCH as a chunked one and is not distinguished. What
+ * it saves is a round trip per chunk, and the buffer a chunk has to fill.
+ *
+ * A browser refuses this outright over HTTP/1.1, so a refusal before any byte
+ * was accepted is reported rather than thrown - an instance behind a proxy that
+ * does not speak HTTP/2 is an ordinary deployment, not a fault.
+ */
+export async function patchStream(
+  location: string,
+  offset: number,
+  body: ReadableStream<Uint8Array>,
+  transport: Transport = {},
+): Promise<StreamResult> {
+  const doFetch = transport.fetch ?? fetch;
+
+  let response: Response;
+  try {
+    response = await doFetch(location, {
+      method: "PATCH",
+      headers: {
+        "Tus-Resumable": TUS_VERSION,
+        "Content-Type": "application/offset+octet-stream",
+        "Upload-Offset": `${offset}`,
+      },
+      body,
+      // Required with a stream body: the request finishes sending before the
+      // response begins. Not in the DOM types every runtime ships, hence the
+      // assertion rather than a plain property.
+      duplex: "half",
+      ...abortable(transport),
+    } as RequestInit);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    // The browser would not send it at all: no HTTP/2, or no support despite
+    // the detection. Nothing was written, so the caller may write chunks.
+    return { offset, refusedOutright: true };
+  }
+
+  if (response.status !== 204) {
+    throw new TusError(response.status, await describe(response));
+  }
+
+  const reported = response.headers.get("Upload-Offset");
+  if (reported === null) {
+    throw new TusError(response.status, "the server accepted a stream without reporting an offset");
+  }
+  return { offset: parseOffset(response, reported), refusedOutright: false };
+}
+
+/**
  * Asks where an interrupted upload left off.
  *
  * A completed upload answers 404, which is not an error here but the answer:
