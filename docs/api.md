@@ -92,11 +92,19 @@ rather than discovered at download. Every fault is reported at once.
 
 | Status | When |
 |---|---|
-| `201` | Created. `Location` names the upload |
+| `201` | Created. `Location` names the upload, as a **path** |
 | `400` | Malformed metadata, an undeclared length, or a lifetime the instance does not permit |
 | `409` | The identifier is already in use |
 | `413` | Larger than `SENDAN_MAX_UPLOAD_SIZE` |
 | `429` | Rate limited |
+
+> [!NOTE]
+> **`Location` is relative, and deliberately.** The tus specification permits
+> it, and a path cannot be wrong about a connection the instance cannot see.
+> This binary does not terminate TLS, so an absolute URL built from the request
+> would name `http` for a browser that is talking `https` through a proxy — and
+> a browser refuses to follow that as mixed content. Resolve it against the
+> request you made.
 
 > [!IMPORTANT]
 > **The length must be declared.** `Upload-Defer-Length` is refused: accepting

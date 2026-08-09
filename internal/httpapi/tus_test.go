@@ -553,3 +553,48 @@ func TestTheClientIsNotServedWhenDisabled(t *testing.T) {
 		t.Errorf("status %d with the client disabled, want 404", rec.Code)
 	}
 }
+
+// The Location a client is given must describe the request the client made,
+// not the one this process received.
+//
+// The binary does not terminate TLS; docs/configuration.md expects a reverse
+// proxy to. The protocol handler builds an absolute URL from the connection it
+// can see, which is the proxy's plain HTTP one, so a browser on an HTTPS page
+// was handed an http:// URL and refused to follow it as mixed content. Every
+// upload failed after creation, in the deployment the documentation recommends.
+//
+// Nothing caught it because every other test reaches the instance directly,
+// where the scheme it infers happens to be right.
+func TestTheLocationDoesNotDescribeTheConnectionItCannotSee(t *testing.T) {
+	h := newAPIHarness(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/uploads", nil)
+	req.Header.Set("Tus-Resumable", "1.0.0")
+	req.Header.Set("Upload-Length", "100")
+	req.Header.Set("Upload-Metadata", uploadMetadata(nil))
+	// What a TLS-terminating proxy sends: the browser's host, over a plain
+	// connection to this process.
+	req.Host = "send.example"
+
+	rec := httptest.NewRecorder()
+	h.handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status %d, want 201: %s", rec.Code, rec.Body.String())
+	}
+
+	location := rec.Header().Get("Location")
+	if location == "" {
+		t.Fatal("no Location header")
+	}
+	if strings.HasPrefix(location, "http://") || strings.HasPrefix(location, "https://") {
+		t.Errorf("Location %q is absolute; it asserts a scheme this process cannot know", location)
+	}
+	if !strings.HasPrefix(location, "/api/uploads/") {
+		t.Errorf("Location %q does not address the upload endpoint", location)
+	}
+	// And it still identifies the upload, which is the point of the header.
+	if strings.TrimPrefix(location, "/api/uploads/") == "" {
+		t.Errorf("Location %q names no upload", location)
+	}
+}

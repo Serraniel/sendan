@@ -2,6 +2,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const port = Number(process.env.SENDAN_E2E_PORT ?? 18091);
+const tlsPort = Number(process.env.SENDAN_E2E_TLS_PORT ?? 18191);
 
 export default defineConfig({
   // Kept apart from src/, where vitest looks. A suite that ran under both
@@ -39,17 +40,43 @@ export default defineConfig({
     // Chromium has the File System Access API; Firefox does not. That is the
     // difference the save paths turn on, so both are run rather than one being
     // treated as representative.
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: "**/*.h2.spec.ts" },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] }, testIgnore: "**/*.h2.spec.ts" },
+
+    // Over TLS, and therefore over HTTP/2, which is the only way a browser will
+    // stream a request body. Everything else runs against the instance
+    // directly; only the flows that need HTTP/2 come here.
+    {
+      name: "chromium-h2",
+      testMatch: "**/*.h2.spec.ts",
+      use: {
+        ...devices["Desktop Chrome"],
+        baseURL: `https://localhost:${tlsPort}`,
+        // The certificate is generated at startup and self-signed. Accepting it
+        // is the point of the proxy, not a weakening of anything.
+        ignoreHTTPSErrors: true,
+      },
+    },
   ],
 
-  webServer: {
-    command: "../scripts/e2e-server.sh",
-    url: `http://localhost:${port}/healthz`,
-    // Building the client and the binary takes longer than starting them.
-    timeout: 180_000,
-    reuseExistingServer: !process.env.CI,
-    stdout: "ignore",
-    stderr: "pipe",
-  },
+  webServer: [
+    {
+      command: "../scripts/e2e-server.sh",
+      url: `http://localhost:${port}/healthz`,
+      // Building the client and the binary takes longer than starting them.
+      timeout: 180_000,
+      reuseExistingServer: !process.env.CI,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+    {
+      command: "../scripts/e2e-tlsproxy.sh",
+      url: `https://localhost:${tlsPort}/healthz`,
+      ignoreHTTPSErrors: true,
+      timeout: 120_000,
+      reuseExistingServer: !process.env.CI,
+      stdout: "ignore",
+      stderr: "pipe",
+    },
+  ],
 });
