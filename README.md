@@ -23,7 +23,11 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > upload and download flows, with per-upload password, expiry and download
 > limit.
 >
-> **Not built:** the command line client and the container image.
+> **Partly built:** the command line client sends and receives (`sendan up`,
+> `sendan down`) and must be built from source — there are no released binaries,
+> no published checksums, and no `sendan verify` yet.
+>
+> **Not built:** the container image.
 
 ## Features
 
@@ -40,7 +44,8 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
   client. *(The binary serves the client today; the container image is not
   built.)*
 - **Cross-platform command line client**, sharing one cryptographic
-  implementation with the server. *(Not built.)*
+  implementation with the server. *(Sends and receives; not yet released as a
+  binary.)*
 - **Optional compatibility endpoints** for existing third-party clients,
   disabled by default. *(Not built.)*
 
@@ -75,11 +80,10 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 > can serve modified code regardless of the contents of this repository.
 >
 > **Running the instance yourself answers this**, and is what Sendan is for. For
-> an instance you do not control, the answer is the command line client — a
-> fixed, reproducibly built binary, obtained independently, which also verifies
-> that an instance serves the published client. It is milestone M5 and **is not
-> built yet**; until it is, treat that case as unmitigated. See
-> [SECURITY.md](SECURITY.md).
+> an instance you do not control, the answer is the command line client: using it
+> means never executing that instance's code. It sends and receives today, but
+> **must be built from source** — there is no released binary to check, and no
+> `sendan verify` yet. See [SECURITY.md](SECURITY.md) for what that leaves open.
 
 ## Browser requirements
 

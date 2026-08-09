@@ -325,3 +325,74 @@ func FuzzContentBitFlipIsRejected(f *testing.F) {
 		}
 	})
 }
+
+// The declared length is checked against the encoder itself, not against a
+// second copy of the arithmetic - which would agree with a wrong answer just as
+// readily.
+func TestEncodedContentLengthMatchesTheEncoder(t *testing.T) {
+	sizes := []int64{
+		0, 1, headerSize,
+		maxRecordPlaintext - 1, maxRecordPlaintext, maxRecordPlaintext + 1,
+		2*maxRecordPlaintext - 1, 2 * maxRecordPlaintext, 2*maxRecordPlaintext + 1,
+		3*maxRecordPlaintext + 4321,
+	}
+
+	key := bytes.Repeat([]byte{0x11}, FileKeySize)
+	for _, size := range sizes {
+		var out bytes.Buffer
+		e, err := NewEncryptor(&out, key)
+		if err != nil {
+			t.Fatalf("%d bytes: encryptor: %v", size, err)
+		}
+		if _, err := e.Write(make([]byte, size)); err != nil {
+			t.Fatalf("%d bytes: write: %v", size, err)
+		}
+		if err := e.Close(); err != nil {
+			t.Fatalf("%d bytes: close: %v", size, err)
+		}
+
+		want := int64(out.Len())
+		got, err := EncodedContentLength(size)
+		if err != nil {
+			t.Fatalf("%d bytes: %v", size, err)
+		}
+		if got != want {
+			t.Errorf("plaintext of %d bytes: declared %d, encoder produced %d", size, got, want)
+		}
+	}
+}
+
+// Sizes nobody would have thought to enumerate. A calculation right only at the
+// boundaries somebody wrote down is right by coincidence.
+func TestEncodedContentLengthMatchesTheEncoderAtArbitrarySizes(t *testing.T) {
+	key := bytes.Repeat([]byte{0x22}, FileKeySize)
+	for i := 0; i < 16; i++ {
+		size := int64(rand.Intn(3 * maxRecordPlaintext))
+
+		var out bytes.Buffer
+		e, err := NewEncryptor(&out, key)
+		if err != nil {
+			t.Fatalf("encryptor: %v", err)
+		}
+		if _, err := e.Write(make([]byte, size)); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		if err := e.Close(); err != nil {
+			t.Fatalf("close: %v", err)
+		}
+
+		got, err := EncodedContentLength(size)
+		if err != nil {
+			t.Fatalf("%d bytes: %v", size, err)
+		}
+		if got != int64(out.Len()) {
+			t.Errorf("plaintext of %d bytes: declared %d, encoder produced %d", size, got, out.Len())
+		}
+	}
+}
+
+func TestEncodedContentLengthRefusesWhatIsNotAByteCount(t *testing.T) {
+	if _, err := EncodedContentLength(-1); err == nil {
+		t.Error("a negative length was accepted")
+	}
+}

@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { decryptBytes, encryptBytes } from "../content.js";
+import { decryptBytes, encodedContentLength, encryptBytes } from "../content.js";
 
 /**
  * The content encoding vectors, produced by the Go implementation.
@@ -65,6 +65,24 @@ describe("spec §5 content encoding vectors", () => {
       if (c.streamHex !== undefined) {
         expect(toHex(stream)).toBe(c.streamHex);
       }
+    });
+
+    /**
+     * The length both implementations declare before sending anything, pinned
+     * to the same vector rather than to each implementation's own encoder.
+     *
+     * The instance enforces the declaration, so a browser and the command line
+     * client that disagreed would mean one of them could never complete an
+     * upload — and the disagreement would surface as a stuck transfer rather
+     * than as anything naming a length.
+     */
+    it(`${c.name} — declares the length the vector's stream has`, async () => {
+      const stream = await encryptBytes(
+        fromHex(c.fileKeyHex),
+        patternBytes(c.plaintextPattern, c.plaintextLength),
+        fromHex(c.contentSaltHex),
+      );
+      expect(encodedContentLength(c.plaintextLength)).toBe(stream.length);
     });
 
     it(`${c.name} — decrypts the Go-produced stream`, async () => {
