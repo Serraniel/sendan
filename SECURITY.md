@@ -74,9 +74,20 @@ individual bug report.
 > encryption, so an operator seeking the key can extract it from the page before
 > encryption occurs.
 >
-> The mitigation is the **command line client**: a fixed, reproducibly built
-> binary obtained independently of any instance. Where the adversary includes the
-> operator of the instance, use the CLI and verify its checksum.
+> **There is no mitigation for this today.** The intended one is a command line
+> client — a fixed, reproducibly built binary obtained independently of any
+> instance — and it is not built yet
+> ([#42](https://github.com/Serraniel/sendan/issues/42)). Until it exists, an
+> adversary who includes the operator of the instance is outside what Sendan can
+> protect against, and the browser client cannot change that.
+>
+> The first half of checking an instance does exist: each release publishes a
+> digest manifest of every file in the client, so what an instance serves can be
+> compared against what was published. The program that performs that comparison
+> is [#103](https://github.com/Serraniel/sendan/issues/103), also outstanding.
+> `docs/design.md` §7.1 sets out what the finished mechanism does and does not
+> establish — notably that it cannot detect a backdoor served only to a chosen
+> victim.
 
 Also out of scope:
 
@@ -85,8 +96,13 @@ Also out of scope:
   shoulder.
 - **A compromised endpoint.** Malware on the sender's or recipient's machine
   defeats client-side encryption entirely.
-- **Traffic analysis.** Sendan does not hide file sizes, upload times, or the
-  fact that you are using it. Padding is not currently implemented.
+- **Traffic analysis.** Sendan does not hide upload times, the fact that you are
+  using it, or the size of a file. The *metadata envelope* is padded, so the
+  filename and media type do not leak their lengths, and the metadata endpoint
+  deliberately omits the size for the same reason — but stored ciphertext is
+  proportional to the file, so anyone who can observe a transfer or measure a
+  response can infer roughly how large it is. Content padding is not
+  implemented.
 - **Third-party client compatibility mode**, when enabled, uses that protocol's
   weaker server-enforced password model for interoperability. Uploads made
   through those endpoints are **less secure** than native ones, and the interface

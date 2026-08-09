@@ -28,8 +28,8 @@ import type { UploadMetadata } from "./download.js";
 export const CAVEAT =
   "This describes what the code running in this tab did. That code came from " +
   "this instance, so it is a report from a well-behaved instance rather than " +
-  "proof against a hostile one. The command line client is the reliable " +
-  "trust anchor; the threat model explains why.";
+  "proof against a hostile one. Nothing shown here would detect an instance " +
+  "that served different code. The threat model explains what that means.";
 
 export interface ContentProtection {
   cipher: string;

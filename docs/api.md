@@ -4,8 +4,9 @@ Every endpoint an instance serves. The reasoning behind each is in
 [`docs/design.md`](design.md) §4; this page is the reference.
 
 > [!NOTE]
-> There is no client yet. Uploading and downloading a file today means speaking
-> this API directly.
+> The web client speaks this API, so a file can be sent and received in a
+> browser without reading any of it. This page is for anything else — another
+> client, a script, or checking what an instance actually promises.
 
 ## Conventions
 

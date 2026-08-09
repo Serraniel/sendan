@@ -30,13 +30,16 @@ command line client are produced from a single Go module.
 | `internal/upload` | Lifecycle: expiry policy, revocation, reaping |
 | `internal/httpapi` | HTTP surface and the middleware every response passes through |
 | `internal/webui` | Serving the embedded web client |
-| `web` | The client itself: SvelteKit, and the TypeScript half of the scheme |
 | `internal/config` | Environment configuration and validation |
 | `internal/logging` | Structured logging with identifier redaction |
 | `internal/ratelimit` | Structural abuse controls |
 | `web/src/crypto` | The TypeScript half of the cryptographic scheme |
+| `web/src/lib` | The client's own logic: transfer, save paths, links, capability checks |
+| `web/src/routes` | The two pages, which are deliberately thin over `lib` |
+| `web/e2e` | Browser flows, run against a real instance |
 | `testdata/vectors` | Shared cross-language test vectors |
-| `scripts` | Checks continuous integration runs and contributors can run directly, currently the coverage gate |
+| `scripts` | Checks continuous integration runs and contributors can run directly; `verify.sh` runs all of them |
+| `tools` | Programs the project builds for its own use and does not ship: the asset manifest, and a TLS proxy the browser tests need |
 
 Each backend pair is held to a single conformance suite — `store/storetest` and
 `blob/blobtest` — so a second backend is not a second set of assumptions.
@@ -336,6 +339,14 @@ belongs to the client, where the difference actually exists.
 > excess is refused, and the upload is not extended by it. Both the streamed and
 > the chunked shapes are tested, because a regression in the streamed one would
 > otherwise surface only in a browser that supports it.
+>
+> Which shape a browser uses is not only a question of what the browser
+> supports. Request streaming also requires HTTP/2, which a browser has only
+> over TLS, and this binary does not terminate TLS — so an instance reached
+> directly speaks HTTP/1.1 and every browser takes the chunked path. The client
+> therefore falls back at run time on a refusal rather than trusting feature
+> detection alone, and the browser suite runs one project through a
+> TLS-terminating proxy so the streamed path is exercised at all.
 
 > [!IMPORTANT]
 > **A completed upload cannot be written to.** The upload path reads only rows
