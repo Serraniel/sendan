@@ -16,7 +16,7 @@ Pull requests, and pushes to `main`.
 | `test-go` | `go vet`, then unit and integration tests with the race detector, then the per-package coverage floors in `.coverage-floors` |
 | `test-web` | lint, type-check, unit tests, production build, and an audit asserting the built client can run under the policy it is served with |
 | `test-vectors` | the shared cryptographic vectors, run against **both** the Go and TypeScript implementations |
-| `build` | builds the web client, then the binary with assets embedded |
+| `build` | builds the web client, then the binary with assets embedded, and states what the client hashes to |
 
 ## What a failure means
 
@@ -40,6 +40,19 @@ else catches it: a blocked style is not an error, the development server sends
 no policy, and the page therefore renders correctly in every place it is looked
 at and wrongly on every real instance. Move the rule into a component
 stylesheet, or use an element that does not need one.
+
+### The asset manifest
+
+`build` writes `internal/webui/manifest.json`: the digest of every file in the
+built client, published so that anyone can check an instance serves the client
+it claims to (`docs/design.md` §7.1). It is uploaded as a run artefact.
+
+It fails if the manifest does not cover the whole build. The generator
+enumerates the directory and so covers everything by construction — which is
+precisely why the check walks the build again from the shell rather than asking
+the generator. **An asset nobody digested is one nobody can detect being
+replaced**, so a filter added later, or a build step writing somewhere
+unexpected, has to fail loudly rather than quietly narrow what is protected.
 
 ### The coverage gate
 

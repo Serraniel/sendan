@@ -61,3 +61,8 @@ web/coverage/
 # Playwright output. Reports and traces are artefacts of a run, not of the tree.
 web/test-results/
 web/playwright-report/
+
+# The client's digest manifest is a build output, published with the release.
+# Kept out of the tree so it can never be mistaken for a statement about a
+# revision it does not describe.
+internal/webui/manifest.json

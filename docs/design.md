@@ -784,12 +784,28 @@ independently of the operator:
 
 | Piece | Where it comes from | Issue |
 |---|---|---|
-| A digest manifest of every asset in the published client | the release, built by the project's pipeline | [#102](https://github.com/Serraniel/sendan/issues/102) |
+| A digest manifest of every asset in the published client | the release, built by the project's pipeline | [#102](https://github.com/Serraniel/sendan/issues/102) — **done** |
 | A signature over that manifest | the release, signed with cosign | [#104](https://github.com/Serraniel/sendan/issues/104) |
 | `sendan verify <url>`, which fetches the instance's assets and compares | the command line client, obtained once and reused | [#103](https://github.com/Serraniel/sendan/issues/103) |
 
 The instance is given no part in it beyond serving the bytes it would serve any
 visitor. It is not asked, and its answers are not relied on.
+
+The manifest is produced by `tools/asset-manifest` and is deliberately written
+**outside** the directory that is embedded and served. Everything under
+`internal/webui/dist` is shipped inside the binary, and an instance serving its
+own manifest would be attesting to itself — the exact circularity above. A
+verifier obtains it from the release.
+
+Its contents are decided by enumerating the build, never by a list of what the
+build is expected to contain: an asset missing from the manifest is one an
+attacker may replace freely, so the set cannot come from anybody's idea of what
+was built. Digests are over the stored bytes, before any transport compression,
+because what is compared is the resource rather than one encoding of it.
+
+A manifest built from a modified working tree says so. Such a build corresponds
+to no published revision, so a verifier can refuse it rather than compare
+against a commit that does not describe those bytes.
 
 #### What this establishes
 

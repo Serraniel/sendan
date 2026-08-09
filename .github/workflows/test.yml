@@ -194,6 +194,21 @@ jobs:
           # with no client in it.
           go build -tags embedui -o /tmp/sendan-ui ./cmd/sendan
 
+      # The statement of what the published client hashes to, which is what
+      # makes it possible to check that an instance serves it rather than a
+      # modified one (docs/design.md §7.1). Generated here because it describes
+      # the build, and checked here because a manifest that missed an asset
+      # would leave that asset replaceable without detection.
+      - name: State what the client hashes to
+        run: ./scripts/asset-manifest.sh
+
+      - name: Keep the manifest with the run that produced it
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: asset-manifest
+          path: internal/webui/manifest.json
+          retention-days: 14
+
       # Tests that need the client present cannot run in the job above, which
       # deliberately has no JavaScript toolchain. They run here, where it has
       # just been built - otherwise they skip everywhere and prove nothing.
