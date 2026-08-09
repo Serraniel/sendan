@@ -228,8 +228,25 @@ describe("the caveat", () => {
    */
   it("says the report comes from code the instance served", () => {
     expect(CAVEAT).toMatch(/came from\s+this instance/);
-    expect(CAVEAT).toContain("command line client");
     expect(CAVEAT).toContain("threat model");
+    // And says what it would miss, rather than only where it came from.
+    expect(CAVEAT.toLowerCase()).toContain("served different code");
+  });
+
+  /**
+   * It named the command line client as the reliable trust anchor, and there is
+   * no command line client yet - it is this repository's, and it is M5 (#42).
+   * Recommending a tool that cannot yet be obtained is worse than recommending
+   * nothing: a reader who cannot find it concludes they looked in the wrong
+   * place, not that it does not exist yet.
+   *
+   * This is a signpost, not a prohibition. When the command line client ships,
+   * naming it here is the right thing to do - delete this test then, rather
+   * than working around it.
+   */
+  it("recommends nothing that cannot be obtained today", () => {
+    expect(CAVEAT.toLowerCase()).not.toContain("command line");
+    expect(CAVEAT.toLowerCase()).not.toContain("cli");
   });
 
   it("does not claim to prove anything", () => {

@@ -74,9 +74,27 @@ individual bug report.
 > encryption, so an operator seeking the key can extract it from the page before
 > encryption occurs.
 >
-> The mitigation is the **command line client**: a fixed, reproducibly built
-> binary obtained independently of any instance. Where the adversary includes the
-> operator of the instance, use the CLI and verify its checksum.
+> **What you can do today: run the instance yourself.** Sendan is self-hosted,
+> and an operator who is you is not an adversary. That is a complete answer for
+> your own files and no answer at all for a file somebody sends you from an
+> instance you do not control.
+>
+> **For that case, the answer is being built and is not finished.** It has three
+> parts, all in this repository:
+>
+> | Part | State |
+> |---|---|
+> | A digest manifest of every file in the published client | **done** — published with each release ([#102](https://github.com/Serraniel/sendan/issues/102)) |
+> | A signature over that manifest | [#104](https://github.com/Serraniel/sendan/issues/104) |
+> | `sendan verify <url>`, which fetches what an instance serves and compares | [#103](https://github.com/Serraniel/sendan/issues/103) |
+>
+> The verifier is part of the command line client ([#42](https://github.com/Serraniel/sendan/issues/42),
+> milestone M5), which is also the fixed, reproducibly built binary you would use
+> instead of a browser where the operator is the adversary. Until that ships,
+> **treat this row of the threat model as unmitigated for instances you do not
+> run.** `docs/design.md` §7.1 sets out what the finished mechanism will and will
+> not establish — notably that it cannot detect a backdoor served only to a
+> chosen victim.
 
 Also out of scope:
 
@@ -85,8 +103,13 @@ Also out of scope:
   shoulder.
 - **A compromised endpoint.** Malware on the sender's or recipient's machine
   defeats client-side encryption entirely.
-- **Traffic analysis.** Sendan does not hide file sizes, upload times, or the
-  fact that you are using it. Padding is not currently implemented.
+- **Traffic analysis.** Sendan does not hide upload times, the fact that you are
+  using it, or the size of a file. The *metadata envelope* is padded, so the
+  filename and media type do not leak their lengths, and the metadata endpoint
+  deliberately omits the size for the same reason — but stored ciphertext is
+  proportional to the file, so anyone who can observe a transfer or measure a
+  response can infer roughly how large it is. Content padding is not
+  implemented.
 - **Third-party client compatibility mode**, when enabled, uses that protocol's
   weaker server-enforced password model for interoperability. Uploads made
   through those endpoints are **less secure** than native ones, and the interface

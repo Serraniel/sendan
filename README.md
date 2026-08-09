@@ -11,8 +11,9 @@ number of downloads, or on demand.
 The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 
 > [!WARNING]
-> **Status: pre-alpha. There is no usable server yet, and nothing has been
-> audited.** Do not use Sendan to protect anything that matters.
+> **Status: pre-alpha, and nothing has been audited.** A file can be sent and
+> received in a browser today; a hostile operator is not yet something this can
+> defend against. Do not use Sendan to protect anything that matters.
 >
 > **Built and tested:** the cryptographic scheme in Go and TypeScript, verified
 > against each other by shared test vectors; metadata storage on SQLite and
@@ -36,11 +37,12 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
   rows, and no file identifiers in logs. Unlimited retention is available but
   must be enabled explicitly.
 - **Single-container deployment.** One static binary serving an embedded web
-  client.
+  client. *(The binary serves the client today; the container image is not
+  built.)*
 - **Cross-platform command line client**, sharing one cryptographic
-  implementation with the server.
+  implementation with the server. *(Not built.)*
 - **Optional compatibility endpoints** for existing third-party clients,
-  disabled by default.
+  disabled by default. *(Not built.)*
 
 ## Cryptographic design
 
@@ -70,10 +72,14 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 > [!IMPORTANT]
 > **Browser-delivered end-to-end encryption has a structural limitation.** The
 > server delivers the code that performs the encryption, so a malicious operator
-> can serve modified code regardless of the contents of this repository. The
-> command line client is the reliable trust anchor: a fixed, reproducibly built
-> binary obtained independently of any instance. Where the threat model includes
-> the operator, use the CLI. See [SECURITY.md](SECURITY.md).
+> can serve modified code regardless of the contents of this repository.
+>
+> **Running the instance yourself answers this**, and is what Sendan is for. For
+> an instance you do not control, the answer is the command line client — a
+> fixed, reproducibly built binary, obtained independently, which also verifies
+> that an instance serves the published client. It is milestone M5 and **is not
+> built yet**; until it is, treat that case as unmitigated. See
+> [SECURITY.md](SECURITY.md).
 
 ## Browser requirements
 
@@ -93,8 +99,17 @@ WebAssembly. A browser missing any of these is told which, rather than being
 shown an error from inside the cryptography.
 
 Saving a download uses whichever of three paths the browser offers, in order:
-the File System Access API, a service worker, or holding the file in memory.
-Only the last is bounded by the size of a tab.
+
+1. **The File System Access API**, where the browser can be asked for a file to
+   write. Chromium-based browsers have it; Firefox and Safari do not.
+2. **A service worker**, which answers a request the page makes to itself with a
+   stream of plaintext so the browser's own download machinery writes it. This
+   exists for the browsers in the first line's second half — without it they
+   would have only the third.
+3. **A blob held in memory**, where neither is available.
+
+Only the third is bounded by the size of a tab, so only there does a large file
+fail. The first two are bounded by the disk.
 
 ## Documentation
 
