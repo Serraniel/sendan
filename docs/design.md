@@ -24,6 +24,8 @@ command line client are produced from a single Go module.
 | Path | Contents |
 |---|---|
 | `cmd/sendan` | Server entrypoint |
+| `cmd/sendan-cli` | The command line client, deliberately a separate binary: it is the program a user is asked to obtain and trust, so it links none of the server's dependencies |
+| `internal/client` | Speaking the API from the outside — the Go half of what `web/src/lib` does in the browser |
 | `internal/crypto` | The Go half of the cryptographic scheme (spec §4–§7) |
 | `internal/store` | Upload metadata: SQLite and PostgreSQL, plus a conformance suite |
 | `internal/blob` | Upload ciphertext: filesystem and S3, plus crypto-shredding and a conformance suite |

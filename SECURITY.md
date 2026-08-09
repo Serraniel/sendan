@@ -79,8 +79,16 @@ individual bug report.
 > your own files and no answer at all for a file somebody sends you from an
 > instance you do not control.
 >
-> **For that case, the answer is being built and is not finished.** It has three
-> parts, all in this repository:
+> **For that case, use the command line client instead of a browser.** It sends
+> and receives, and using it means never executing the instance's code — which is
+> the whole of this problem. It is in this repository and **must be built from
+> source**: there are no released binaries yet
+> ([#44](https://github.com/Serraniel/sendan/issues/44)) and no published
+> checksums to check one against
+> ([#45](https://github.com/Serraniel/sendan/issues/45)).
+>
+> **Checking that a browser is being served the published client is separate,
+> and unfinished.** Three parts, all in this repository:
 >
 > | Part | State |
 > |---|---|
@@ -88,13 +96,11 @@ individual bug report.
 > | A signature over that manifest | [#104](https://github.com/Serraniel/sendan/issues/104) |
 > | `sendan verify <url>`, which fetches what an instance serves and compares | [#103](https://github.com/Serraniel/sendan/issues/103) |
 >
-> The verifier is part of the command line client ([#42](https://github.com/Serraniel/sendan/issues/42),
-> milestone M5), which is also the fixed, reproducibly built binary you would use
-> instead of a browser where the operator is the adversary. Until that ships,
-> **treat this row of the threat model as unmitigated for instances you do not
-> run.** `docs/design.md` §7.1 sets out what the finished mechanism will and will
-> not establish — notably that it cannot detect a backdoor served only to a
-> chosen victim.
+> Until those ship, **a browser talking to an instance you do not run is
+> unmitigated**, and the command line client is the way around it.
+> `docs/design.md` §7.1 sets out what the finished mechanism will and will not
+> establish — notably that it cannot detect a backdoor served only to a chosen
+> victim.
 
 Also out of scope:
 

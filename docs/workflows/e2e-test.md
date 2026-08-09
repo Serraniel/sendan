@@ -36,12 +36,17 @@ directly over plain HTTP makes every such inference happen to be right. An
 upload `Location` naming `http` for a browser talking `https` went unnoticed
 until something reached the instance the way a deployment does.
 
-> [!NOTE]
-> **Transfers between the command line client and the browser are not covered
-> yet.** That is the case that catches divergence between the two
-> implementations in a realistic setting rather than at the vector level, and it
-> needs a CLI, which is M5 (#42). The shared cryptographic vectors cover the
-> same ground at the level of the primitives in the meantime.
+`interop.spec.ts` moves a file **between the command line client and the
+browser**, both ways and with a password. It builds the CLI from the same source
+the browser client came from and drives it as a program, which is the case that
+catches divergence between the two implementations in a realistic setting rather
+than at the level of the primitives. Changing one label in the Go key schedule
+fails all three of its tests.
+
+The shared cryptographic vectors pin the primitives; this pins everything built
+on them — the key schedule's inputs, the metadata envelope, the tus metadata
+header, the link format, and the declared length both clients compute
+independently and the instance enforces.
 
 Retries are configured in `playwright.config.ts` (2 on CI) so a flaky test
 reruns on its own rather than failing the job. Tests that pass only on retry are

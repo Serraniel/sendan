@@ -30,3 +30,8 @@ internal/webui       92.0
 internal/config      93.0
 internal/logging     98.0
 internal/ratelimit   96.0
+# internal/client's remaining gap is I/O failure branches - a write to a
+# temporary file failing, a seek failing - which a test cannot reach without
+# faking the filesystem. The paths that matter, including every refusal a person
+# can be shown, are covered.
+internal/client      82.0

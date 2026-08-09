@@ -11,7 +11,7 @@ require restarting repeatedly to discover the next fault.
 > [!NOTE]
 > **Every variable below is honoured**, with one exception named in the table.
 > The transfer API is complete and the web client speaks it, so a file can be
-> sent and received in a browser. There is no command line client yet.
+> sent and received in a browser, or with the command line client.
 >
 > | Variable | Effect today |
 > |---|---|

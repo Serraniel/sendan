@@ -126,6 +126,25 @@ func deriveKeys(fileID, linkSecret, passwordHash []byte) (*Keys, error) {
 // authentication token (spec §8.1).
 //
 // The server never holds the token itself, only this hash.
+//
+// SHA-256 is correct here, and static analysis reports otherwise.
+// CodeQL's go/weak-sensitive-data-hashing traces a password into this call -
+// truthfully, since a password-protected upload derives AT from a PRK the
+// password contributed to - and concludes that a password is being hashed with
+// a function too fast for the purpose. Two things make that conclusion wrong:
+//
+//   - The password is already stretched. DeriveKeysWithPassword runs it through
+//     Argon2id (PasswordParams.hash) before it reaches the key schedule, which
+//     is the expensive step the rule exists to require.
+//   - What is hashed here is not a password. AT is 32 bytes of HKDF-Expand
+//     output, uniformly distributed to anyone without the link secret. The
+//     speed of a hash only matters when its input can be guessed, and a
+//     256-bit key cannot be. Hashing a high-entropy credential so the server
+//     can verify without holding it is the standard construction.
+//
+// The rule is worth keeping enabled: if this project ever did hash a password
+// directly, that is precisely the defect nobody would notice by reading. The
+// alert is dismissed per instance rather than the query being excluded.
 func AuthTokenHash(authToken []byte) []byte {
 	sum := sha256.Sum256(authToken)
 	return sum[:]

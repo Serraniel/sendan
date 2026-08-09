@@ -401,3 +401,39 @@ func (d *Decryptor) nextRecord() error {
 	}
 	return nil
 }
+
+// EncodedContentLength reports the encoded size of a plaintext of n bytes.
+//
+// An uploader must declare the total length before sending the first byte, and
+// what it sends is the encoding rather than the file, so it has to know this
+// without having produced it. Being wrong is not a rounding error: too small
+// and the server refuses the tail, too large and the upload never completes.
+//
+// The encoding is fully determined by the length, which is what makes this
+// possible. Records hold maxRecordPlaintext bytes; the final one is short, and
+// is emitted even for an empty input because the terminating delimiter is what
+// distinguishes a complete stream from a truncated one.
+//
+// This is the Go half of a value the TypeScript client computes too. The two
+// must agree exactly: a browser and the command line client uploading the same
+// file declare the same number, and a shared test vector pins them together.
+func EncodedContentLength(n int64) (int64, error) {
+	if n < 0 {
+		return 0, fmt.Errorf("%w: plaintext length %d is not a byte count", ErrContent, n)
+	}
+
+	// A whole multiple of the record size fills its last record exactly, and
+	// that record is the final one. Rounding up would claim a further empty
+	// record that the encoder never emits.
+	var nonFinal int64
+	if n > 0 {
+		nonFinal = (n + maxRecordPlaintext - 1) / maxRecordPlaintext
+		nonFinal--
+	}
+	final := n - nonFinal*maxRecordPlaintext
+
+	// The delimiter and the GCM tag are what a record costs beyond its
+	// plaintext.
+	const recordOverhead = 1 + 16
+	return headerSize + nonFinal*RecordSize + final + recordOverhead, nil
+}

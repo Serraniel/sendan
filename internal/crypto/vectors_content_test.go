@@ -197,3 +197,48 @@ func TestVectorsContentEncodingDecrypts(t *testing.T) {
 		})
 	}
 }
+
+// The declared length is pinned to the shared vectors, not only to this
+// implementation's encoder.
+//
+// A browser and the command line client uploading the same file must declare
+// the same number: the instance enforces the declaration, so two clients that
+// disagreed would mean one of them could never complete an upload. Both
+// implementations compute this, and the vector already carries the answer -
+// each case states a plaintext length and the stream it produces.
+func TestVectorsEncodedContentLength(t *testing.T) {
+	path := filepath.Join("..", "..", "testdata", "vectors", "content-encoding.json")
+	raw, err := os.ReadFile(path) //nolint:gosec // fixed test fixture path
+	if err != nil {
+		t.Fatalf("read vectors: %v", err)
+	}
+	var v contentVectors
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatalf("parse vectors: %v", err)
+	}
+
+	checked := 0
+	for _, c := range v.Cases {
+		if c.StreamHex == "" {
+			continue
+		}
+		stream, err := hex.DecodeString(c.StreamHex)
+		if err != nil {
+			t.Fatalf("%s: stream: %v", c.Name, err)
+		}
+
+		got, err := EncodedContentLength(int64(c.PlaintextLength))
+		if err != nil {
+			t.Fatalf("%s: %v", c.Name, err)
+		}
+		if got != int64(len(stream)) {
+			t.Errorf("%s: plaintext of %d bytes declared %d, the vector's stream is %d",
+				c.Name, c.PlaintextLength, got, len(stream))
+		}
+		checked++
+	}
+
+	if checked == 0 {
+		t.Fatal("no vector carried a stream, so nothing was compared")
+	}
+}

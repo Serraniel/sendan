@@ -26,20 +26,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Guards on the CLI command rather than on go.mod: the module now exists
-      # but cmd/sendan-cli does not, and this job builds that specific binary.
-      - id: guard
-        run: |
-          if [ -d cmd/sendan-cli ]; then echo "present=true" >> "$GITHUB_OUTPUT"
-          else echo "present=false" >> "$GITHUB_OUTPUT"
-               echo "::notice::No cmd/sendan-cli yet - skipping. Remove this guard with the CLI."
-          fi
-      - if: steps.guard.outputs.present == 'true'
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
       - name: Build twice and compare
-        if: steps.guard.outputs.present == 'true'
         env:
           CGO_ENABLED: "0"
           SOURCE_DATE_EPOCH: "0"

@@ -89,8 +89,23 @@ copyright lines to existing files — authorship is recorded in the git history.
 ```
 
 It runs every gate continuous integration runs — build, vet, lint, tests,
-coverage, the client build and the asset audit — and reports each by **exit
-status**.
+coverage floors, the client build and the asset audit — and reports each by
+**exit status**.
+
+The coverage floors assume PostgreSQL and S3 are reachable, as they are in CI.
+Without them `internal/store` and `internal/blob` fall short and the gate fails
+on the environment rather than on your change; it says so when they are unset.
+To have them:
+
+```sh
+docker run -d --name sendan-pg -p 15432:5432   -e POSTGRES_USER=sendan -e POSTGRES_PASSWORD=sendan -e POSTGRES_DB=sendan   postgres:17-alpine
+docker run -d --name sendan-minio -p 9000:9000   -e MINIO_ROOT_USER=sendan -e MINIO_ROOT_PASSWORD=sendanminio   minio/minio server /data
+docker exec sendan-minio mc alias set local http://127.0.0.1:9000 sendan sendanminio
+docker exec sendan-minio mc mb local/sendan
+
+export SENDAN_TEST_POSTGRES="postgres://sendan:sendan@127.0.0.1:15432/sendan?sslmode=disable"
+export SENDAN_TEST_S3="s3://sendan:sendanminio@127.0.0.1:9000/sendan?ssl=false"
+```
 
 The browser flows are separate, because they need browsers installed:
 
