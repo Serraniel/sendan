@@ -74,11 +74,12 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 > server delivers the code that performs the encryption, so a malicious operator
 > can serve modified code regardless of the contents of this repository.
 >
-> The intended answer is a command line client — a fixed, reproducibly built
-> binary obtained independently of any instance — and **it is not built yet**.
-> Until it is, an adversary who includes the operator is outside what Sendan can
-> protect against. See [SECURITY.md](SECURITY.md), which says so rather than
-> pointing at a tool nobody can obtain.
+> **Running the instance yourself answers this**, and is what Sendan is for. For
+> an instance you do not control, the answer is the command line client — a
+> fixed, reproducibly built binary, obtained independently, which also verifies
+> that an instance serves the published client. It is milestone M5 and **is not
+> built yet**; until it is, treat that case as unmitigated. See
+> [SECURITY.md](SECURITY.md).
 
 ## Browser requirements
 
