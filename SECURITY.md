@@ -81,11 +81,8 @@ individual bug report.
 >
 > **For that case, use the command line client instead of a browser.** It sends
 > and receives, and using it means never executing the instance's code — which is
-> the whole of this problem. It is in this repository and **must be built from
-> source**: there are no released binaries yet
-> ([#44](https://github.com/Serraniel/sendan/issues/44)) and no published
-> checksums to check one against
-> ([#45](https://github.com/Serraniel/sendan/issues/45)).
+> the whole of this problem. See **Verifying the command line client** below for
+> how to check the binary you have is the one that was published.
 >
 > **Checking that a browser is being served the published client is separate,
 > and unfinished.** Three parts, all in this repository:
@@ -120,6 +117,58 @@ Also out of scope:
   weaker server-enforced password model for interoperability. Uploads made
   through those endpoints are **less secure** than native ones, and the interface
   states so.
+
+## Verifying the command line client
+
+The client is the trust anchor, so it is worth being able to check rather than
+assume. Each release publishes a binary for every supported platform and a
+`SHA256SUMS` file beside them.
+
+**Check what you downloaded:**
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing
+sendan version          # must match the release you took the checksums from
+```
+
+That tells you the file is the one the release published. It does not tell you
+the release was built from the source in this repository — for that, build it
+yourself and compare:
+
+```sh
+git checkout v0.5.0                       # the tag the release names
+SENDAN_VERSION=v0.5.0 SENDAN_COMMIT=<the commit the release names>   ./scripts/release-build.sh
+sha256sum -c dist/SHA256SUMS
+```
+
+Identical bytes mean the published binary contains nothing that is not in the
+source you just read.
+
+> [!IMPORTANT]
+> **Use the same Go toolchain.** Two versions of the compiler do not produce the
+> same bytes, and a mismatch looks exactly like a compromised binary. Each
+> release records the version it used; `REPRODUCING.md` beside the binaries has
+> the exact command.
+
+The build is deterministic because it is made so: `CGO_ENABLED=0` (also what
+makes it static, with no runtime dependency), `-trimpath` so no path from the
+building machine survives, `-buildvcs=false` so no version control state leaks
+in, and `-buildid=` because that identifier is not stable across environments.
+Version and commit are injected rather than discovered, which is why a
+reproduction has to pass them.
+
+Continuous integration builds every target **twice**, with the build cache
+cleared in between, and fails the release if the checksums differ. That check
+runs the same script you would.
+
+> [!NOTE]
+> **The checksums are not yet signed.** Anybody who could replace a binary on
+> the releases page could replace the checksums beside it, so this establishes
+> that a download was not corrupted and that a build is reproducible — not that
+> the release came from this project. Signing is
+> [#104](https://github.com/Serraniel/sendan/issues/104). Until then, a
+> reproduction from source is the stronger check, because it does not depend on
+> the release page being honest.
 
 ## Cryptographic design
 

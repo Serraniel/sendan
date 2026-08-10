@@ -27,12 +27,27 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Serraniel/sendan/internal/client"
+)
+
+// version and commit are stamped by the release tooling.
+//
+// A reproducible build cannot let the toolchain embed them: -buildvcs=false is
+// required for the output to be deterministic, and it removes exactly the
+// version control settings that would otherwise fill these in. So they are
+// injected, and scripts/release-build.sh is what injects them.
+//
+// The defaults are what a build from source says, and are honest about it: a
+// binary reporting "dev" was not one anybody published a checksum for.
+var (
+	version = "dev"
+	commit  = "unknown"
 )
 
 func main() {
@@ -55,6 +70,7 @@ const usage = `sendan — send and receive end-to-end encrypted files
 
   sendan up [file]        encrypt and upload; reads stdin when no file is given
   sendan down <link>      download and decrypt; writes the file named in it
+  sendan version          what this binary is, for checking against a release
 
 Options for up:
   --to <url>              the instance to upload to (or set SENDAN_INSTANCE)
@@ -87,6 +103,11 @@ func run(ctx context.Context, args []string) error {
 		return up(ctx, args[1:])
 	case "down":
 		return down(ctx, args[1:])
+	case "version", "--version":
+		// On stdout: it is the answer to the question that was asked, and
+		// somebody comparing it against a release will want to pipe it.
+		fmt.Printf("sendan %s (%s) %s/%s\n", version, commit, runtime.GOOS, runtime.GOARCH)
+		return nil
 	case "help", "-h", "--help":
 		_, _ = fmt.Fprint(os.Stdout, usage)
 		return nil
