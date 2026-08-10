@@ -4,12 +4,13 @@
 package main
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // There is deliberately no --password <value>.
@@ -20,9 +21,7 @@ import (
 // accepts it is a flag people will use. The three ways below are the ways there
 // are.
 //
-// None of them disable terminal echo. Doing so needs a system call this binary
-// otherwise has no reason to make, and the trust anchor is worth keeping small;
-// the prompt says the password is visible rather than pretending otherwise.
+// The prompt does not echo, the way a system password prompt behaves.
 
 // errNoTerminal reports that a password is needed and nothing can supply it.
 //
@@ -51,34 +50,40 @@ func passwordFromFile(path string) (string, error) {
 	return text, nil
 }
 
-// promptPassword asks at the terminal.
+// promptPassword asks at the terminal, without echoing.
+//
+// Not shown as it is typed, the way a system password prompt behaves. A
+// password on screen survives a shoulder, a shared screen, and terminal
+// scrollback, and none of those are exotic.
+//
+// This is what golang.org/x/term is for. It costs one small package and brings
+// no new module tree - x/sys was already linked through argon2 - and it handles
+// Windows, which hand-rolled termios would not.
 func promptPassword(prompt string) (string, error) {
-	info, err := os.Stdin.Stat()
-	if err != nil {
-		return "", err
-	}
-	if info.Mode()&os.ModeCharDevice == 0 {
+	fd := int(os.Stdin.Fd())
+	if !term.IsTerminal(fd) {
+		// Nothing to ask at. Checked properly rather than by asking whether
+		// stdin is a character device: /dev/null is one and is not a terminal,
+		// so redirecting from it used to reach the prompt and fail with "EOF".
 		return "", errNoTerminal
 	}
 
-	fmt.Fprintf(os.Stderr, "%s (it will be visible as you type): ", prompt)
-	line, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	fmt.Fprintf(os.Stderr, "%s: ", prompt)
+	typed, err := term.ReadPassword(fd)
+	// The newline the terminal did not echo, so the next line starts cleanly
+	// whatever happened.
+	fmt.Fprintln(os.Stderr)
 	if err != nil {
-		// Reaching the end immediately means nothing was there to answer with.
-		// The check above catches a pipe, but not every character device is a
-		// terminal - /dev/null is one, and redirecting from it arrives here.
-		// Telling somebody "EOF" leaves them to work out what to do.
 		if errors.Is(err, io.EOF) {
-			fmt.Fprintln(os.Stderr)
 			return "", errNoTerminal
 		}
 		return "", fmt.Errorf("reading the password: %w", err)
 	}
-	fmt.Fprintln(os.Stderr)
 
-	// Only the line ending is removed. A password may legitimately begin or end
-	// with a space, and trimming it would silently change the key.
-	return strings.TrimRight(line, "\r\n"), nil
+	// Returned as typed. A password may legitimately begin or end with a space,
+	// and trimming would silently change the key. ReadPassword stops at the
+	// newline and does not include it.
+	return string(typed), nil
 }
 
 // readPassword obtains the password for opening a file.
@@ -116,8 +121,15 @@ func readNewPassword(fromFile string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// Pressing return is an answer: no password. The scheme has no such thing
+	// as an empty one - an upload marked protected that any link holder can
+	// open is a meaningless state, and spec §4 refuses it - so this means the
+	// upload goes without, and says so twice rather than failing.
 	if first == "" {
-		return "", errors.New("an empty password is not one; the upload was not started")
+		fmt.Fprintln(os.Stderr,
+			"No password given, so this file will not have one: anyone with the link can open it.")
+		return "", nil
 	}
 
 	again, err := promptPassword("The same password again")

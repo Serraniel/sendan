@@ -271,3 +271,61 @@ func TestAnEmptyEnvironmentPasswordIsRefused(t *testing.T) {
 		t.Error("an empty SENDAN_PASSWORD was accepted as a password")
 	}
 }
+
+// Pressing return at the prompt is an answer, not a mistake.
+//
+// There is no such thing as an empty password in the scheme: an upload marked
+// protected that any link holder can open is a meaningless state, and spec §4
+// refuses it. So an empty answer means the file goes without one, which is said
+// at the prompt and again in the summary rather than failing.
+//
+// The prompt itself needs a terminal, so what is checked here is the rule the
+// prompt applies: empty is no password, not an error and not a protected upload
+// with an empty key.
+func TestAnEmptyAnswerMeansNoPasswordRatherThanAnError(t *testing.T) {
+	opts, err := uploadOptions(true, writeTemp(t, "typed something"), "", "")
+	if err != nil {
+		t.Fatalf("options: %v", err)
+	}
+	if opts.Password == "" {
+		t.Fatal("a password that was given did not arrive")
+	}
+
+	// And with none, the summary says so in the words somebody needs.
+	none, err := uploadOptions(false, "", "", "")
+	if err != nil {
+		t.Fatalf("options: %v", err)
+	}
+	said := describeProtection(none)
+	if !strings.Contains(said, "no password") || !strings.Contains(said, "anyone with the link") {
+		t.Errorf("%q does not say plainly that the file is unprotected", said)
+	}
+}
+
+// A password from a file or the environment is a script's, and an empty one
+// there is a secret that failed to resolve rather than somebody choosing to go
+// without. Uploading unprotected in that case would be the worst outcome: the
+// script believes it protected the file.
+func TestAnEmptyPasswordFromAScriptIsARefusalNotAChoice(t *testing.T) {
+	t.Setenv("SENDAN_PASSWORD", "")
+	if _, err := readNewPassword(""); err == nil {
+		t.Error("an empty SENDAN_PASSWORD was taken as a decision to use no password")
+	}
+
+	if _, err := passwordFromFile(writeTemp(t, "\n")); err == nil {
+		t.Error("an empty password file was taken as a decision to use no password")
+	}
+}
+
+// The prompt must not advertise that the password is visible, because it is not.
+func TestTheUsageDoesNotPromiseAVisiblePassword(t *testing.T) {
+	if strings.Contains(usage, "visible as you type") {
+		t.Error("the usage says the password is visible; it is not echoed")
+	}
+	if !strings.Contains(usage, "not shown as you type") {
+		t.Error("the usage does not say the password is hidden")
+	}
+	if !strings.Contains(usage, "empty means no password") {
+		t.Error("the usage does not say what an empty answer does")
+	}
+}

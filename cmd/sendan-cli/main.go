@@ -59,7 +59,8 @@ const usage = `sendan — send and receive end-to-end encrypted files
 Options for up:
   --to <url>              the instance to upload to (or set SENDAN_INSTANCE)
   --name <name>           the filename a recipient sees; required for stdin
-  --password              protect the file with a password, asked for twice
+  --password              protect the file with a password; asked for twice,
+                          not shown as you type, and empty means no password
   --password-file <path>  read that password from a file instead
   --expires <duration>    30m, 12h, 7d; the instance decides if omitted
   --downloads <n>         allow n downloads, then remove it

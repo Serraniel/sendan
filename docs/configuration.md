@@ -37,7 +37,7 @@ because this is where somebody looks.
 > **There is no `--password <value>`, deliberately.** An argument appears in the
 > process list, in shell history, and in whatever a CI job records, and the
 > password contributes to the wrapping key — so it is the one value that must
-> not be written down. `--password` prompts and asks twice;
+> not be written down. `--password` prompts, without echoing, and asks twice;
 > `--password-file <path>` reads one; `SENDAN_PASSWORD` is for scripts, where
 > the alternative is worse.
 >
@@ -45,6 +45,16 @@ because this is where somebody looks.
 > file nobody can open — not the sender, who never tries, and not the recipient,
 > who is told only that the password did not work. Nothing later in the system
 > can detect it.
+>
+> **Pressing return at the prompt means no password**, and the upload says so
+> twice rather than failing. There is no such thing as an empty password here: an
+> upload marked protected that any link holder could open is a meaningless state,
+> and spec §4 refuses it.
+>
+> An empty `SENDAN_PASSWORD`, or an empty password file, is refused instead. In a
+> script that is a secret which failed to resolve, not somebody choosing to go
+> without — and uploading unprotected there would leave the script believing it
+> had protected the file.
 
 ## Server
 
