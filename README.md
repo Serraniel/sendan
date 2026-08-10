@@ -24,9 +24,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > limit.
 >
 > **Partly built:** the command line client sends and receives (`sendan up`,
-> `sendan down`), with password, expiry and download-limit options, and must be
-> built from source — there are no released binaries, no published checksums,
-> and no `sendan verify` yet.
+> `sendan down`), with password, expiry and download-limit options. Releases
+> carry static binaries for Linux, macOS and Windows on both architectures, with
+> checksums and a reproduction procedure — but they are not signed yet, and
+> there is no `sendan verify`.
 >
 > **Not built:** the container image.
 

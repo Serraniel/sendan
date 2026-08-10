@@ -29,27 +29,68 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
+      # Every target, through the same script a user runs to reproduce a
+      # release. Checking one target would leave five unverified, and checking
+      # them with different commands would verify something nobody can repeat.
       - name: Build twice and compare
-        env:
-          CGO_ENABLED: "0"
-          SOURCE_DATE_EPOCH: "0"
         run: |
           set -euo pipefail
-          flags="-trimpath -ldflags=-buildid= -buildvcs=false"
-          # shellcheck disable=SC2086
-          go build $flags -o /tmp/build-a ./cmd/sendan-cli
+          export SENDAN_VERSION="${GITHUB_REF_NAME:-dev}"
+          export SENDAN_COMMIT="${GITHUB_SHA:-unknown}"
+
+          ./scripts/release-build.sh /tmp/dist-a >/dev/null
           go clean -cache
-          # shellcheck disable=SC2086
-          go build $flags -o /tmp/build-b ./cmd/sendan-cli
-          a=$(sha256sum /tmp/build-a | cut -d' ' -f1)
-          b=$(sha256sum /tmp/build-b | cut -d' ' -f1)
-          echo "build A: $a"
-          echo "build B: $b"
-          if [ "$a" != "$b" ]; then
+          ./scripts/release-build.sh /tmp/dist-b >/dev/null
+
+          if ! diff -u /tmp/dist-a/SHA256SUMS /tmp/dist-b/SHA256SUMS; then
             echo "::error::Build is not reproducible - users cannot verify the released binary"
             exit 1
           fi
-          echo "Reproducible."
+          echo "Reproducible across $(wc -l < /tmp/dist-a/SHA256SUMS) targets:"
+          cat /tmp/dist-a/SHA256SUMS
+
+  # The command line client's binaries, built by the same script as above and
+  # published with their checksums. Deliberately not waiting on the release tool
+  # in the job below: this is the trust anchor, and its build path is kept
+  # simple enough that somebody can repeat it by hand.
+  cli-binaries:
+    name: Publish the command line client
+    runs-on: ubuntu-latest
+    needs: [verify-reproducible]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Build every target
+        run: |
+          set -euo pipefail
+          export SENDAN_VERSION="${GITHUB_REF_NAME:-dev}"
+          export SENDAN_COMMIT="${GITHUB_SHA:-unknown}"
+          ./scripts/release-build.sh dist
+      - name: Record the toolchain a reproduction needs
+        run: |
+          {
+            echo "Built with: $(go version)"
+            echo
+            echo "To reproduce:"
+            echo
+            echo '```sh'
+            echo "git checkout ${GITHUB_REF_NAME:-HEAD}"
+            echo "SENDAN_VERSION=${GITHUB_REF_NAME:-dev} SENDAN_COMMIT=${GITHUB_SHA:-unknown} \\"
+            echo "  ./scripts/release-build.sh"
+            echo "sha256sum -c dist/SHA256SUMS"
+            echo '```'
+          } > dist/REPRODUCING.md
+          cat dist/REPRODUCING.md
+      - name: Attach to the release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
 
   binaries:
     name: Publish binaries
