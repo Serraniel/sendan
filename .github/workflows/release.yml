@@ -66,12 +66,27 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
       - name: Build every target
         run: |
           set -euo pipefail
           export SENDAN_VERSION="${GITHUB_REF_NAME:-dev}"
           export SENDAN_COMMIT="${GITHUB_SHA:-unknown}"
           ./scripts/release-build.sh dist
+
+      # The statement `sendan verify` compares an instance against. Published
+      # here rather than with the container image, because a verifier that has
+      # to wait for the release tooling is a verifier nobody can use - and it is
+      # the same release the binaries come from, which is what makes the version
+      # in it mean anything.
+      - name: State what this release's client hashes to
+        run: |
+          set -euo pipefail
+          (cd web && npm ci && npm run build)
+          SENDAN_VERSION="${GITHUB_REF_NAME:-dev}" SENDAN_COMMIT="${GITHUB_SHA:-unknown}" \
+            ./scripts/asset-manifest.sh dist/manifest.json
       - name: Record the toolchain a reproduction needs
         run: |
           {
