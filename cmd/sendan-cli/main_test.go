@@ -226,3 +226,85 @@ func TestALinkThatIsNotOneIsRefusedBeforeAnyRequest(t *testing.T) {
 		t.Errorf("%v does not say what is wrong with it", err)
 	}
 }
+
+// The requirement this command is built around: a password must never be
+// available as a plain argument.
+//
+// An argument appears in the process list, in shell history, and in whatever a
+// CI job records, and the password contributes to the wrapping key. A flag that
+// accepted one is a flag people would use, so there must not be one - and the
+// usage has to say where the password does come from, or somebody will look for
+// the flag and conclude they misremembered.
+func TestThereIsNoWayToPassAPasswordAsAnArgument(t *testing.T) {
+	t.Setenv("SENDAN_INSTANCE", "http://127.0.0.1:1")
+
+	// Anything that looks like it takes a password value must be refused as an
+	// unknown option rather than quietly consuming it.
+	for _, args := range [][]string{
+		{"up", "--password=hunter2", "f"},
+		{"up", "--password-value", "hunter2", "f"},
+		{"up", "-p", "hunter2", "f"},
+		{"up", "--pass", "hunter2", "f"},
+	} {
+		err := run(t.Context(), args)
+		if err == nil {
+			t.Errorf("%v was accepted", args)
+			continue
+		}
+		if !strings.Contains(err.Error(), "unknown option") {
+			t.Errorf("%v: %v, want it refused as an unknown option", args, err)
+		}
+	}
+
+	// And the usage points at the ways there are, and says why.
+	for _, mentions := range []string{"--password-file", "SENDAN_PASSWORD", "process list"} {
+		if !strings.Contains(usage, mentions) {
+			t.Errorf("the usage does not mention %q", mentions)
+		}
+	}
+	if !strings.Contains(usage, "There is no --password <value>") {
+		t.Error("the usage does not say that a password cannot be given as an argument")
+	}
+
+	// The options list must not offer one. Checked against the list rather than
+	// the whole text, which mentions the flag in order to deny it.
+	options := usage[strings.Index(usage, "Options for up:"):]
+	options = options[:strings.Index(options, "There is no")]
+	for _, line := range strings.Split(options, "\n") {
+		if strings.Contains(line, "--password") && strings.Contains(line, "<") &&
+			!strings.Contains(line, "--password-file") {
+			t.Errorf("the options list offers a password value: %q", strings.TrimSpace(line))
+		}
+	}
+}
+
+// The new options are read before anything is opened or sent, so a mistake
+// stops the command rather than being discovered after a file has been read.
+func TestBadOptionsStopBeforeAnythingIsSent(t *testing.T) {
+	t.Setenv("SENDAN_INSTANCE", "http://127.0.0.1:1")
+
+	file := filepath.Join(t.TempDir(), "a.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	cases := map[string][]string{
+		"a lifetime that is not one": {"up", "--expires", "soon", file},
+		"a count that is not one":    {"up", "--downloads", "many", file},
+		"zero downloads":             {"up", "--downloads", "0", file},
+		"--expires with no value":    {"up", "--expires"},
+		"--downloads with no value":  {"up", "--downloads"},
+	}
+
+	for name, args := range cases {
+		err := run(t.Context(), args)
+		if err == nil {
+			t.Errorf("%s: accepted", name)
+			continue
+		}
+		// Not a connection failure: it never got that far.
+		if strings.Contains(err.Error(), "connection refused") {
+			t.Errorf("%s: reached the network before noticing: %v", name, err)
+		}
+	}
+}
