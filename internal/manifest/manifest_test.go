@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Serraniel and the Sendan contributors
 
-package main
+package manifest
 
 import (
 	"encoding/json"
@@ -37,7 +37,7 @@ func keys(m map[string]string) []string {
 func TestEveryFileInTheBuildIsCovered(t *testing.T) {
 	build := aBuild()
 
-	manifest, err := Build(build, "v0.4.0", "abc123")
+	manifest, err := Build(build, "v0.4.0", "abc123", false)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestNothingIsSkipped(t *testing.T) {
 		"empty.js":                  {Data: []byte("")},
 	}
 
-	manifest, err := Build(build, "v1", "c")
+	manifest, err := Build(build, "v1", "c", false)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestTheDigestIsSubresourceIntegritySpelling(t *testing.T) {
 	// 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
 	const helloSHA256 = "sha256-LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ="
 
-	manifest, err := Build(fstest.MapFS{"a.js": {Data: []byte("hello")}}, "v1", "c")
+	manifest, err := Build(fstest.MapFS{"a.js": {Data: []byte("hello")}}, "v1", "c", false)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -124,11 +124,11 @@ func TestTheDigestIsSubresourceIntegritySpelling(t *testing.T) {
 // Two builds of the same bytes must produce the same manifest, or a verifier
 // comparing against a published one has nothing to compare.
 func TestTheManifestIsDeterministic(t *testing.T) {
-	first, err := Build(aBuild(), "v1", "c")
+	first, err := Build(aBuild(), "v1", "c", false)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	second, err := Build(aBuild(), "v1", "c")
+	second, err := Build(aBuild(), "v1", "c", false)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestTheManifestIsDeterministic(t *testing.T) {
 // A manifest covering nothing would verify anything, so an empty build is a
 // refusal rather than a document.
 func TestAnEmptyBuildIsRefused(t *testing.T) {
-	if _, err := Build(fstest.MapFS{}, "v1", "c"); err == nil {
+	if _, err := Build(fstest.MapFS{}, "v1", "c", false); err == nil {
 		t.Fatal("an empty build produced a manifest")
 	}
 }
@@ -157,7 +157,7 @@ func TestAnEmptyBuildIsRefused(t *testing.T) {
 func TestTheSchemaIsStated(t *testing.T) {
 	// A verifier reading a manifest it does not understand must refuse rather
 	// than guess at the shape.
-	manifest, err := Build(aBuild(), "v1", "c")
+	manifest, err := Build(aBuild(), "v1", "c", false)
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

@@ -170,6 +170,67 @@ runs the same script you would.
 > reproduction from source is the stronger check, because it does not depend on
 > the release page being honest.
 
+## Verifying an instance
+
+The client bundle is the trust boundary: the server only ever holds ciphertext,
+so what decides whether a file is safe is the JavaScript the instance delivered.
+Checking an instance therefore means checking what it served.
+
+```sh
+sendan verify https://files.example.org
+```
+
+```
+  instance   https://files.example.org
+  claims     v0.5.0, commit 1a2b3c4, unmodified
+  manifest   v0.5.0
+
+  ✓ 41 of 41 assets match the published client
+```
+
+and when they do not, the exit status is non-zero and the assets are named:
+
+```
+  ✗ /_app/immutable/chunks/crypto.BxK2.js
+      served   sha256-9f3a…
+      expected sha256-2c71…
+
+  This instance is not serving the published client. Do not assume
+  uploads made through it are end-to-end encrypted.
+```
+
+The manifest comes from the **release**, never from the instance — an instance
+serving the statement it is measured against would be attesting to itself.
+`--manifest <path|url>` takes one directly, which is how a fork with its own
+releases is checked, and how this works offline.
+
+`/api/source` is read only to know *which* published build to compare against.
+It is a claim, and an instance that lies about its version is caught by the
+digests failing to match the version it named.
+
+### What this establishes
+
+| | |
+|---|---|
+| The instance serves the published client | **verified**, for the response this verifier received |
+| The client was modified | **detected** |
+| `/api/source` misreports the version | **detected** |
+| A backdoored bundle served to a chosen victim and a clean one to verifiers | ⚠️ **not detected** |
+| Server-side code | not covered, and does not need to be: it only ever holds ciphertext |
+
+That last gap is inherent to verifying from a different client than the victim
+uses. It is narrowed by anyone being able to run this, from anywhere, at any
+time: a broad attack is visible to any observer, so it has to be precisely
+targeted to survive. Closing it for a specific person would need a verifier
+inside their browser, which `docs/design.md` §7.1 records as considered and not
+planned.
+
+> [!NOTE]
+> Verifying the binary (above) and verifying an instance (here) answer different
+> questions, and both are worth asking. The first says the program doing the
+> checking is the published one. The second says the instance is serving the
+> published client. Neither implies the other.
+
 ## Cryptographic design
 
 The full scheme, including the reasoning for using AES-256-GCM and for **not**

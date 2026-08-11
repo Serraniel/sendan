@@ -34,4 +34,8 @@ internal/ratelimit   96.0
 # temporary file failing, a seek failing - which a test cannot reach without
 # faking the filesystem. The paths that matter, including every refusal a person
 # can be shown, are covered.
-internal/client      82.0
+internal/client      84.0
+# internal/manifest's gap is the same shape: a file that cannot be opened or
+# read while being digested. The format itself, and that it covers every file in
+# a build, are covered.
+internal/manifest    80.0

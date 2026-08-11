@@ -70,6 +70,7 @@ const usage = `sendan — send and receive end-to-end encrypted files
 
   sendan up [file]        encrypt and upload; reads stdin when no file is given
   sendan down <link>      download and decrypt; writes the file named in it
+  sendan verify <url>     check an instance serves the published client
   sendan version          what this binary is, for checking against a release
 
 Options for up:
@@ -83,6 +84,10 @@ Options for up:
 
 Options for down:
   -o <path>               write here instead; "-" means stdout
+
+Options for verify:
+  --manifest <path|url>   compare against this manifest instead of the release
+                          for the version the instance claims
 
 There is no --password <value>: an argument appears in the process list and in
 shell history, and the password contributes to the key. Use the prompt, a file,
@@ -103,6 +108,8 @@ func run(ctx context.Context, args []string) error {
 		return up(ctx, args[1:])
 	case "down":
 		return down(ctx, args[1:])
+	case "verify":
+		return verify(ctx, args[1:])
 	case "version", "--version":
 		// On stdout: it is the answer to the question that was asked, and
 		// somebody comparing it against a release will want to pipe it.
