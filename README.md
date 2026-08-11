@@ -27,7 +27,8 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > `sendan down`), with password, expiry and download-limit options. Releases
 > carry static binaries for Linux, macOS and Windows on both architectures, with
 > checksums and a reproduction procedure, and `sendan verify` checks that an
-> instance serves the published client — but releases are not signed yet.
+> instance serves the published client. **No release has been cut yet**, so the
+> client is built from source today, and releases are not signed.
 >
 > **Not built:** the container image.
 
@@ -82,10 +83,17 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 > can serve modified code regardless of the contents of this repository.
 >
 > **Running the instance yourself answers this**, and is what Sendan is for. For
-> an instance you do not control, the answer is the command line client: using it
-> means never executing that instance's code. It sends and receives today, but
-> **must be built from source** — there is no released binary to check, and no
-> `sendan verify` yet. See [SECURITY.md](SECURITY.md) for what that leaves open.
+> an instance you do not control, there are two answers, and both exist:
+>
+> - Use the command line client instead of a browser. Using it means never
+>   executing that instance's code. See [`docs/cli.md`](docs/cli.md).
+> - `sendan verify <url>` checks that an instance is serving the published
+>   client, against a manifest from the release rather than from the instance.
+>
+> What is still missing is a **signature** over that manifest
+> ([#104](https://github.com/Serraniel/sendan/issues/104)), and any published
+> release at all — no tag has been cut, so the client is built from source
+> today. [SECURITY.md](SECURITY.md) sets out what each check establishes.
 
 ## Browser requirements
 
@@ -124,6 +132,7 @@ fail. The first two are bounded by the disk.
 | [`docs/design.md`](docs/design.md) | Architecture, cryptographic scheme, and the reasoning behind each decision |
 | [`docs/spec/wire-format-v1.md`](docs/spec/wire-format-v1.md) | Normative wire format and key schedule |
 | [`docs/workflows/`](docs/workflows/README.md) | What each CI workflow does, and what a failure means |
+| [`docs/cli.md`](docs/cli.md) | The command line client: installing it, and every command and option |
 | [`docs/api.md`](docs/api.md) | Every endpoint: paths, methods, status codes and what each returns |
 | [`docs/configuration.md`](docs/configuration.md) | Every environment variable and its default |
 | [`SECURITY.md`](SECURITY.md) | Threat model and vulnerability disclosure policy |

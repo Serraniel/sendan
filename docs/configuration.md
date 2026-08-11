@@ -26,7 +26,8 @@ require restarting repeatedly to discover the next fault.
 ## The command line client
 
 The client reads two variables. Neither is a server setting, and both are here
-because this is where somebody looks.
+because this is where somebody looks; [`docs/cli.md`](cli.md) has the commands
+themselves.
 
 | Variable | Meaning |
 |---|---|
