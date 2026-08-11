@@ -85,16 +85,18 @@ individual bug report.
 > how to check the binary you have is the one that was published.
 >
 > **Checking that a browser is being served the published client is separate,
-> and unfinished.** Three parts, all in this repository:
+> and can be done today.** Three parts, all in this repository:
 >
 > | Part | State |
 > |---|---|
 > | A digest manifest of every file in the published client | **done** — published with each release ([#102](https://github.com/Serraniel/sendan/issues/102)) |
+> | `sendan verify <url>`, which fetches what an instance serves and compares | **done** — see **Verifying an instance** below ([#103](https://github.com/Serraniel/sendan/issues/103)) |
 > | A signature over that manifest | [#104](https://github.com/Serraniel/sendan/issues/104) |
-> | `sendan verify <url>`, which fetches what an instance serves and compares | [#103](https://github.com/Serraniel/sendan/issues/103) |
 >
-> Until those ship, **a browser talking to an instance you do not run is
-> unmitigated**, and the command line client is the way around it.
+> What the missing signature costs: anybody who could replace the manifest on
+> the releases page could replace what you check against. The check still
+> detects an instance modifying the client it was given, which is the common
+> case, and does not detect a release page that has itself been tampered with.
 > `docs/design.md` §7.1 sets out what the finished mechanism will and will not
 > establish — notably that it cannot detect a backdoor served only to a chosen
 > victim.
@@ -122,7 +124,15 @@ Also out of scope:
 
 The client is the trust anchor, so it is worth being able to check rather than
 assume. Each release publishes a binary for every supported platform and a
-`SHA256SUMS` file beside them.
+`SHA256SUMS` file beside them, at
+[github.com/Serraniel/sendan/releases](https://github.com/Serraniel/sendan/releases).
+[`docs/cli.md`](docs/cli.md) has the per-platform download and install steps.
+
+> [!NOTE]
+> **No release has been cut yet.** The pipeline that produces and checks these
+> is in place, and this describes what it publishes. Until a tag exists, build
+> from source — which is the stronger check anyway, and is the second procedure
+> below.
 
 **Check what you downloaded:**
 
@@ -136,8 +146,12 @@ the release was built from the source in this repository — for that, build it
 yourself and compare:
 
 ```sh
-git checkout v0.5.0                       # the tag the release names
-SENDAN_VERSION=v0.5.0 SENDAN_COMMIT=<the commit the release names>   ./scripts/release-build.sh
+git checkout v0.5.0        # the tag the release names
+
+SENDAN_VERSION=v0.5.0 \
+SENDAN_COMMIT=<the commit the release names> \
+  ./scripts/release-build.sh
+
 sha256sum -c dist/SHA256SUMS
 ```
 

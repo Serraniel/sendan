@@ -26,6 +26,7 @@ command line client are produced from a single Go module.
 | `cmd/sendan` | Server entrypoint |
 | `cmd/sendan-cli` | The command line client, deliberately a separate binary: it is the program a user is asked to obtain and trust, so it links none of the server's dependencies |
 | `internal/client` | Speaking the API from the outside — the Go half of what `web/src/lib` does in the browser |
+| `internal/manifest` | The published statement of what a client build contains, written by the release and read by `sendan verify` |
 | `internal/crypto` | The Go half of the cryptographic scheme (spec §4–§7) |
 | `internal/store` | Upload metadata: SQLite and PostgreSQL, plus a conformance suite |
 | `internal/blob` | Upload ciphertext: filesystem and S3, plus crypto-shredding and a conformance suite |
@@ -799,7 +800,7 @@ independently of the operator:
 |---|---|---|
 | A digest manifest of every asset in the published client | the release, built by the project's pipeline | [#102](https://github.com/Serraniel/sendan/issues/102) — **done** |
 | A signature over that manifest | the release, signed with cosign | [#104](https://github.com/Serraniel/sendan/issues/104) |
-| `sendan verify <url>`, which fetches the instance's assets and compares | the command line client, obtained once and reused | [#103](https://github.com/Serraniel/sendan/issues/103) |
+| `sendan verify <url>`, which fetches the instance's assets and compares | the command line client, obtained once and reused | [#103](https://github.com/Serraniel/sendan/issues/103) — **done** |
 
 The instance is given no part in it beyond serving the bytes it would serve any
 visitor. It is not asked, and its answers are not relied on.
