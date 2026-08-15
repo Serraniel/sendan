@@ -296,10 +296,42 @@ cosign verify-blob \
   manifest.json
 ```
 
-The two signatures rest on different things. The minisign one is made offline
-by a key CI never holds, so compromising this repository does not produce one.
-The Sigstore one is made by CI and cannot be made without running the workflow,
-which is publicly logged. Checking both means a forgery has to survive both.
+### What these signatures do not establish
+
+> [!IMPORTANT]
+> **All three signing keys are reachable by the release pipeline, so a
+> compromise of this repository can produce every one of them.** Releases are
+> tagged and signed automatically, and anything automation can do unattended,
+> whoever controls the automation can also do. No signature here survives that.
+
+That is a deliberate trade, and what is bought with it is **discovery rather
+than prevention**:
+
+- Every Sigstore signature is recorded in a **public transparency log**, bound
+  to the workflow run that made it. A malicious release cannot be produced
+  quietly; it leaves a permanent public record naming what signed it and when.
+- The build is **reproducible**. Anyone can rebuild from source and compare
+  bytes, so a backdoor has to be present in source that anybody can read, not
+  smuggled into a binary.
+
+"We cannot stop it, and it cannot be done silently" is a weaker property than
+an offline key would give, and it is the true one. An offline key would also
+not survive a *persistent* compromise, since the public key the client checks
+against lives in this source tree and could be replaced — it would protect
+already-installed clients and make the change visible in history, which is the
+part that is genuinely lost here.
+
+The three signatures still fail differently, which is why there are three:
+
+| | Cannot be forged by |
+|---|---|
+| Sigstore | anyone unable to run this workflow — and every issuance is logged |
+| minisign | anyone without the release key, and it is checkable by a tool this project did not write |
+| SLH-DSA | anyone with a quantum computer and a recording of this release |
+
+The last is the one that outlives the others: an adversary who archives a
+release today and factors elliptic curves in a decade defeats the first two and
+not the third.
 
 `SHA256SUMS` is signed the same way, so the checksum file the install
 instructions tell you to trust is itself checkable.
