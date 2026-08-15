@@ -27,6 +27,7 @@ command line client are produced from a single Go module.
 | `cmd/sendan-cli` | The command line client, deliberately a separate binary: it is the program a user is asked to obtain and trust, so it links none of the server's dependencies |
 | `internal/client` | Speaking the API from the outside — the Go half of what `web/src/lib` does in the browser |
 | `internal/manifest` | The published statement of what a client build contains, written by the release and read by `sendan verify` |
+| `internal/signature` | Verifying release signatures: minisign-format Ed25519, and SLH-DSA. Verification only — nothing here can sign |
 | `internal/crypto` | The Go half of the cryptographic scheme (spec §4–§7) |
 | `internal/store` | Upload metadata: SQLite and PostgreSQL, plus a conformance suite |
 | `internal/blob` | Upload ciphertext: filesystem and S3, plus crypto-shredding and a conformance suite |
@@ -42,7 +43,8 @@ command line client are produced from a single Go module.
 | `web/e2e` | Browser flows, run against a real instance |
 | `testdata/vectors` | Shared cross-language test vectors |
 | `scripts` | Checks continuous integration runs and contributors can run directly; `verify.sh` runs all of them |
-| `tools` | Programs the project builds for its own use and does not ship: the asset manifest, and a TLS proxy the browser tests need |
+| `deploy` | Configuration an operator runs rather than builds: the reverse proxy `compose.yaml` starts |
+| `tools` | Programs the project builds for its own use and does not ship: the asset manifest, a TLS proxy the browser tests need, and the post-quantum signer |
 
 Each backend pair is held to a single conformance suite — `store/storetest` and
 `blob/blobtest` — so a second backend is not a second set of assumptions.

@@ -19,9 +19,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > against each other by shared test vectors; metadata storage on SQLite and
 > PostgreSQL; blob storage on the filesystem and S3-compatible object stores,
 > with encryption at rest; the expiry, revocation and reaping lifecycle;
-> configuration, structured logging and abuse controls; and the web client's
+> configuration, structured logging and abuse controls; the web client's
 > upload and download flows, with per-upload password, expiry and download
-> limit.
+> limit; and optional wrapping of at-rest keys under an operator-held master
+> key, so a database backup carries nothing that opens a blob.
 >
 > **Partly built:** the command line client sends and receives (`sendan up`,
 > `sendan down`), with password, expiry and download-limit options. Releases
@@ -31,8 +32,9 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > client is built from source today. The container image builds and runs; it is
 > published on the first tag.
 >
-> **Not yet in place:** the release signing key, so nothing is signed with it
-> yet — `sendan verify` says so rather than checking against nothing.
+> **Not yet in place:** the two release signing keys. The pipeline signs with
+> them automatically once they exist; until then nothing is signed with them and
+> `sendan verify` says so rather than checking against nothing.
 
 ## Features
 
@@ -92,10 +94,13 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 > - `sendan verify <url>` checks that an instance is serving the published
 >   client, against a manifest from the release rather than from the instance.
 >
-> What is still missing is a **signature** over that manifest
-> ([#104](https://github.com/Serraniel/sendan/issues/104)), and any published
-> release at all — no tag has been cut, so the client is built from source
-> today. [SECURITY.md](SECURITY.md) sets out what each check establishes.
+> The manifest is **signed** — three ways, and `sendan verify` refuses one it
+> cannot authenticate. What is still missing is any published release at all: no
+> tag has been cut, so the client is built from source today, and the two keys
+> the pipeline signs with have yet to be generated.
+> [SECURITY.md](SECURITY.md) sets out what each check does and does not
+> establish — including that none of the signatures survives a compromise of
+> this repository.
 
 ## Browser requirements
 

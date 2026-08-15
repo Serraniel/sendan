@@ -88,6 +88,62 @@ The image runs as UID **65532**, and the volume is created owned by it. A bind
 mount from the host is not: `chown 65532:65532` the directory first, or the
 process will start and fail to write.
 
+### The three shapes
+
+Metadata and blobs are configured separately, which gives three deployments
+worth naming. [`compose.yaml`](../compose.yaml) is the first; the other two are
+the same file with `environment:` changed.
+
+**One volume, no other services.** The default, and the right answer for a
+personal instance:
+
+```yaml
+environment:
+  SENDAN_BASE_URL: https://${SENDAN_DOMAIN}
+  SENDAN_TRUSTED_PROXIES: "1"
+volumes:
+  - sendan-data:/var/lib/sendan
+```
+
+**Object storage for blobs, SQLite for metadata.** Content goes to a bucket;
+the volume still holds the database, so it is still the thing to back up:
+
+```yaml
+environment:
+  SENDAN_BASE_URL: https://${SENDAN_DOMAIN}
+  SENDAN_TRUSTED_PROXIES: "1"
+  SENDAN_STORAGE: s3://KEY:SECRET@s3.example.org/sendan
+volumes:
+  - sendan-data:/var/lib/sendan
+```
+
+**Neither on disk — no volume at all.** With PostgreSQL and an object store,
+the container holds nothing that must survive it:
+
+```yaml
+environment:
+  SENDAN_BASE_URL: https://${SENDAN_DOMAIN}
+  SENDAN_TRUSTED_PROXIES: "1"
+  SENDAN_DATABASE: postgres://sendan:secret@db.example.org/sendan
+  SENDAN_STORAGE: s3://KEY:SECRET@s3.example.org/sendan
+# no volumes at all
+```
+
+This is the shape to run more than one replica in. Nothing about a partial
+upload is kept in the process or on its disk, so a resumed chunk reaching a
+different replica finds the upload rather than nothing.
+
+> [!IMPORTANT]
+> Deleting is **weaker on PostgreSQL than on SQLite**. A deleted row survives in
+> the write-ahead log until its segment is recycled, and PostgreSQL offers no
+> way to truncate that on demand. `docs/design.md` §3 sets out exactly what
+> persists; a master key narrows it, because what survives is then a wrapped key
+> rather than a usable one.
+
+Credentials appear in these URLs, so they belong in an environment file or a
+secret rather than a compose file in version control. The startup log redacts
+them; a `git log` does not.
+
 ## In front of it
 
 The binary does not terminate TLS. Run it behind a reverse proxy that does, and
@@ -150,10 +206,38 @@ it does buffer responses unless told otherwise, which is what
 There is less to back up than usual, and restoring one has a consequence worth
 understanding before it happens.
 
-The volume holds two halves that must be consistent with each other: the
-metadata, which records what exists and when it expires, and the blobs, which
-hold the ciphertext. Copying them at different moments gives metadata naming
-blobs that are not in the copy, or blobs no row refers to.
+**The two halves are useless apart, and must be captured together.** The
+metadata records what exists, when it expires, and — crucially — the key that
+decrypts each blob. The blobs hold the ciphertext. A database backup without
+its blobs restores rows pointing at content that is gone; a backup of the blobs
+without the database restores files nothing holds a key for, which is to say
+noise. Copying them at different moments gives a subtler version of the same
+thing: metadata naming blobs the copy does not contain, or blobs no row refers
+to.
+
+That matters most in the split deployments, where the halves live in different
+systems and are easy to back up on different schedules:
+
+| Shape | Metadata | Blobs |
+|---|---|---|
+| one volume | in the volume | in the volume — one archive covers both |
+| object store for blobs | in the volume | in the bucket: enable versioning, and keep it at least as long as the volume's backups |
+| PostgreSQL and object store | `pg_dump` | the bucket — take the dump **first**, so every row it names already exists in the bucket |
+
+**Take the metadata first** in every shape. Whichever order you choose, uploads
+that happen during the window end up mismatched; the order decides which kind:
+
+- Metadata first — the mismatches are uploads *deleted* during the window, so
+  the restored instance refuses files that were meant to be gone anyway, and
+  gains some unreferenced blobs.
+- Blobs first — the mismatches are uploads *created* during the window, so the
+  restored instance has rows for files somebody was told had uploaded
+  successfully, and cannot serve them.
+
+An unreferenced blob is unreadable, because the key that opens it was in the row
+that is missing. It is wasted space and nothing more — but note that **nothing
+sweeps it up**: reaping works from the database outwards, so a blob no row
+mentions is invisible to it and stays until somebody removes it by hand.
 
 **Do not copy `sendan.db` while the instance is running.** SQLite in WAL mode
 keeps recent writes in a side file, and a plain copy takes the database without
