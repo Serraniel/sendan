@@ -28,9 +28,11 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > carry static binaries for Linux, macOS and Windows on both architectures, with
 > checksums and a reproduction procedure, and `sendan verify` checks that an
 > instance serves the published client. **No release has been cut yet**, so the
-> client is built from source today, and releases are not signed.
+> client is built from source today. The container image builds and runs; it is
+> published on the first tag.
 >
-> **Not built:** the container image.
+> **Not yet in place:** the release signing key, so nothing is signed with it
+> yet — `sendan verify` says so rather than checking against nothing.
 
 ## Features
 
@@ -44,8 +46,8 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
   rows, and no file identifiers in logs. Unlimited retention is available but
   must be enabled explicitly.
 - **Single-container deployment.** One static binary serving an embedded web
-  client. *(The binary serves the client today; the container image is not
-  built.)*
+  client, on an image with no distribution, no package manager and no shell.
+  *(Builds and runs; published on the first tag.)*
 - **Cross-platform command line client**, sharing one cryptographic
   implementation with the server. *(Sends and receives; not yet released as a
   binary.)*
@@ -135,6 +137,7 @@ fail. The first two are bounded by the disk.
 | [`docs/cli.md`](docs/cli.md) | The command line client: installing it, and every command and option |
 | [`docs/api.md`](docs/api.md) | Every endpoint: paths, methods, status codes and what each returns |
 | [`docs/configuration.md`](docs/configuration.md) | Every environment variable and its default |
+| [`docs/deployment.md`](docs/deployment.md) | Running the container image, and what stands in front of it |
 | [`SECURITY.md`](SECURITY.md) | Threat model and vulnerability disclosure policy |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution process, DCO, and testing requirements |
 
