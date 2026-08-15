@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/Serraniel/sendan/internal/client"
+	"github.com/Serraniel/sendan/internal/signature"
 )
 
 func testdata(t *testing.T, name string) []byte {
@@ -166,6 +167,47 @@ func TestAnInstanceWithNoReleaseToCompareAgainstSaysSo(t *testing.T) {
 			"", "", client.Claim{Version: version})
 		if err == nil {
 			t.Errorf("version %q: expected a refusal", version)
+		}
+	}
+}
+
+// The two release keys must be filled in together.
+//
+// They behave differently when empty, and that asymmetry is the trap: an empty
+// releaseKey refuses every published manifest, which is loud, while an empty
+// releasePQKey silently skips the post-quantum check. Filling in one and
+// forgetting the other yields a build that looks like it enforces both
+// signatures and enforces one - which is the failure requiring two was meant to
+// prevent, arrived at by an editing mistake rather than an attack.
+func TestBothReleaseKeysAreSetOrNeither(t *testing.T) {
+	switch {
+	case releaseKey == "" && releasePQKey == "":
+		// No release has been cut. `sendan verify` says so rather than
+		// checking against nothing.
+	case releaseKey != "" && releasePQKey != "":
+		// Both in force, which is what a published release requires.
+	case releaseKey == "":
+		t.Fatal("releasePQKey is set but releaseKey is not: a published manifest " +
+			"cannot be checked at all, because the classical signature is the one " +
+			"that gates the fetch")
+	default:
+		t.Fatal("releaseKey is set but releasePQKey is not: this build would " +
+			"accept a release carrying only the classical signature, and report " +
+			"it as verified. Fill in releasePQKey, or clear releaseKey")
+	}
+}
+
+// And whichever are set must actually parse, so a mistyped key is caught here
+// rather than by the first person to run `sendan verify`.
+func TestTheCompiledInKeysParse(t *testing.T) {
+	if releaseKey != "" {
+		if _, err := signature.ParsePublicKey(releaseKey); err != nil {
+			t.Errorf("releaseKey does not parse: %v", err)
+		}
+	}
+	if releasePQKey != "" {
+		if _, err := signature.ParsePQPublicKey(releasePQKey); err != nil {
+			t.Errorf("releasePQKey does not parse: %v", err)
 		}
 	}
 }

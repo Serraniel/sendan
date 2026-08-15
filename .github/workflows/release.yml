@@ -116,31 +116,61 @@ jobs:
       # ECDSA, so the signature this job does make rests on a primitive Shor's
       # algorithm breaks - which is what the other two are for.
 
-      # The signature `sendan verify` requires cannot be made here. Its key is
-      # held offline precisely so that whoever compromises this workflow does not
-      # get it, and a key this job could reach would be a key this job could
-      # leak. The release is therefore published unsigned by that key, and stays
-      # unverifiable until a maintainer signs it - which `sendan verify` reports
-      # as an unsigned release rather than as a pass.
-      - name: Say what remains to be signed by hand
+      # The two signatures `sendan verify` checks. Made here, from keys held as
+      # repository secrets, because releases are tagged automatically and a
+      # signature waiting on a person is a release that sits unverifiable until
+      # somebody is free.
+      #
+      # What that costs is stated rather than glossed: a key this job can reach
+      # is a key an attacker who reaches this job can use, so none of these
+      # signatures survives a compromise of this repository. What survives is
+      # discovery - the Sigstore signature above is recorded in a public
+      # transparency log against the workflow that made it, and the build is
+      # reproducible from source. SECURITY.md says so in those words.
+      #
+      # Skipped, not failed, when the secrets are absent: a release that stops
+      # because a key has not been generated yet is worse than one that is
+      # honestly unsigned, and `sendan verify` reports the difference.
+      - name: Sign the manifest with the release keys
+        env:
+          MINISIGN_KEY: ${{ secrets.SENDAN_MINISIGN_KEY }}
+          PQ_KEY: ${{ secrets.SENDAN_PQ_KEY }}
         run: |
-          {
-            echo "### This release is not yet verifiable"
-            echo
-            echo "\`sendan verify\` will report it as unsigned until the release"
-            echo "key signs the manifest. On the machine holding that key:"
-            echo
-            echo '```sh'
-            echo "gh release download ${GITHUB_REF_NAME} -p manifest.json"
-            echo "minisign -Sm manifest.json -t 'sendan ${GITHUB_REF_NAME} client asset manifest'"
-            echo "go run ./tools/pq-sign sign release.pqkey manifest.json"
-            echo "gh release upload ${GITHUB_REF_NAME} manifest.json.minisig manifest.json.slhdsa"
-            echo '```'
-            echo
-            echo "Reproduce the build first and confirm the manifest matches;"
-            echo "signing what CI produced without checking it signs whatever CI"
-            echo "produced. See docs/workflows/release.md."
-          } >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+
+          if [ -z "${MINISIGN_KEY}" ] || [ -z "${PQ_KEY}" ]; then
+            echo "::warning::No release signing keys are configured, so this release is unsigned."
+            {
+              echo "### This release is not signed"
+              echo
+              echo "SENDAN_MINISIGN_KEY and SENDAN_PQ_KEY are not set, so"
+              echo "\`sendan verify\` will report this release as unsigned."
+              echo "docs/workflows/release.md says how to generate them."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Written to the runner's own temporary directory and removed after,
+          # rather than into the checkout, where a later step could publish one.
+          keydir="$(mktemp -d)"
+          trap 'rm -rf "$keydir"' EXIT
+          printf '%s' "${MINISIGN_KEY}" > "$keydir/minisign.key"
+          printf '%s' "${PQ_KEY}" > "$keydir/release.pqkey"
+
+          # A Go implementation, so no apt install and no interactive prompt.
+          # The key is stored unencrypted (minisign -G -W): a passphrase beside
+          # the key in the same secret store protects nothing, and a prompt is
+          # the manual step this whole design exists to remove.
+          go install aead.dev/minisign/cmd/minisign@latest
+
+          minisign -S \
+            -s "$keydir/minisign.key" \
+            -m dist/manifest.json \
+            -t "sendan ${GITHUB_REF_NAME} client asset manifest"
+
+          go run ./tools/pq-sign sign "$keydir/release.pqkey" dist/manifest.json
+
+          ls -l dist/manifest.json.minisig dist/manifest.json.slhdsa
 
       - name: Record the toolchain a reproduction needs
         run: |

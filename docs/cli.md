@@ -188,6 +188,12 @@ something to somebody who eventually has a quantum computer — and it can only 
 checked with software from this repository. Requiring both means a forgery has to
 defeat the one still standing.
 
+Both are made by the release pipeline, so **neither survives a compromise of the
+project's repository**. What that leaves is set out in
+[`SECURITY.md`](../SECURITY.md): a public transparency log and a reproducible
+build, which make a bad release discoverable rather than impossible. Verifying
+against a manifest you built yourself, below, does not depend on any of it.
+
 > [!IMPORTANT]
 > **No release keys exist yet**, because no release has been cut. Until they are
 > published, `sendan verify` against a release URL stops and says so rather than

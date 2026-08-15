@@ -31,34 +31,26 @@ Go and this repository, and nothing else — every tool they would otherwise hav
 to install at the right version is one more thing standing between them and the
 answer.
 
-### One signature is not made here
+### Signing is automatic, and what that costs
 
 `sendan verify` requires the client asset manifest to be signed by **two release
-keys**, and both are held offline. This workflow cannot sign with it, by
-design: a key this job could reach is a key that leaks when this job does, and
-the manifest exists to be checkable by someone who does not trust the release
-pipeline.
+keys**, and this workflow signs with both, from repository secrets.
 
-So a freshly tagged release is **not yet verifiable**. `sendan verify` reports
-it as unsigned — a distinct answer from a pass, and from a failure. The job
-summary prints the commands; the safe order is:
+That is a decision with a price attached. Releases are tagged automatically by
+release-please, so a signature waiting on a person is a release that sits
+unverifiable until somebody is free — and in practice, until somebody remembers.
+The alternative was a manual step per release, which is a step that gets skipped.
 
-```sh
-# 1. Reproduce what CI built, and confirm it matches. Signing CI's output
-#    without this step signs whatever CI produced.
-git checkout v0.5.0
-(cd web && npm ci && npm run build)
-./scripts/asset-manifest.sh /tmp/manifest.json
+**A key this job can reach is a key an attacker who reaches this job can use.**
+None of these signatures survives a compromise of this repository. `SECURITY.md`
+states that plainly rather than implying otherwise, and sets out what is bought
+instead: the Sigstore signature is recorded in a public transparency log against
+the run that made it, and the build is reproducible from source, so a malicious
+release is discoverable by anyone, permanently.
 
-gh release download v0.5.0 -p manifest.json
-diff -u /tmp/manifest.json manifest.json
-
-# 2. Sign with both keys, and publish both signatures.
-minisign -Sm manifest.json -t 'sendan v0.5.0 client asset manifest'
-go run ./tools/pq-sign sign release.pqkey manifest.json
-
-gh release upload v0.5.0 manifest.json.minisig manifest.json.slhdsa
-```
+Releases are still signed in a useful order: the manifest is produced, signed,
+and only then attached, so nothing is published in a state where the signature
+and the file could disagree.
 
 The trusted comment is covered by the signature; the untrusted comment on the
 first line is not, and nothing should be read from it.
@@ -66,15 +58,28 @@ first line is not, and nothing should be read from it.
 Generating the keys, once:
 
 ```sh
-minisign -G                              # Ed25519 -> releaseKey
-go run ./tools/pq-sign generate release  # SLH-DSA -> releasePQKey
+minisign -G -W -p release.pub -s release.key   # Ed25519 -> releaseKey
+go run ./tools/pq-sign generate release        # SLH-DSA -> releasePQKey
 ```
 
 The public halves go in `releaseKey` and `releasePQKey` in
-`cmd/sendan-cli/verify.go`, and in `docs/cli.md`. The private halves never leave
-the machine that made them, and should not live in the same place as each
-other: a release must satisfy both, and one attacker holding both keys is the
-situation having two exists to avoid.
+`cmd/sendan-cli/verify.go`, and in `docs/cli.md`.
+
+The private halves become repository secrets:
+
+| Secret | Contents |
+|---|---|
+| `SENDAN_MINISIGN_KEY` | the whole of `release.key` |
+| `SENDAN_PQ_KEY` | the whole of `release.pqkey` |
+
+`-W` on the minisign key means it carries no passphrase. That is deliberate: a
+passphrase stored beside the key it unlocks, in the same secret store, protects
+nothing, and a passphrase *not* stored there is a prompt — the manual step this
+design exists to remove.
+
+Keep a copy of both private keys somewhere outside GitHub. Losing them does not
+break existing releases, but it means every future one is signed by a key no
+published client trusts, which is a source change and a new release to fix.
 
 Changing either constant changes what every future binary will accept, so it is
 a source change that goes through review like any other.
@@ -107,13 +112,14 @@ Do not bypass this job.
 | Signature | Made by | Checked by | Rests on |
 |---|---|---|---|
 | Sigstore bundle | this workflow | `cosign verify-blob`, and the transparency log | ECDSA, and being unable to run this workflow |
-| minisign | a maintainer, offline | `sendan verify`, and `minisign -Vm` | Ed25519, and a key CI never holds |
-| SLH-DSA | a maintainer, offline | `sendan verify`, and `tools/pq-sign verify` | hash functions only |
+| minisign | this workflow | `sendan verify`, and `minisign -Vm` | Ed25519, and a key a lean verifier can check |
+| SLH-DSA | this workflow | `sendan verify`, and `tools/pq-sign verify` | hash functions only |
 
-They fail differently on purpose. The Sigstore one is publicly logged but
-producible by anyone who can run this workflow. The minisign one survives that
-but not an adversary who eventually has a quantum computer and a recorded
-release. The SLH-DSA one covers exactly that case, and rests on a scheme with
-much less deployment behind it, which is why it is not the only one.
+All three are made by this workflow, so all three fall to a compromise of it.
+They still differ in what else they resist, which is why there are three:
 
-A forgery has to defeat all three.
+- Sigstore is publicly logged, so producing one leaves a permanent record.
+- minisign is checkable by `minisign -Vm` and by a client small enough to audit,
+  which reading a Sigstore bundle would not be.
+- SLH-DSA is the only one an adversary with a quantum computer and an archived
+  release cannot forge years from now.
