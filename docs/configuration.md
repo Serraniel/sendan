@@ -164,6 +164,8 @@ Sizes accept a plain byte count or a binary suffix: `1024`, `500MiB`, `2GiB`,
 |---|---|---|
 | `SENDAN_DATABASE` | `sqlite:data/sendan.db` | Metadata store location. `sqlite:<path>` or a `postgres://` URL |
 | `SENDAN_STORAGE` | `file:data/blobs` | Blob store location. `file:<path>` or an `s3://` URL |
+| `SENDAN_MASTER_KEY_FILE` | *(unset)* | Path to a file holding the at-rest wrapping key. Preferred |
+| `SENDAN_MASTER_KEY` | *(unset)* | The same key inline. Simpler, and more exposed |
 
 The S3 form is `s3://key:secret@endpoint/bucket/prefix`, where the prefix is
 optional and lets one bucket hold several instances. TLS is used unless
@@ -177,6 +179,68 @@ silently would hide a typo behind a working but wrong deployment.
 An unrecognised location is a **startup failure** naming the accepted forms,
 never a silent fallback to the default. A server that quietly stores uploads
 somewhere other than where you asked is worse than one that refuses to run.
+
+### The at-rest wrapping key
+
+Each upload has a random key that encrypts its blob. By default that key is
+stored in the upload's row as it is. Setting a master key stores it wrapped, so
+a **cold copy** of the database carries nothing that opens a blob.
+
+```sh
+sendan generate-master-key > /run/secrets/sendan-master-key
+```
+
+Hex or base64, 32 bytes. `SENDAN_MASTER_KEY_FILE` is preferred: it works with
+Docker secrets, Kubernetes secrets and a plain mount, and the value never enters
+the process environment, where `docker inspect`, `/proc/<pid>/environ` and any
+crash reporter can read it. `SENDAN_MASTER_KEY` is simpler and carries exactly
+those exposures. Setting both is a startup failure rather than a precedence
+rule — two answers to *which key opens this database* is not a question to
+guess at.
+
+> [!WARNING]
+> **Losing this key makes every upload unrecoverable.** There is no recovery
+> path, and that is the same property that makes the feature work. Keep it
+> somewhere that survives the loss of the database and **nowhere the database
+> backup goes** — a copy beside the data protects nothing, since whoever takes
+> one takes both.
+
+| Exposure | Without | With |
+|---|---|---|
+| A database backup leaks | blob ciphertext is openable | nothing usable |
+| A volume snapshot leaks | blob ciphertext is openable | nothing usable |
+| A disk is decommissioned unwiped | blob ciphertext is openable | nothing usable |
+| The live host is compromised | everything | everything — the key is in memory |
+
+> [!IMPORTANT]
+> This does not change what protects your files. **Content is safe behind the
+> link secret either way**, which never reaches the server. "Openable" above
+> means the layer below that one. This is defence in depth against cold copies,
+> not a second lock on the content.
+
+### Turning it on, changing it, turning it off
+
+All three are the same command, run with the instance **stopped**:
+
+```sh
+# on, for a database written without wrapping
+sendan rotate-master-key --new /run/secrets/sendan-master-key
+
+# changed
+sendan rotate-master-key --old /run/secrets/old --new /run/secrets/new
+
+# off
+sendan rotate-master-key --old /run/secrets/sendan-master-key
+```
+
+It reads the database location from the same environment the server does. A
+rotation rewrites the whole table in one transaction and touches 32 bytes per
+row: no blob is re-encrypted, so even a large instance finishes in minutes. If
+it cannot open what it finds, nothing is changed at all — a half-rotated
+database is one no single key can read.
+
+Uploads written before wrapping was turned on keep working; they stay unwrapped
+until a rotation covers them.
 
 Credentials embedded in a location are removed before it is logged, so the
 startup line names the backend without disclosing its password.

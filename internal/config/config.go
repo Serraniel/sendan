@@ -14,9 +14,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Serraniel/sendan/internal/store"
 )
 
 // Defaults, per docs/design.md §3 and §8.
@@ -102,6 +105,18 @@ type Config struct {
 	// or "s3://bucket".
 	Storage string
 
+	// MasterKey wraps the per-file at-rest keys before they are stored, so a
+	// cold copy of the database - a backup, a volume snapshot, a disk that left
+	// the building - carries nothing that opens a blob.
+	//
+	// Empty means the feature is off, which is the default and has to be:
+	// losing this key makes every upload unrecoverable, and a key the server
+	// generated for itself would sit in the same backup it is meant to protect.
+	//
+	// It does not change what the content guarantee rests on. That is the link
+	// secret, which never reaches the server either way.
+	MasterKey []byte
+
 	LogLevel  slog.Level
 	LogFormat string // "json" or "text"
 }
@@ -137,6 +152,8 @@ func Load(getenv Getenv) (*Config, error) {
 
 		Database: l.str("SENDAN_DATABASE", DefaultDatabase),
 		Storage:  l.str("SENDAN_STORAGE", DefaultStorage),
+
+		MasterKey: l.masterKey(),
 
 		LogLevel:  l.level("SENDAN_LOG_LEVEL", slog.LevelInfo),
 		LogFormat: l.enum("SENDAN_LOG_FORMAT", "json", "json", "text"),
@@ -298,6 +315,58 @@ func (l *loader) enum(key, fallback string, allowed ...string) string {
 	}
 	l.fail(key, raw, "expected one of "+strings.Join(allowed, ", "))
 	return fallback
+}
+
+// masterKey reads the at-rest wrapping key.
+//
+// From a file by preference. A file works with Docker secrets, Kubernetes
+// secrets and a plain mount, and the value never enters the process
+// environment, where docker inspect, /proc/<pid>/environ and any crash reporter
+// can read it. The variable is supported because small deployments want it, and
+// documented with what it costs.
+func (l *loader) masterKey() []byte {
+	const (
+		fileKey = "SENDAN_MASTER_KEY_FILE"
+		envKey  = "SENDAN_MASTER_KEY"
+	)
+
+	path, inline := l.getenv(fileKey), l.getenv(envKey)
+
+	// Refused rather than resolved by precedence. Two answers to "which key
+	// opens this database" is a question nobody should have to guess at, and
+	// guessing wrong makes every upload unreadable.
+	if path != "" && inline != "" {
+		l.fail(fileKey, path, "both "+fileKey+" and "+envKey+" are set, and only one key can be in force")
+		return nil
+	}
+
+	raw := inline
+	if path != "" {
+		//nolint:gosec // the path is the operator's own configuration, and
+		// reading a file they named is the whole point of the setting.
+		b, err := os.ReadFile(path)
+		if err != nil {
+			l.fail(fileKey, path, "cannot be read: "+err.Error())
+			return nil
+		}
+		raw = string(b)
+	}
+	if raw == "" {
+		return nil
+	}
+
+	key, err := store.ParseMasterKey(raw)
+	if err != nil {
+		which := envKey
+		if path != "" {
+			which = fileKey
+		}
+		// Never the value: this is the one setting whose contents must not
+		// reach a log, and a configuration error is printed.
+		l.fail(which, "", err.Error())
+		return nil
+	}
+	return key
 }
 
 func (l *loader) validate(cfg *Config) {

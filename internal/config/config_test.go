@@ -4,7 +4,10 @@
 package config
 
 import (
+	"bytes"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -270,5 +273,83 @@ func TestIncompleteTTLMustBePositive(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "SENDAN_INCOMPLETE_TTL") {
 		t.Fatalf("the error does not name the setting at fault: %v", err)
+	}
+}
+
+// The at-rest wrapping key. Off unless asked for, because losing it makes every
+// upload unrecoverable and a default nobody chose is a default nobody guards.
+func TestTheMasterKeyIsOffByDefault(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(cfg.MasterKey) != 0 {
+		t.Error("a master key was configured without being asked for")
+	}
+}
+
+func TestTheMasterKeyIsReadFromAFileOrTheEnvironment(t *testing.T) {
+	key := strings.Repeat("ab", 32) // 32 bytes as hex
+
+	path := filepath.Join(t.TempDir(), "master.key")
+	if err := os.WriteFile(path, []byte(key+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fromFile, err := Load(env(map[string]string{"SENDAN_MASTER_KEY_FILE": path}))
+	if err != nil {
+		t.Fatalf("from a file: %v", err)
+	}
+	fromEnv, err := Load(env(map[string]string{"SENDAN_MASTER_KEY": key}))
+	if err != nil {
+		t.Fatalf("from the environment: %v", err)
+	}
+
+	if len(fromFile.MasterKey) != 32 {
+		t.Fatalf("read %d bytes from a file, want 32", len(fromFile.MasterKey))
+	}
+	if !bytes.Equal(fromFile.MasterKey, fromEnv.MasterKey) {
+		t.Error("the same key given two ways produced two keys")
+	}
+}
+
+// Refused rather than resolved by precedence. Two answers to "which key opens
+// this database" is a question nobody should have to guess at, and guessing
+// wrong makes every upload unreadable.
+func TestTwoMasterKeysAreRefused(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "master.key")
+	if err := os.WriteFile(path, []byte(strings.Repeat("ab", 32)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Load(env(map[string]string{
+		"SENDAN_MASTER_KEY_FILE": path,
+		"SENDAN_MASTER_KEY":      strings.Repeat("cd", 32),
+	}))
+	if err == nil {
+		t.Fatal("two master keys were accepted")
+	}
+}
+
+func TestAnUnusableMasterKeyIsRefusedWithoutPrintingIt(t *testing.T) {
+	const secret = "003344556677"
+
+	for name, pairs := range map[string]map[string]string{
+		"too short":    {"SENDAN_MASTER_KEY": secret},
+		"missing file": {"SENDAN_MASTER_KEY_FILE": filepath.Join(t.TempDir(), "absent")},
+		"not a key":    {"SENDAN_MASTER_KEY": "not a key at all"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(env(pairs))
+			if err == nil {
+				t.Fatal("an unusable master key was accepted")
+			}
+			// The one setting whose value must never reach output. A
+			// configuration error is printed, and printing the key with it
+			// would put it wherever that output goes.
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("the error contains the key: %v", err)
+			}
+		})
 	}
 }
