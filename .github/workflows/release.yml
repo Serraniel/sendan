@@ -111,10 +111,10 @@ jobs:
               "dist/${file}"
           done
 
-      # TODO(#60): add a post-quantum signature (SPHINCS+ preferred) alongside
-      # these. Sigstore signs with ECDSA, so a release signed only this way rests
-      # on a primitive Shor's algorithm breaks - and a signature's job is to
-      # still mean something years after it was made.
+      # The post-quantum signature is not made here either, and for the same
+      # reason as the Ed25519 one: its key is held offline. Sigstore signs with
+      # ECDSA, so the signature this job does make rests on a primitive Shor's
+      # algorithm breaks - which is what the other two are for.
 
       # The signature `sendan verify` requires cannot be made here. Its key is
       # held offline precisely so that whoever compromises this workflow does not
@@ -133,7 +133,8 @@ jobs:
             echo '```sh'
             echo "gh release download ${GITHUB_REF_NAME} -p manifest.json"
             echo "minisign -Sm manifest.json -t 'sendan ${GITHUB_REF_NAME} client asset manifest'"
-            echo "gh release upload ${GITHUB_REF_NAME} manifest.json.minisig"
+            echo "go run ./tools/pq-sign sign release.pqkey manifest.json"
+            echo "gh release upload ${GITHUB_REF_NAME} manifest.json.minisig manifest.json.slhdsa"
             echo '```'
             echo
             echo "Reproduce the build first and confirm the manifest matches;"

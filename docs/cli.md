@@ -176,13 +176,20 @@ establish.
 
 ### The release key
 
-A manifest fetched over the network is refused unless it is signed by the
-release key. The public half is compiled into the binary, so the copy you
-obtained carries the key it checks against rather than fetching one at the time
-of checking.
+A manifest fetched over the network is refused unless it is signed by **both**
+release keys — one Ed25519, one SLH-DSA. Their public halves are compiled into
+the binary, so the copy you obtained carries the keys it checks against rather
+than fetching them at the time of checking.
+
+Two schemes because they fail differently. Ed25519 is checkable with `minisign`,
+which means this program is not the only thing that can verify a release.
+SLH-DSA rests only on hash functions, so a signature made today still means
+something to somebody who eventually has a quantum computer — and it can only be
+checked with software from this repository. Requiring both means a forgery has to
+defeat the one still standing.
 
 > [!IMPORTANT]
-> **No release key exists yet**, because no release has been cut. Until one is
+> **No release keys exist yet**, because no release has been cut. Until they are
 > published, `sendan verify` against a release URL stops and says so rather than
 > checking against nothing. Verify with `--manifest` pointing at a manifest you
 > produced yourself:
@@ -196,9 +203,10 @@ of checking.
 > That is the stronger check anyway: it compares the instance against a client
 > you built, rather than against a statement somebody else signed.
 
-The signature is in [minisign](https://jedisct1.github.io/minisign/) format, so
-`minisign -Vm manifest.json -P <key>` checks it without this program.
-[`SECURITY.md`](../SECURITY.md) gives the full procedure.
+The first signature is in [minisign](https://jedisct1.github.io/minisign/)
+format, so `minisign -Vm manifest.json -P <key>` checks it without this program.
+The second is checked with `tools/pq-sign verify`.
+[`SECURITY.md`](../SECURITY.md) gives the full procedure for both.
 
 ## Environment
 

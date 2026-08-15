@@ -33,8 +33,8 @@ answer.
 
 ### One signature is not made here
 
-`sendan verify` requires the client asset manifest to be signed by the **release
-key**, and that key is held offline. This workflow cannot sign with it, by
+`sendan verify` requires the client asset manifest to be signed by **two release
+keys**, and both are held offline. This workflow cannot sign with it, by
 design: a key this job could reach is a key that leaks when this job does, and
 the manifest exists to be checkable by someone who does not trust the release
 pipeline.
@@ -53,19 +53,31 @@ git checkout v0.5.0
 gh release download v0.5.0 -p manifest.json
 diff -u /tmp/manifest.json manifest.json
 
-# 2. Sign, and publish the signature.
+# 2. Sign with both keys, and publish both signatures.
 minisign -Sm manifest.json -t 'sendan v0.5.0 client asset manifest'
-gh release upload v0.5.0 manifest.json.minisig
+go run ./tools/pq-sign sign release.pqkey manifest.json
+
+gh release upload v0.5.0 manifest.json.minisig manifest.json.slhdsa
 ```
 
 The trusted comment is covered by the signature; the untrusted comment on the
 first line is not, and nothing should be read from it.
 
-Generating the key, once: `minisign -G`. The public half goes in `releaseKey` in
-`cmd/sendan-cli/verify.go` and in `docs/cli.md`; the private half never leaves
-the machine that made it. Changing that constant changes what every future
-binary will accept, so it is a source change that goes through review like any
-other.
+Generating the keys, once:
+
+```sh
+minisign -G                              # Ed25519 -> releaseKey
+go run ./tools/pq-sign generate release  # SLH-DSA -> releasePQKey
+```
+
+The public halves go in `releaseKey` and `releasePQKey` in
+`cmd/sendan-cli/verify.go`, and in `docs/cli.md`. The private halves never leave
+the machine that made them, and should not live in the same place as each
+other: a release must satisfy both, and one attacker holding both keys is the
+situation having two exists to avoid.
+
+Changing either constant changes what every future binary will accept, so it is
+a source change that goes through review like any other.
 
 ### Image tags
 
@@ -90,10 +102,18 @@ anchor — the answer to a malicious instance serving modified client code — a
 unreproducible build undermines a security guarantee the project makes publicly.
 Do not bypass this job.
 
-## Known gap
+## Why three signatures
 
-Both signature schemes in use are exposed to Shor's algorithm: Sigstore signs
-with ECDSA, and the release key is Ed25519. A post-quantum signature, SPHINCS+
-preferred for resting only on hash functions, is tracked in issue #60 and is not
-yet implemented. It fits alongside the release key's signature as a second
-detached file, which is why that signature is detached rather than embedded.
+| Signature | Made by | Checked by | Rests on |
+|---|---|---|---|
+| Sigstore bundle | this workflow | `cosign verify-blob`, and the transparency log | ECDSA, and being unable to run this workflow |
+| minisign | a maintainer, offline | `sendan verify`, and `minisign -Vm` | Ed25519, and a key CI never holds |
+| SLH-DSA | a maintainer, offline | `sendan verify`, and `tools/pq-sign verify` | hash functions only |
+
+They fail differently on purpose. The Sigstore one is publicly logged but
+producible by anyone who can run this workflow. The minisign one survives that
+but not an adversary who eventually has a quantum computer and a recorded
+release. The SLH-DSA one covers exactly that case, and rests on a scheme with
+much less deployment behind it, which is why it is not the only one.
+
+A forgery has to defeat all three.
