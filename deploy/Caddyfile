@@ -1,0 +1,36 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# TLS in front of Sendan. Used by compose.yaml; see docs/deployment.md.
+
+{$SENDAN_DOMAIN} {
+	# Caddy obtains and renews a certificate on its own. For a domain that does
+	# not resolve publicly - a test, or an internal deployment - replace this
+	# with `tls internal`, which issues from a local authority instead.
+	encode zstd gzip
+
+	reverse_proxy sendan:8080 {
+		# Stream responses instead of collecting them. Without this a download
+		# is buffered by the proxy before any of it reaches the recipient, so a
+		# large file appears to hang and memory grows with it.
+		#
+		# Uploads need no equivalent: Caddy does not buffer request bodies. Not
+		# every proxy makes that choice, and the ones that do not break
+		# streaming uploads - docs/deployment.md has the settings for nginx.
+		flush_interval -1
+	}
+
+	# Larger than SENDAN_MAX_UPLOAD_SIZE, so the instance is what refuses an
+	# oversized upload. A proxy that refuses first produces an error with no
+	# explanation in it, at an offset nobody chose.
+	request_body {
+		max_size 2GB
+	}
+
+	header {
+		# The instance sets its own security headers, including the policy the
+		# client runs under. This adds only what a proxy is better placed to
+		# say: that this name should always be reached over TLS.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+}

@@ -137,7 +137,7 @@ fail. The first two are bounded by the disk.
 | [`docs/cli.md`](docs/cli.md) | The command line client: installing it, and every command and option |
 | [`docs/api.md`](docs/api.md) | Every endpoint: paths, methods, status codes and what each returns |
 | [`docs/configuration.md`](docs/configuration.md) | Every environment variable and its default |
-| [`docs/deployment.md`](docs/deployment.md) | Running the container image, and what stands in front of it |
+| [`docs/deployment.md`](docs/deployment.md) | Running the container image, the reverse proxy in front of it, and backups |
 | [`SECURITY.md`](SECURITY.md) | Threat model and vulnerability disclosure policy |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution process, DCO, and testing requirements |
 

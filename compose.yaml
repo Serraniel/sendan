@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# A deployment somebody can start from. See docs/deployment.md.
+#
+#   SENDAN_DOMAIN=files.example.org docker compose up -d
+#
+# Two services: Sendan, and a reverse proxy that terminates TLS in front of it.
+# Sendan does not terminate TLS itself, and the browser client needs it for more
+# than confidentiality - streaming an upload requires HTTP/2, which browsers
+# only offer over TLS.
+
+name: sendan
+
+services:
+  sendan:
+    # Both keys on purpose: `docker compose up` uses the published image, and
+    # `docker compose up --build` builds this checkout instead. Until a release
+    # is tagged there is no published image, so the second is the one that
+    # works.
+    image: ghcr.io/serraniel/sendan:latest
+    build: .
+    restart: unless-stopped
+
+    # Nothing needs to write to the root filesystem. /tmp is the exception: an
+    # S3 backend spools an upload through it, and without this the container
+    # fails on the first upload rather than at startup.
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    environment:
+      # The address people will use, which is what goes into the links this
+      # instance hands out. It has nothing to do with the address the process
+      # can see, and getting it wrong produces links that resolve to nothing.
+      SENDAN_BASE_URL: https://${SENDAN_DOMAIN:?set SENDAN_DOMAIN to the domain this instance serves}
+
+      # One proxy stands in front, so the last entry of X-Forwarded-For is the
+      # client. At the default of 0 the header is ignored and every request
+      # appears to come from the proxy, which makes per-address rate limiting
+      # meaningless. Raising it beyond the number of proxies is worse: it lets
+      # a client write its own address into the header.
+      SENDAN_TRUSTED_PROXIES: "1"
+
+    volumes:
+      - sendan-data:/var/lib/sendan
+
+    # Not published to the host. The proxy reaches it over the compose network,
+    # and an instance reachable directly on :8080 is one that can be reached
+    # without TLS by anybody who finds the port.
+    expose:
+      - "8080"
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - sendan
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SENDAN_DOMAIN: ${SENDAN_DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Certificates and account keys. Losing this volume means re-issuing on
+      # every restart, which rate limits will eventually refuse.
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  sendan-data:
+  caddy-data:
+  caddy-config:
