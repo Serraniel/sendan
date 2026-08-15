@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
-# Runs every gate continuous integration runs, and reports by exit status.
+# Runs the gates continuous integration runs, and reports by exit status.
+#
+# One is left out: the container image is built and started by CI, which needs
+# buildx and several minutes for two architectures. Running it here would make
+# the quick check slow enough to skip, and a check people skip is worse than one
+# they know the boundary of - so the boundary is stated below and at the end.
 #
 # It exists because reading the tail of a command's output is not the same as
 # checking whether it succeeded. A lint failure was pushed after `npm run lint |
@@ -23,6 +28,13 @@ if [ -z "${SENDAN_TEST_POSTGRES:-}" ] || [ -z "${SENDAN_TEST_S3:-}" ]; then
   echo "      gate will report internal/store and internal/blob below their"
   echo "      floors. That is the environment, not the change. CONTRIBUTING.md"
   echo "      says how to start them."
+  echo
+fi
+
+if [ -f Dockerfile ]; then
+  echo "note: the container image is not built here. CI builds it for both"
+  echo "      architectures, starts it read-only, and checks its attestations."
+  echo "      docs/deployment.md has the commands to do that by hand."
   echo
 fi
 
@@ -62,4 +74,5 @@ if [ "$failed" -ne 0 ]; then
   echo "verify: something continuous integration checks would fail on."
   exit 1
 fi
-echo "verify: every gate continuous integration runs passes."
+echo "verify: every gate this script covers passes; the container image is not"
+echo "        among them - see the note above."
