@@ -14,9 +14,12 @@ import (
 
 // spool accumulates a chunked upload on local disk.
 //
-// Both backends use it, so a partial upload behaves identically whichever one
-// is configured. The filesystem store then renames the spool into place; the
-// object store uploads it and removes it.
+// The filesystem backend only, which then renames the spool into place. The
+// object store used to share this and now accumulates in the object store
+// itself, because local disk equal to the upload was a cost worth removing and
+// a spool on one machine cannot be resumed on another - see s3multipart.go.
+// Here neither applies: a filesystem backend already keeps its blobs on the
+// disk it is spooling to.
 //
 // The name is derived from the identifier rather than random, because a resumed
 // upload has to find what a previous request left behind.
@@ -86,22 +89,6 @@ func (s spool) length(id string) (int64, error) {
 		return 0, fmt.Errorf("blob: stat partial: %w", err)
 	}
 	return info.Size(), nil
-}
-
-// open returns the spooled bytes for reading, so a backend can upload them.
-func (s spool) open(id string) (*os.File, error) {
-	name, err := s.path(id)
-	if err != nil {
-		return nil, err
-	}
-	f, err := os.Open(name) //nolint:gosec // the path is built from a validated identifier
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("blob: open partial: %w", err)
-	}
-	return f, nil
 }
 
 // remove discards a partial upload. A partial that was never finished is a

@@ -39,7 +39,7 @@ SENDAN_DOMAIN=files.example.org docker compose up -d --build
 
 ```sh
 docker run -d --name sendan \
-  --read-only --tmpfs /tmp \
+  --read-only \
   -v sendan-data:/var/lib/sendan \
   -p 8080:8080 \
   -e SENDAN_BASE_URL=https://files.example.org \
@@ -57,16 +57,18 @@ into the links the instance hands out, so it has to be the address people will
 actually use, not the one the process can see.
 [`docs/configuration.md`](configuration.md) has every variable.
 
-### Why `--read-only --tmpfs /tmp`
+### Why `--read-only`
 
-The root filesystem is read only because nothing needs to write to it. `/tmp`
-is the exception: an S3 backend spools an upload there while it is being stored
-([#111](https://github.com/Serraniel/sendan/issues/111) is about removing that).
-Without the `tmpfs`, a read-only container fails on the first upload rather than
-at startup, which is the worst time to find out.
+Nothing needs to write to the root filesystem. Neither backend needs scratch
+space: the filesystem one writes beside its blobs, and the object store
+accumulates a partial upload in the object store.
 
-The filesystem backend does not use `/tmp` — it writes to its own directory —
-but the flag costs nothing and means the same command works for both.
+That was not always true — an S3 backend used to spool each upload to local
+disk, so a read-only container needed a writable `/tmp` and failed on the first
+upload without one. It no longer does. A 12 MB upload, larger than one multipart
+part, completes in a container with no writable filesystem outside its volume.
+
+Adding `--tmpfs /tmp` is harmless if you prefer it, and no longer required.
 
 ### The volume
 

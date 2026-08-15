@@ -280,12 +280,14 @@ jobs:
 
       # Under the conditions the documentation asks operators to use, because a
       # read-only root filesystem is exactly the kind of constraint that is
-      # discovered to be unsatisfiable in production.
+      # discovered to be unsatisfiable in production. No tmpfs: neither backend
+      # needs scratch space, and a container that quietly started depending on
+      # one again would pass a laxer check.
       - name: Start it read-only and non-root, and use it
         run: |
           set -euo pipefail
           docker run -d --name sendan-ci \
-            --read-only --tmpfs /tmp \
+            --read-only \
             -v sendan-ci-data:/var/lib/sendan \
             -p 8080:8080 \
             -e SENDAN_BASE_URL=http://127.0.0.1:8080 \

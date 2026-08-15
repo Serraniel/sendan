@@ -279,15 +279,19 @@ property would make every resumed chunk cost a pass over everything before it.
 | Backend | How a partial upload is held |
 |---|---|
 | Filesystem | A file beside the blob, renamed into place by `Finish`. A rename is atomic, so a reader never observes a half-written blob. |
-| Object store | Spooled to local disk and uploaded by `Finish`, because objects are immutable and cannot be appended to. |
+| Object store | A multipart upload, because objects are immutable and cannot be appended to. `Finish` completes it, and completion is atomic from a reader's point of view. |
+
+A part must be at least 5 MiB except the last, which a tus client knows nothing
+about, so whatever falls below a part boundary is held as its own object until
+enough arrives to fill a part — or until the upload finishes and it becomes the
+last part, the one no size limit applies to.
 
 > [!NOTE]
-> Spooling costs local disk equal to the upload, and a partial upload does not
-> survive losing the machine it was spooled on — with several replicas,
-> resumability is per-replica. Multipart uploads remove both and are
-> [#111](https://github.com/Serraniel/sendan/issues/111); the interface already
-> describes the behaviour without assuming how it is stored, so that is a
-> backend change behind a settled contract.
+> Nothing about a partial upload is held in the process or on its disk. An
+> instance reads back what is stored, so a chunk resumed against a different
+> replica finds the upload rather than nothing, and no scratch space is needed.
+> An abandoned multipart upload holds storage as an abandoned spool file held
+> disk, so `Delete` aborts it — which is what the reaper calls.
 
 A partial upload holds the same content a finished one would, so it is encrypted
 the same way and deleted the same way: `Delete` discards it whether or not a

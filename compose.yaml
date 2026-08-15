@@ -21,12 +21,11 @@ services:
     build: .
     restart: unless-stopped
 
-    # Nothing needs to write to the root filesystem. /tmp is the exception: an
-    # S3 backend spools an upload through it, and without this the container
-    # fails on the first upload rather than at startup.
+    # Nothing needs to write to the root filesystem. Neither backend needs
+    # scratch space, so there is no tmpfs here: the object store accumulates a
+    # partial upload in the object store, and the filesystem backend writes
+    # beside its blobs, on the volume below.
     read_only: true
-    tmpfs:
-      - /tmp
 
     environment:
       # The address people will use, which is what goes into the links this
