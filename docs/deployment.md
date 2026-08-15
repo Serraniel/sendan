@@ -104,6 +104,46 @@ An image reports what it was built from at `/api/source`, which is a claim
 rather than a fact — [`SECURITY.md`](../SECURITY.md) explains what turns it into
 something checkable, and `sendan verify` is what does the checking.
 
+### Where it came from
+
+Every image carries **SLSA build provenance** and an **SBOM**, one of each per
+architecture. The provenance is what ties an image to this repository and to the
+workflow run that produced it:
+
+```sh
+docker buildx imagetools inspect ghcr.io/serraniel/sendan:v0.5.0 \
+  --format '{{ json .Provenance }}'
+```
+
+It records the build arguments, so the version an image reports at `/api/source`
+can be checked against the version it was actually built with rather than taken
+on trust. It also lists the resolved dependencies, including the digests of the
+base images the build used.
+
+The bill of materials, for asking what is in the image without running it:
+
+```sh
+docker buildx imagetools inspect ghcr.io/serraniel/sendan:v0.5.0 \
+  --format '{{ json .SBOM }}'
+```
+
+> [!NOTE]
+> These are BuildKit attestations attached to the image index, not signatures
+> made with `cosign attest`. `cosign verify-attestation` does not read them —
+> the commands above do.
+
+Attestations say what a build claims about itself. The signature above is what
+makes those claims worth reading, because it is the part an attacker cannot
+produce without the workflow.
+
+### What none of this establishes
+
+That the source it names is source you have read. Provenance proves an image was
+built by this workflow from a particular commit; it says nothing about what that
+commit contains. For the client an instance serves, `sendan verify` is the check
+that closes that gap, and it works against a running instance rather than
+against an image.
+
 ## Backend-only mode
 
 `SENDAN_SERVE_UI=false` disables the embedded client, so the same image serves
