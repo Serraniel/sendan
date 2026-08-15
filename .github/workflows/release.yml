@@ -59,6 +59,10 @@ jobs:
     needs: [verify-reproducible]
     permissions:
       contents: write
+      # For keyless signing below: Fulcio issues a short-lived certificate
+      # against this token, so what the signature attests to is that this
+      # workflow, in this repository, at this tag produced the file.
+      id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,6 +91,56 @@ jobs:
           (cd web && npm ci && npm run build)
           SENDAN_VERSION="${GITHUB_REF_NAME:-dev}" SENDAN_COMMIT="${GITHUB_SHA:-unknown}" \
             ./scripts/asset-manifest.sh dist/manifest.json
+      # An unsigned manifest is only as trustworthy as the page it came from,
+      # and that page is the obvious thing to replace if the goal is to make a
+      # backdoored instance verify clean. Signed keylessly: there is no key to
+      # steal, and the certificate binds the signature to this workflow at this
+      # tag, so forging one means running this workflow rather than obtaining a
+      # secret. Every issuance is public in the transparency log.
+      #
+      # SHA256SUMS is signed by the same step because docs/cli.md asks people to
+      # check binaries against it; signing the manifest and leaving the checksums
+      # unsigned would just move the unsigned link in the chain.
+      - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Sign the manifest and the checksums
+        run: |
+          set -euo pipefail
+          for file in manifest.json SHA256SUMS; do
+            cosign sign-blob --yes \
+              --bundle "dist/${file}.sigstore.json" \
+              "dist/${file}"
+          done
+
+      # TODO(#60): add a post-quantum signature (SPHINCS+ preferred) alongside
+      # these. Sigstore signs with ECDSA, so a release signed only this way rests
+      # on a primitive Shor's algorithm breaks - and a signature's job is to
+      # still mean something years after it was made.
+
+      # The signature `sendan verify` requires cannot be made here. Its key is
+      # held offline precisely so that whoever compromises this workflow does not
+      # get it, and a key this job could reach would be a key this job could
+      # leak. The release is therefore published unsigned by that key, and stays
+      # unverifiable until a maintainer signs it - which `sendan verify` reports
+      # as an unsigned release rather than as a pass.
+      - name: Say what remains to be signed by hand
+        run: |
+          {
+            echo "### This release is not yet verifiable"
+            echo
+            echo "\`sendan verify\` will report it as unsigned until the release"
+            echo "key signs the manifest. On the machine holding that key:"
+            echo
+            echo '```sh'
+            echo "gh release download ${GITHUB_REF_NAME} -p manifest.json"
+            echo "minisign -Sm manifest.json -t 'sendan ${GITHUB_REF_NAME} client asset manifest'"
+            echo "gh release upload ${GITHUB_REF_NAME} manifest.json.minisig"
+            echo '```'
+            echo
+            echo "Reproduce the build first and confirm the manifest matches;"
+            echo "signing what CI produced without checking it signs whatever CI"
+            echo "produced. See docs/workflows/release.md."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Record the toolchain a reproduction needs
         run: |
           {

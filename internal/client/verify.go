@@ -4,8 +4,10 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/Serraniel/sendan/internal/manifest"
+	"github.com/Serraniel/sendan/internal/signature"
 )
 
 // Claim is what an instance says about itself, from /api/source.
@@ -163,6 +166,67 @@ func (c *Client) digestOf(ctx context.Context, path string) (string, error) {
 	}
 
 	return manifest.DigestOf(resp.Body)
+}
+
+// ErrUnsigned reports a manifest published without a signature beside it.
+//
+// Distinct from a signature that fails, because the two need different words:
+// one release was never signed, the other is not what it says it is.
+var ErrUnsigned = errors.New("client: no signature is published for this manifest")
+
+// SignatureURL is where the detached signature for a manifest lives.
+func SignatureURL(manifestURL string) string { return manifestURL + ".minisig" }
+
+// FetchSignedManifest fetches a manifest and refuses it unless key signed it.
+//
+// Refuses rather than warns. A verifier that carries on after a signature does
+// not check out has replaced the question "is this the published client?" with
+// "does this instance agree with a file I found next to it?", which anybody who
+// could reach the file can answer however they like.
+func (c *Client) FetchSignedManifest(ctx context.Context, url string, key *signature.PublicKey) (*manifest.Manifest, error) {
+	// A manifest is a few kilobytes of JSON. The size is the far end's choice,
+	// so it is bounded here rather than trusted.
+	body, err := c.fetch(ctx, url, 1<<20)
+	if err != nil {
+		return nil, fmt.Errorf("client: fetching the manifest from %s: %w", url, err)
+	}
+
+	sigURL := SignatureURL(url)
+	raw, err := c.fetch(ctx, sigURL, 8<<10)
+	if err != nil {
+		var api *APIError
+		if errors.As(err, &api) && api.Status == http.StatusNotFound {
+			return nil, fmt.Errorf("%w: %s", ErrUnsigned, sigURL)
+		}
+		return nil, fmt.Errorf("client: fetching the signature from %s: %w", sigURL, err)
+	}
+
+	sig, err := signature.ParseSignature(bytes.NewReader(raw))
+	if err != nil {
+		return nil, err
+	}
+	if err := key.Verify(body, sig); err != nil {
+		return nil, err
+	}
+	return LoadManifest(bytes.NewReader(body))
+}
+
+// fetch reads at most limit bytes from a URL.
+func (c *Client) fetch(ctx context.Context, url string, limit int64) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.http().Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, &APIError{Status: resp.StatusCode, Message: describe(resp)}
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, limit))
 }
 
 // LoadManifest reads a manifest from JSON.

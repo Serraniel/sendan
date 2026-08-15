@@ -34,7 +34,12 @@ internal/ratelimit   96.0
 # temporary file failing, a seek failing - which a test cannot reach without
 # faking the filesystem. The paths that matter, including every refusal a person
 # can be shown, are covered.
-internal/client      84.0
+internal/client      85.0
+# internal/signature verifies release signatures, so it carries a high floor for
+# the same reason the cryptographic core does: every branch here is a decision
+# about whether to trust a file. The uncovered statement is an io.ReadAll error
+# on a reader that has already been read.
+internal/signature   97.0
 # internal/manifest's gap is the same shape: a file that cannot be opened or
 # read while being digested. The format itself, and that it covers every file in
 # a build, are covered.

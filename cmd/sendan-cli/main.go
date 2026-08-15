@@ -88,6 +88,8 @@ Options for down:
 Options for verify:
   --manifest <path|url>   compare against this manifest instead of the release
                           for the version the instance claims
+  --key <line|path>       require the manifest to be signed by this key instead
+                          of the one this build was published with
 
 There is no --password <value>: an argument appears in the process list and in
 shell history, and the password contributes to the key. Use the prompt, a file,

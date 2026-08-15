@@ -91,15 +91,13 @@ individual bug report.
 > |---|---|
 > | A digest manifest of every file in the published client | **done** — published with each release ([#102](https://github.com/Serraniel/sendan/issues/102)) |
 > | `sendan verify <url>`, which fetches what an instance serves and compares | **done** — see **Verifying an instance** below ([#103](https://github.com/Serraniel/sendan/issues/103)) |
-> | A signature over that manifest | [#104](https://github.com/Serraniel/sendan/issues/104) |
+> | A signature over that manifest | **done** — see **Verifying the manifest by hand** below ([#104](https://github.com/Serraniel/sendan/issues/104)) |
 >
-> What the missing signature costs: anybody who could replace the manifest on
-> the releases page could replace what you check against. The check still
-> detects an instance modifying the client it was given, which is the common
-> case, and does not detect a release page that has itself been tampered with.
-> `docs/design.md` §7.1 sets out what the finished mechanism will and will not
-> establish — notably that it cannot detect a backdoor served only to a chosen
-> victim.
+> `sendan verify` refuses to use a manifest it cannot authenticate, so replacing
+> the manifest on the releases page no longer changes what an instance is checked
+> against — it produces a refusal instead. `docs/design.md` §7.1 sets out what
+> the mechanism does and does not establish, notably that it cannot detect a
+> backdoor served only to a chosen victim.
 
 Also out of scope:
 
@@ -198,6 +196,7 @@ sendan verify https://files.example.org
   instance   https://files.example.org
   claims     v0.5.0, commit 1a2b3c4, unmodified
   manifest   v0.5.0
+             signed by this build's release key
 
   ✓ 41 of 41 assets match the published client
 ```
@@ -221,6 +220,61 @@ releases is checked, and how this works offline.
 `/api/source` is read only to know *which* published build to compare against.
 It is a claim, and an instance that lies about its version is caught by the
 digests failing to match the version it named.
+
+### The manifest must be signed
+
+A manifest fetched over the network is refused unless it carries a valid
+detached signature by the release key, whose public half is compiled into the
+binary rather than fetched — a key obtained at the moment of checking is a key
+whoever answers the request gets to choose. **Refused, not warned about:**
+carrying on after a bad signature would replace the question "is this the
+published client?" with "does this instance agree with a file I found next to
+it?", which anyone who can reach that file can answer however they like.
+
+Two cases are reported differently, because they call for different things:
+
+| | |
+|---|---|
+| the signature does not verify | the manifest is not the one that was published |
+| no signature is published | that release cannot be checked at all |
+
+`--key <line\|path>` checks against a key you obtained some other way, which is
+how a fork's releases are verified.
+
+A manifest given as a **local file** is used without a signature, and the report
+says so. Somebody who built the client from source and produced their own
+manifest is the authority for it; demanding our signature on their own work
+would ask them to trust us about something they already know first-hand.
+
+### Verifying the manifest by hand
+
+The command line client should not be the only thing that can check this. The
+signature is in [minisign](https://jedisct1.github.io/minisign/) format, so:
+
+```sh
+gh release download v0.5.0 -p 'manifest.json*'
+minisign -Vm manifest.json -P '<the release public key>'
+```
+
+The release key is published in [`docs/cli.md`](docs/cli.md). A signature also
+goes into Sigstore's public transparency log at release time, which is a second,
+independent record of what was published and by which workflow:
+
+```sh
+cosign verify-blob \
+  --bundle manifest.json.sigstore.json \
+  --certificate-identity-regexp '^https://github\.com/Serraniel/sendan/\.github/workflows/release\.yml@' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  manifest.json
+```
+
+The two signatures rest on different things. The minisign one is made offline
+by a key CI never holds, so compromising this repository does not produce one.
+The Sigstore one is made by CI and cannot be made without running the workflow,
+which is publicly logged. Checking both means a forgery has to survive both.
+
+`SHA256SUMS` is signed the same way, so the checksum file the install
+instructions tell you to trust is itself checkable.
 
 ### What this establishes
 

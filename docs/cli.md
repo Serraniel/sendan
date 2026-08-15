@@ -168,10 +168,37 @@ compares digests. Exit status is non-zero if anything differs.
 | | |
 |---|---|
 | `--manifest <path\|url>` | compare against this manifest instead of the release for the version the instance claims |
+| `--key <line\|path>` | require the manifest to be signed by this key instead of the one this build was published with |
 
 `--manifest` is how a fork with its own releases is checked, and how this works
 offline. [`SECURITY.md`](../SECURITY.md) sets out what a pass does and does not
 establish.
+
+### The release key
+
+A manifest fetched over the network is refused unless it is signed by the
+release key. The public half is compiled into the binary, so the copy you
+obtained carries the key it checks against rather than fetching one at the time
+of checking.
+
+> [!IMPORTANT]
+> **No release key exists yet**, because no release has been cut. Until one is
+> published, `sendan verify` against a release URL stops and says so rather than
+> checking against nothing. Verify with `--manifest` pointing at a manifest you
+> produced yourself:
+>
+> ```sh
+> (cd web && npm ci && npm run build)
+> ./scripts/asset-manifest.sh /tmp/manifest.json
+> sendan verify https://files.example.org --manifest /tmp/manifest.json
+> ```
+>
+> That is the stronger check anyway: it compares the instance against a client
+> you built, rather than against a statement somebody else signed.
+
+The signature is in [minisign](https://jedisct1.github.io/minisign/) format, so
+`minisign -Vm manifest.json -P <key>` checks it without this program.
+[`SECURITY.md`](../SECURITY.md) gives the full procedure.
 
 ## Environment
 
