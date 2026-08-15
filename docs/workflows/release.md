@@ -15,8 +15,21 @@ Tags matching `v*` — created by merging the release pull request from
 |---|---|
 | `verify-reproducible` | builds the CLI twice and requires the two to be byte-identical |
 | `cli-binaries` | the CLI for every target, `SHA256SUMS`, the client asset manifest, and a Sigstore signature over each of the latter two |
-| `binaries` | GoReleaser cross-platform binaries, checksums, Sigstore signatures, GitHub Release |
 | `container` | multi-architecture image to GHCR with SBOM, build provenance, and a cosign signature |
+
+### There is no release tool
+
+Binaries and checksums come from `scripts/release-build.sh`, and release notes
+from release-please. A release tool was considered and rejected
+([#48](https://github.com/Serraniel/sendan/issues/48)): it would be a second
+build path for artefacts the first one already produces, and two build paths
+that must agree byte-for-byte is a guarantee nobody can keep.
+
+What that buys is the reproduction procedure in
+[`SECURITY.md`](../../SECURITY.md). Somebody checking a published binary needs
+Go and this repository, and nothing else — every tool they would otherwise have
+to install at the right version is one more thing standing between them and the
+answer.
 
 ### One signature is not made here
 
