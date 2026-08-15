@@ -257,6 +257,13 @@ jobs:
         with:
           context: .
           platforms: linux/amd64,linux/arm64
+          # Without these the image reports itself as "dev", and an instance
+          # that cannot say which release it is cannot be checked against one -
+          # `sendan verify` reads /api/source to decide which published manifest
+          # to compare against.
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

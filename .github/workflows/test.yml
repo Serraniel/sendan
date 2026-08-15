@@ -226,3 +226,77 @@ jobs:
             exit 1
           fi
           echo "Client embedded."
+
+  # The image is only built by the release workflow, which runs on a tag - so a
+  # change that breaks it would be found at the moment of publishing, by the one
+  # job with nothing after it to catch anything. Built here on both
+  # architectures, and then actually started: an image that builds and exits is
+  # a passing build and a broken release.
+  container:
+    name: Container image
+    runs-on: ubuntu-latest
+    needs: [test-go, test-web]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Build for both architectures
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: false
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+
+      # Loaded singly because a multi-architecture build produces a manifest
+      # list, and there is nothing to run in one of those.
+      - name: Build for this machine and load it
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          load: true
+          tags: sendan:ci
+          build-args: |
+            VERSION=ci
+            COMMIT=${{ github.sha }}
+
+      # Under the conditions the documentation asks operators to use, because a
+      # read-only root filesystem is exactly the kind of constraint that is
+      # discovered to be unsatisfiable in production.
+      - name: Start it read-only and non-root, and use it
+        run: |
+          set -euo pipefail
+          docker run -d --name sendan-ci \
+            --read-only --tmpfs /tmp \
+            -v sendan-ci-data:/var/lib/sendan \
+            -p 8080:8080 \
+            -e SENDAN_BASE_URL=http://127.0.0.1:8080 \
+            sendan:ci
+
+          for _ in $(seq 30); do
+            if curl -fsS http://127.0.0.1:8080/api/source >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+
+          echo "It reports:"
+          curl -fsS http://127.0.0.1:8080/api/source
+
+          # An image that cannot say which release it is cannot be checked
+          # against one, and the build argument that stamps it is easy to drop.
+          if ! curl -fsS http://127.0.0.1:8080/api/source | grep -q '"version": *"ci"'; then
+            echo "::error::the image does not report the version it was built with"
+            docker logs sendan-ci
+            exit 1
+          fi
+
+          # The client has to be in there too: serve_ui defaults on, so an image
+          # built without the embedui tag would answer this with an explanation
+          # rather than the application.
+          if ! curl -fsS http://127.0.0.1:8080/ | grep -qi "sendan"; then
+            echo "::error::the image does not serve the web client"
+            exit 1
+          fi
+
+          docker rm -f sendan-ci >/dev/null
