@@ -541,16 +541,38 @@ func TestTheClientDoesNotShadowTheAPI(t *testing.T) {
 // With the client disabled, an instance is backend-only from the same binary.
 func TestTheClientIsNotServedWhenDisabled(t *testing.T) {
 	h := newAPIHarness(t)
-	handler := New(Options{
+	h.handler = New(Options{
 		Uploads: h.svc,
 		BaseURL: mustURL(t, "https://sendan.example"),
 		ServeUI: false,
 	})
 
-	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	if rec.Code != http.StatusNotFound {
-		t.Errorf("status %d with the client disabled, want 404", rec.Code)
+	// Absent, rather than merely unrouted at the root: a path that exists in
+	// the embedded bundle has to be gone too.
+	for _, path := range []string{"/", "/index.html", "/_app/immutable/entry/start.js"} {
+		rec := httptest.NewRecorder()
+		h.handler.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("GET %s answered %d with the client disabled, want 404", path, rec.Code)
+		}
+	}
+
+	// The half that matters. "No client" is not what this setting is for -
+	// an API-only instance is, and an instance that serves neither a client
+	// nor an API satisfies the assertion above perfectly.
+	body := []byte(strings.Repeat("sendan..", 500))
+
+	rec, id := h.create(t, len(body), uploadMetadata(nil))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("creating an upload answered %d with the client disabled, want 201", rec.Code)
+	}
+	if got := h.patch(t, id, 0, body); got.Code != http.StatusNoContent {
+		t.Fatalf("sending the body answered %d with the client disabled, want 204", got.Code)
+	}
+	// And the finished upload is readable, so the instance is serving the whole
+	// path an operator's own client would use, not merely accepting bytes.
+	if got, _ := h.get(t, "/api/uploads/"+id+"/metadata"); got.Code != http.StatusOK {
+		t.Errorf("metadata answered %d with the client disabled, want 200", got.Code)
 	}
 }
 
