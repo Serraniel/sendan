@@ -103,7 +103,12 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - working-directory: web
+      # Named for what it does rather than for its first line: this is the lint,
+      # the type-check, the tests and the production build, and an unnamed step
+      # reports all four as "Run npm ci" in the log somebody reads to find out
+      # whether the type-check runs at all.
+      - name: Lint, type-check, test and build the client
+        working-directory: web
         run: |
           npm ci
           npm run lint
