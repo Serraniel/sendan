@@ -177,13 +177,26 @@ var ErrUnsigned = errors.New("client: no signature is published for this manifes
 // SignatureURL is where the detached signature for a manifest lives.
 func SignatureURL(manifestURL string) string { return manifestURL + ".minisig" }
 
-// FetchSignedManifest fetches a manifest and refuses it unless key signed it.
+// Keys is what a manifest must be signed by. Both are required: a build that
+// accepted either alone would have the weaker of the two as its real guarantee.
+type Keys struct {
+	// Ed25519 is checkable by minisign, so this client is not the only thing
+	// that can verify a release.
+	Ed25519 *signature.PublicKey
+
+	// PostQuantum covers the case Ed25519 does not: an adversary who records a
+	// release today and has a quantum computer later. Optional only while no
+	// key exists to check against; once one is compiled in it is required.
+	PostQuantum *signature.PQPublicKey
+}
+
+// FetchSignedManifest fetches a manifest and refuses it unless keys signed it.
 //
 // Refuses rather than warns. A verifier that carries on after a signature does
 // not check out has replaced the question "is this the published client?" with
 // "does this instance agree with a file I found next to it?", which anybody who
 // could reach the file can answer however they like.
-func (c *Client) FetchSignedManifest(ctx context.Context, url string, key *signature.PublicKey) (*manifest.Manifest, error) {
+func (c *Client) FetchSignedManifest(ctx context.Context, url string, keys Keys) (*manifest.Manifest, error) {
 	// A manifest is a few kilobytes of JSON. The size is the far end's choice,
 	// so it is bounded here rather than trusted.
 	body, err := c.fetch(ctx, url, 1<<20)
@@ -205,9 +218,36 @@ func (c *Client) FetchSignedManifest(ctx context.Context, url string, key *signa
 	if err != nil {
 		return nil, err
 	}
-	if err := key.Verify(body, sig); err != nil {
+	if err := keys.Ed25519.Verify(body, sig); err != nil {
 		return nil, err
 	}
+
+	// The second signature, over the same bytes. Fetched after the first has
+	// checked out, so a release that fails the cheap check is not made to wait
+	// on a second download.
+	if keys.PostQuantum != nil {
+		pqURL := signature.PQSignatureURL(url)
+		pqRaw, err := c.fetch(ctx, pqURL, 64<<10)
+		if err != nil {
+			var api *APIError
+			if errors.As(err, &api) && api.Status == http.StatusNotFound {
+				return nil, fmt.Errorf(
+					"%w: %s. The Ed25519 signature verified, so this release was "+
+						"signed - but not with both keys this build requires",
+					ErrUnsigned, pqURL)
+			}
+			return nil, fmt.Errorf("client: fetching the signature from %s: %w", pqURL, err)
+		}
+
+		pqSig, err := signature.ParsePQSignature(bytes.NewReader(pqRaw))
+		if err != nil {
+			return nil, err
+		}
+		if err := keys.PostQuantum.Verify(body, pqSig); err != nil {
+			return nil, err
+		}
+	}
+
 	return LoadManifest(bytes.NewReader(body))
 }
 

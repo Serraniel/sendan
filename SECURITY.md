@@ -256,15 +256,35 @@ would ask them to trust us about something they already know first-hand.
 
 ### Verifying the manifest by hand
 
-The command line client should not be the only thing that can check this. The
-signature is in [minisign](https://jedisct1.github.io/minisign/) format, so:
+Two signatures cover the manifest, and `sendan verify` requires both.
+
+The first is [minisign](https://jedisct1.github.io/minisign/) format, so the
+command line client is not the only thing that can check it:
 
 ```sh
 gh release download v0.5.0 -p 'manifest.json*'
 minisign -Vm manifest.json -P '<the release public key>'
 ```
 
-The release key is published in [`docs/cli.md`](docs/cli.md). A signature also
+The second is **SLH-DSA** — SPHINCS+ as standardised — which rests only on hash
+functions and so is not exposed to Shor's algorithm:
+
+```sh
+go run ./tools/pq-sign verify release.pqpub manifest.json
+```
+
+Signing is the one place in this project where post-quantum primitives genuinely
+apply. The encryption is symmetric and already out of reach; a signature is
+different, because it has to still mean something years after it was made. An
+adversary who records a release today and eventually has a quantum computer
+defeats the first signature and not the second.
+
+SLH-DSA has no third-party tool equivalent to minisign, so unlike the first this
+signature can only be checked with software from this repository. That is the
+cost of the conservative scheme, and it is why it is the *second* signature
+rather than the only one.
+
+Both public keys are published in [`docs/cli.md`](docs/cli.md). A signature also
 goes into Sigstore's public transparency log at release time, which is a second,
 independent record of what was published and by which workflow:
 

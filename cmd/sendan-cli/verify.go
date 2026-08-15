@@ -35,6 +35,17 @@ const upstream = "https://github.com/Serraniel/sendan"
 // --key to check against a key they obtained some other way.
 const releaseKey = ""
 
+// releasePQKey is the post-quantum half, in the same form.
+//
+// A release must satisfy both. Ed25519 rests on a primitive a quantum computer
+// breaks, and SLH-DSA on a scheme with far less deployment behind it; requiring
+// both means a forgery has to defeat the one that is still standing.
+//
+// Empty while no key exists, which is why the check is skipped rather than
+// failed: a build that demanded a signature nobody can make would verify
+// nothing at all. Filling this in is what turns the requirement on.
+const releasePQKey = ""
+
 // errNotPublished reports an instance serving something other than the client
 // it claims. Separate so the exit status can distinguish it from a failure to
 // carry out the check at all.
@@ -118,12 +129,12 @@ func loadManifest(ctx context.Context, c *client.Client, from, keyFrom string, c
 	}
 
 	if strings.HasPrefix(from, "http://") || strings.HasPrefix(from, "https://") {
-		key, err := loadKey(keyFrom)
+		keys, err := loadKeys(keyFrom)
 		if err != nil {
 			return nil, "", err
 		}
 
-		m, err := c.FetchSignedManifest(ctx, from, key)
+		m, err := c.FetchSignedManifest(ctx, from, keys)
 		if err != nil {
 			if errors.Is(err, client.ErrUnsigned) {
 				return nil, "", fmt.Errorf(
@@ -135,7 +146,7 @@ func loadManifest(ctx context.Context, c *client.Client, from, keyFrom string, c
 			}
 			return nil, "", err
 		}
-		return m, "signed by " + keyDescription(keyFrom), nil
+		return m, describeKeys(keyFrom, keys), nil
 	}
 
 	f, err := os.Open(from) //nolint:gosec // the path is the user's own argument
@@ -151,10 +162,32 @@ func loadManifest(ctx context.Context, c *client.Client, from, keyFrom string, c
 	return m, "a local file you supplied, unsigned - you are its authority", nil
 }
 
-// loadKey resolves the key a fetched manifest must be signed by.
+// loadKeys resolves the keys a fetched manifest must be signed by.
 //
-// Either the key compiled into this binary, or one named on the command line as
-// a path or as the base64 line itself.
+// Either the keys compiled into this binary, or one named on the command line
+// as a path or as the base64 line itself. --key names the Ed25519 key only: a
+// fork checking against its own key is checking against its own release, and
+// requiring it to supply both would make the option unusable for the case it
+// exists for.
+func loadKeys(from string) (client.Keys, error) {
+	ed, err := loadKey(from)
+	if err != nil {
+		return client.Keys{}, err
+	}
+	keys := client.Keys{Ed25519: ed}
+
+	// Only for this build's own key. A manifest checked against a key the user
+	// supplied is checked against that key alone.
+	if from == "" && releasePQKey != "" {
+		pq, err := signature.ParsePQPublicKey(releasePQKey)
+		if err != nil {
+			return client.Keys{}, err
+		}
+		keys.PostQuantum = pq
+	}
+	return keys, nil
+}
+
 func loadKey(from string) (*signature.PublicKey, error) {
 	if from == "" {
 		if releaseKey == "" {
@@ -174,11 +207,16 @@ func loadKey(from string) (*signature.PublicKey, error) {
 	return signature.ParsePublicKey(from)
 }
 
-func keyDescription(from string) string {
-	if from == "" {
-		return "this build's release key"
+// describeKeys says which keys a manifest satisfied, because "signed" means
+// different things depending on how many signatures were checked.
+func describeKeys(from string, keys client.Keys) string {
+	if from != "" {
+		return "signed by the key you passed"
 	}
-	return "the key you passed"
+	if keys.PostQuantum != nil {
+		return "signed by this build's release keys, classical and post-quantum"
+	}
+	return "signed by this build's release key"
 }
 
 // report prints the result.
