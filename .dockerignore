@@ -35,6 +35,12 @@ coverage.out
 web/test-results/
 web/playwright-report/
 
+# Deployment scaffolding. Read by an operator and by docker compose, never by
+# the build - and compose.yaml naming the image it builds would otherwise put a
+# copy of the recipe inside the result.
+compose.yaml
+deploy/
+
 # Editor and operating system noise.
 .idea/
 .vscode/
