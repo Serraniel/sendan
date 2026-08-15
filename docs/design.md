@@ -235,6 +235,12 @@ revocation**. Whichever is reached first applies.
     than on SQLite, and this is documented for operators in
     `docs/configuration.md`.
 
+    A master key narrows this. With one configured, a row recovered from the
+    write-ahead log yields a *wrapped* at-rest key, which opens nothing without
+    a secret that was never in the database — so the residue stops being
+    equivalent to the key. It does not make deletion complete on PostgreSQL, and
+    it is no help against anyone who has the master key as well.
+
 ## 4. Transfer
 
 > [!NOTE]

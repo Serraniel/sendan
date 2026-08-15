@@ -64,6 +64,14 @@ individual bug report.
   server-side policy. Even the operator cannot bypass it.
 - **Data surviving expiry.** Expired uploads are hard-deleted, with no
   soft-delete rows, no tombstones, and no identifiers retained in logs.
+- **A cold copy of the database**, if an operator configures a master key. The
+  per-file at-rest keys are then stored wrapped, so a backup, a volume snapshot
+  or a decommissioned disk carries nothing that opens a blob. Off by default,
+  because losing that key makes every upload unrecoverable.
+  [`docs/configuration.md`](docs/configuration.md) has the procedure. This is
+  defence in depth below the content guarantee, which rests on the link secret
+  and is unchanged either way — and it does nothing against a live host, where
+  the key is in memory by definition.
 
 ### What Sendan cannot protect you from
 

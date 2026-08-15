@@ -52,6 +52,30 @@ const (
 )
 
 func main() {
+	// Subcommands, and the server when there are none. Kept to the two
+	// operations that must happen while nothing is serving: everything else the
+	// server does, it does from the environment.
+	if args := os.Args[1:]; len(args) > 0 {
+		var err error
+		switch args[0] {
+		case "generate-master-key":
+			err = generateMasterKey()
+		case "rotate-master-key":
+			err = rotateMasterKey(context.Background(), args[1:])
+		case "help", "-h", "--help":
+			fmt.Print(masterKeyUsage)
+			return
+		default:
+			fmt.Fprint(os.Stderr, masterKeyUsage)
+			err = fmt.Errorf("unknown command %q", args[0])
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "sendan: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(); err != nil {
 		// Configuration errors arrive before a logger exists, so they go to
 		// stderr directly rather than being lost.
@@ -114,7 +138,19 @@ func run() error {
 			log.Error("closing the metadata store", "error", err)
 		}
 	}()
-	log.Info("metadata store ready", "location", redactCredentials(cfg.Database))
+	// Wrapped before anything reads a row, so no path exists that reaches an
+	// at-rest key in its stored form.
+	if len(cfg.MasterKey) > 0 {
+		if metadata, err = store.WithMasterKey(metadata, cfg.MasterKey); err != nil {
+			return err
+		}
+	}
+
+	log.Info("metadata store ready",
+		"location", redactCredentials(cfg.Database),
+		// Whether, never which. An operator needs to know the setting took
+		// effect, and a log is one of the places this key must never appear.
+		"at_rest_keys_wrapped", len(cfg.MasterKey) > 0)
 
 	blobs, err := blob.Open(ctx, cfg.Storage)
 	if err != nil {
