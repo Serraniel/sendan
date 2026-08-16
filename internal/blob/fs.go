@@ -13,10 +13,21 @@ import (
 	"path/filepath"
 )
 
-// idPattern is the exact shape of a blob identifier: base64url of a 16-byte
-// file identifier, so 22 characters from an alphabet with no path separators
-// and no dot.
-const idLength = 22
+// A blob identifier has one of exactly two shapes.
+//
+// Native uploads use base64url of a 16-byte identifier: 22 characters. The
+// compatibility protocol's clients validate identifiers themselves and accept
+// only short hexadecimal ones, so an upload made through it uses 16 - see
+// internal/compat.
+//
+// What keeps a path traversal out is the alphabet below, not the length: it
+// admits no separator and no dot, so no accepted identifier can name anything
+// outside the store. The lengths are enumerated rather than given as a range so
+// that a value of some third shape is still refused.
+const (
+	idLength       = 22
+	compatIDLength = 16
+)
 
 // FS stores blobs as files beneath a root directory.
 type FS struct {
@@ -45,8 +56,9 @@ func NewFS(dir string) (*FS, error) {
 // storage root, so this is an allowlist rather than an attempt to strip
 // dangerous sequences.
 func validateID(id string) error {
-	if len(id) != idLength {
-		return fmt.Errorf("%w: length %d, want %d", ErrInvalidID, len(id), idLength)
+	if len(id) != idLength && len(id) != compatIDLength {
+		return fmt.Errorf("%w: length %d, want %d or %d",
+			ErrInvalidID, len(id), compatIDLength, idLength)
 	}
 	for i := 0; i < len(id); i++ {
 		c := id[i]

@@ -83,6 +83,13 @@ func (s *Service) WithPasswordAttempts(a *ratelimit.PasswordAttempts) *Service {
 	return s
 }
 
+// Now is the service's clock.
+//
+// Exported so anything sharing this lifecycle uses the same one. Tests inject a
+// clock to reach expiry without sleeping, and a caller that reads the wall
+// clock directly would quietly opt out of that.
+func (s *Service) Now() time.Time { return s.now() }
+
 // ResolveExpiry turns a requested lifetime into a deadline, applying the
 // instance policy.
 //

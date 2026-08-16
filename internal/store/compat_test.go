@@ -200,3 +200,74 @@ func TestANativeUploadStillRequiresItsEnvelope(t *testing.T) {
 		t.Error("a native upload was created with part of its envelope missing")
 	}
 }
+
+// The compatibility protocol streams a file without declaring its length, so
+// the size is not known when the row is created. It has to be recorded before
+// the upload is reachable, because the download count is derived as bytes
+// served divided by size: a row left at zero serves without ever counting a
+// download, and the limit silently does not apply.
+func TestTheSizeIsRecordedWhenTheUploadFinishes(t *testing.T) {
+	s, c := compatStore(t)
+	u, compat := aCompatUpload(t, "compatfinishsize00000x")
+	u.Size = 0
+	// Room for more than one, so the upload stays reachable and the count can
+	// be read rather than inferred from it having become unreachable.
+	u.MaxDownloads = 3
+
+	if err := c.CreateCompat(t.Context(), u, compat); err != nil {
+		t.Fatal(err)
+	}
+
+	const size = 4096
+	if err := c.FinishCompat(t.Context(), u.ID, size, time.Now()); err != nil {
+		t.Fatalf("finish: %v", err)
+	}
+
+	got, err := s.Get(t.Context(), u.ID, time.Now())
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Size != size {
+		t.Errorf("size %d, want %d", got.Size, size)
+	}
+	if got.CompletedAt.IsZero() {
+		t.Error("the upload was not marked complete")
+	}
+
+	// And the derived download count now advances, which is what makes a
+	// download limit mean anything.
+	if _, err := s.RecordServed(t.Context(), u.ID, size); err != nil {
+		t.Fatalf("record served: %v", err)
+	}
+	after, err := s.Get(t.Context(), u.ID, time.Now())
+	if err != nil {
+		t.Fatalf("get after serving: %v", err)
+	}
+	if after.DownloadCount != 1 {
+		t.Errorf("download count %d after serving the whole file, want 1", after.DownloadCount)
+	}
+}
+
+func TestFinishingAnAbsentOrFinishedUploadIsRefused(t *testing.T) {
+	_, c := compatStore(t)
+	u, compat := aCompatUpload(t, "compatfinishtwice0000x")
+
+	if err := c.CreateCompat(t.Context(), u, compat); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.FinishCompat(t.Context(), u.ID, 10, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Twice would let a second upload claim a different size for content that
+	// is already being served.
+	if err := c.FinishCompat(t.Context(), u.ID, 20, time.Now()); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("finishing twice gave %v, want ErrNotFound", err)
+	}
+	if err := c.FinishCompat(t.Context(), "compatfinishmissing00x", 10, time.Now()); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("finishing an absent upload gave %v, want ErrNotFound", err)
+	}
+	if err := c.FinishCompat(t.Context(), u.ID, -1, time.Now()); !errors.Is(err, store.ErrInvalid) {
+		t.Errorf("a negative size gave %v, want ErrInvalid", err)
+	}
+}

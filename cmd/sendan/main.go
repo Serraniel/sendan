@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/Serraniel/sendan/internal/blob"
+	"github.com/Serraniel/sendan/internal/compat"
 	"github.com/Serraniel/sendan/internal/config"
 	"github.com/Serraniel/sendan/internal/httpapi"
 	"github.com/Serraniel/sendan/internal/logging"
@@ -183,12 +184,32 @@ func run() error {
 	}()
 	defer reaper.Wait()
 
+	// Only when asked for. A nil handler means the routes are never
+	// registered, so the mode being off is structural rather than a check
+	// inside each endpoint.
+	var compatHandler http.Handler
+	if cfg.SendCompat {
+		cs, ok := metadata.(store.CompatStore)
+		if !ok {
+			return fmt.Errorf("this database backend cannot store compatibility uploads")
+		}
+		compatHandler = compat.New(compat.Options{
+			Store:    cs,
+			Uploads:  uploads,
+			Metadata: metadata,
+			Blobs:    blob.NewShredder(blobs),
+			BaseURL:  cfg.BaseURL,
+			Log:      log,
+		})
+	}
+
 	handler := httpapi.New(httpapi.Options{
 		BaseURL:       cfg.BaseURL,
 		SourceURL:     cfg.SourceURL,
 		Version:       version,
 		Commit:        commit,
 		Uploads:       uploads,
+		Compat:        compatHandler,
 		ServeUI:       cfg.ServeUI,
 		WebUI:         clientAssets(),
 		MaxUploadSize: cfg.MaxUploadSize,

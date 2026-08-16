@@ -9,19 +9,14 @@ All problems are reported together, so fixing a misconfiguration does not
 require restarting repeatedly to discover the next fault.
 
 > [!NOTE]
-> **Every variable below is honoured**, with one exception named in the table.
-> The transfer API is complete and the web client speaks it, so a file can be
-> sent and received in a browser, or with the command line client.
->
-> | Variable | Effect today |
-> |---|---|
-> | `SENDAN_SEND_COMPAT` | no endpoints; the compatibility layer is M7. It does log a warning at startup when enabled |
->
-> Everything else applies: storage opens at startup, uploads are accepted and
-> bounded, downloads are served and counted, expiry and reaping run, every
-> request is rate limited, and `SENDAN_SERVE_UI` decides whether the embedded
-> client is served — in a build that has one, which is a build tagged
-> `embedui`. See below.
+> **Every variable below is honoured, with no exceptions.** The transfer API is
+> complete and the web client speaks it, so a file can be sent and received in a
+> browser or with the command line client. Storage opens at startup, uploads are
+> accepted and bounded, downloads are served and counted, expiry and reaping
+> run, every request is rate limited, `SENDAN_SERVE_UI` decides whether the
+> embedded client is served — in a build that has one, which is a build tagged
+> `embedui` — and `SENDAN_SEND_COMPAT` now registers the compatibility
+> endpoints rather than only warning that it would.
 
 ## The command line client
 

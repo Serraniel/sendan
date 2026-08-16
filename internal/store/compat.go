@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // CompatUpload is the per-upload state the third-party compatibility protocol
@@ -57,6 +58,49 @@ type CompatStore interface {
 
 	// RotateCompatNonce replaces the stored nonce.
 	RotateCompatNonce(ctx context.Context, id string, nonce []byte) error
+
+	// FinishCompat records the size an upload turned out to be and marks it
+	// complete.
+	//
+	// The compatibility protocol streams a file without declaring its length
+	// first, so unlike the native path the size is not known when the row is
+	// created. It has to be recorded before the upload is reachable: the
+	// download count is derived as bytes served divided by size, so a row left
+	// at zero would serve without ever counting a download, and a download
+	// limit would silently not apply.
+	FinishCompat(ctx context.Context, id string, size int64, completedAt time.Time) error
+}
+
+// FinishCompat records the final size and marks the upload complete.
+func (s *SQLite) FinishCompat(ctx context.Context, id string, size int64, at time.Time) error {
+	return finishCompat(ctx, s.db, identity, id, size, at)
+}
+
+// FinishCompat records the final size and marks the upload complete.
+func (p *Postgres) FinishCompat(ctx context.Context, id string, size int64, at time.Time) error {
+	return finishCompat(ctx, p.db, rebind, id, size, at)
+}
+
+// finishCompat sets both in one statement, so no moment exists in which an
+// upload is reachable with a size of zero.
+func finishCompat(ctx context.Context, db *sql.DB, bind func(string) string, id string, size int64, at time.Time) error {
+	if size < 0 {
+		return fmt.Errorf("%w: negative size", ErrInvalid)
+	}
+	res, err := db.ExecContext(ctx, bind(
+		`UPDATE uploads SET size = ?, completed_at = ? WHERE id = ? AND completed_at IS NULL`),
+		size, at.Unix(), id)
+	if err != nil {
+		return fmt.Errorf("store: finish compat: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: finish compat: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // CreateCompat stores an upload and its compatibility state in one transaction.

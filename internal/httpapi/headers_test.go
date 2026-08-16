@@ -341,3 +341,51 @@ func servedInlineScripts(doc string) []string {
 	}
 	return out
 }
+
+// The compatibility protocol is off unless an operator asks for it, and off
+// means the routes do not exist rather than existing and refusing. An endpoint
+// that answers 401 is still an endpoint somebody can find and probe.
+func TestTheCompatibilityRoutesExistOnlyWhenEnabled(t *testing.T) {
+	h := newAPIHarness(t)
+
+	paths := []string{
+		"/__version__",
+		"/api/ws",
+		"/api/exists/0123456789abcdef",
+		"/api/metadata/0123456789abcdef",
+		"/api/download/0123456789abcdef",
+		"/download/0123456789abcdef/",
+	}
+
+	disabled := New(Options{
+		Uploads: h.svc,
+		BaseURL: mustURL(t, "https://sendan.example"),
+	})
+	for _, path := range paths {
+		rec := httptest.NewRecorder()
+		disabled.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("with the mode off, %s answered %d, want 404", path, rec.Code)
+		}
+	}
+
+	// With it on, the same paths reach the handler the operator supplied. What
+	// that handler answers is its own business; that it is reached at all is
+	// this package's.
+	reached := map[string]bool{}
+	enabled := New(Options{
+		Uploads: h.svc,
+		BaseURL: mustURL(t, "https://sendan.example"),
+		Compat: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reached[r.URL.Path] = true
+			w.WriteHeader(http.StatusTeapot)
+		}),
+	})
+	for _, path := range paths {
+		rec := httptest.NewRecorder()
+		enabled.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if !reached[path] {
+			t.Errorf("with the mode on, %s did not reach the compatibility handler (status %d)", path, rec.Code)
+		}
+	}
+}
