@@ -145,6 +145,14 @@ func (h *Handler) runUpload(ctx context.Context, conn *websocket.Conn) error {
 		ExpiresAt:     expires,
 		MaxDownloads:  downloadLimit(header.DLimit),
 	}
+	// Bounded by construction today, since downloadLimit never returns zero.
+	// Checked anyway: the rule belongs at every entry point rather than resting
+	// on what one function currently happens to return.
+	if err := h.uploads.EnsureBounded(u.ExpiresAt, u.MaxDownloads); err != nil {
+		sendError(ctx, conn, http.StatusBadRequest)
+		return err
+	}
+
 	c := &store.CompatUpload{
 		ID:       id,
 		AuthKey:  authKey,

@@ -44,6 +44,20 @@ type Policy struct {
 	AllowInfiniteTTL    bool
 	DefaultMaxDownloads int
 
+	// RequireLimit refuses an upload that would have neither a deadline nor a
+	// download limit.
+	//
+	// The two bounds are independent and either alone is enough: a file that
+	// expires on Friday may be fetched any number of times until then, and a
+	// file with three downloads and no deadline is gone once they are spent.
+	// What this refuses is an upload with neither, which is a file that stays
+	// until somebody remembers to remove it - and the reason this project
+	// deletes anything at all is that nobody remembers.
+	//
+	// It can only bind when AllowInfiniteTTL is set, since otherwise every
+	// upload already has a deadline.
+	RequireLimit bool
+
 	// IncompleteTTL is how long an upload may remain unfinished before the
 	// reaper treats it as abandoned. Zero selects DefaultIncompleteTTL.
 	//
@@ -89,6 +103,26 @@ func (s *Service) WithPasswordAttempts(a *ratelimit.PasswordAttempts) *Service {
 // clock to reach expiry without sleeping, and a caller that reads the wall
 // clock directly would quietly opt out of that.
 func (s *Service) Now() time.Time { return s.now() }
+
+// ErrUnbounded reports an upload that would never expire and could be
+// downloaded any number of times.
+var ErrUnbounded = errors.New(
+	"upload: an upload needs either a deadline or a download limit; " +
+		"this instance does not accept one with neither")
+
+// EnsureBounded refuses an upload that has neither bound.
+//
+// Called after both have been resolved, because either one alone satisfies it
+// and neither path knows the other's answer until then.
+func (s *Service) EnsureBounded(expires time.Time, maxDownloads int) error {
+	if !s.policy.RequireLimit {
+		return nil
+	}
+	if expires.IsZero() && maxDownloads <= 0 {
+		return ErrUnbounded
+	}
+	return nil
+}
 
 // ResolveExpiry turns a requested lifetime into a deadline, applying the
 // instance policy.

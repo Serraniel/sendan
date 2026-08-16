@@ -105,6 +105,7 @@ func run() error {
 		"default_ttl", cfg.DefaultTTL.String(),
 		"max_ttl", cfg.MaxTTL.String(),
 		"allow_infinite_ttl", cfg.AllowInfiniteTTL,
+		"require_limit", cfg.RequireLimit,
 		"max_upload_size", cfg.MaxUploadSize,
 		"rate_limit_per_minute", cfg.RateLimit,
 		"trusted_proxies", cfg.TrustedProxies,
@@ -172,6 +173,7 @@ func run() error {
 		DefaultTTL:          cfg.DefaultTTL,
 		MaxTTL:              cfg.MaxTTL,
 		AllowInfiniteTTL:    cfg.AllowInfiniteTTL,
+		RequireLimit:        cfg.RequireLimit,
 		IncompleteTTL:       cfg.IncompleteTTL,
 		DefaultMaxDownloads: cfg.DefaultMaxDownloads,
 	}, log).WithPasswordAttempts(attempts)

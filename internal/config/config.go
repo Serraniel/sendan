@@ -87,6 +87,13 @@ type Config struct {
 	// AllowInfiniteTTL permits uploads that never expire. Off by default.
 	AllowInfiniteTTL bool
 
+	// RequireLimit refuses an upload that would have neither a deadline nor a
+	// download limit. The two are independent and either alone satisfies it.
+	//
+	// Only binds when AllowInfiniteTTL is set, because otherwise every upload
+	// already has a deadline.
+	RequireLimit bool
+
 	// IncompleteTTL is how long an upload may remain unfinished before the
 	// reaper treats it as abandoned and removes it, measured from when it was
 	// created. It therefore also bounds how long a single upload may take.
@@ -141,6 +148,7 @@ func Load(getenv Getenv) (*Config, error) {
 		DefaultTTL:       l.duration("SENDAN_DEFAULT_TTL", DefaultTTL),
 		MaxTTL:           l.duration("SENDAN_MAX_TTL", DefaultMaxTTL),
 		AllowInfiniteTTL: l.boolean("SENDAN_ALLOW_INFINITE_TTL", false),
+		RequireLimit:     l.boolean("SENDAN_REQUIRE_LIMIT", true),
 		IncompleteTTL:    l.duration("SENDAN_INCOMPLETE_TTL", DefaultIncompleteTTL),
 
 		RateLimit:      l.integer("SENDAN_RATE_LIMIT", DefaultRateLimit),

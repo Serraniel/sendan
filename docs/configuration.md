@@ -106,6 +106,7 @@ themselves.
 | `SENDAN_ALLOW_INFINITE_TTL` | `false` | Permit uploads that never expire |
 | `SENDAN_INCOMPLETE_TTL` | `24h` | How long an upload may remain unfinished before it is treated as abandoned and removed |
 | `SENDAN_DEFAULT_MAX_DOWNLOADS` | `0` | Download limit when the uploader does not choose one. `0` means no limit |
+| `SENDAN_REQUIRE_LIMIT` | `true` | Refuse an upload that would have neither a deadline nor a download limit |
 
 > [!IMPORTANT]
 > Setting `SENDAN_DEFAULT_TTL=0` or `SENDAN_MAX_TTL=0` requests **unlimited
@@ -114,6 +115,32 @@ themselves.
 > This is deliberate. Sendan's guarantee is that an expired upload leaves
 > nothing behind; reaching unlimited retention by leaving a value unset would
 > make that an accident rather than a choice.
+
+### Two bounds, and at least one of them
+
+An upload can be bounded by **time**, by **download count**, or by both, and the
+two are independent:
+
+| | |
+|---|---|
+| a deadline, no download limit | fetched any number of times until it expires |
+| a download limit, no deadline | gone once the downloads are spent |
+| both | whichever comes first |
+| **neither** | refused, unless `SENDAN_REQUIRE_LIMIT=false` |
+
+Unlimited downloads within a deadline is an ordinary, supported combination —
+set `SENDAN_DEFAULT_MAX_DOWNLOADS=0`, or have the uploader ask for no limit, and
+the deadline is what removes the file.
+
+What `SENDAN_REQUIRE_LIMIT` refuses is an upload with **neither** bound: a file
+that stays until somebody remembers to delete it. The reason this project
+deletes anything automatically is that nobody remembers.
+
+It can only bind when `SENDAN_ALLOW_INFINITE_TTL=true`, because otherwise every
+upload already has a deadline. An operator who wants files that genuinely never
+go away sets both `SENDAN_ALLOW_INFINITE_TTL=true` and
+`SENDAN_REQUIRE_LIMIT=false` — two deliberate choices rather than one absent
+value.
 
 ## Limits
 
