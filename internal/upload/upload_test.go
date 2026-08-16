@@ -613,3 +613,36 @@ func TestReaperSurvivesAFailingBlobStore(t *testing.T) {
 		t.Fatalf("second reap removed %d, want 0", n)
 	}
 }
+
+// An upload needs either a deadline or a download limit. Either alone is
+// enough; what is refused is neither, which is a file that stays until somebody
+// remembers to remove it.
+func TestAnUploadNeedsAtLeastOneLimit(t *testing.T) {
+	deadline := time.Now().Add(time.Hour)
+
+	for name, tc := range map[string]struct {
+		expires      time.Time
+		maxDownloads int
+		require      bool
+		wantErr      bool
+	}{
+		"a deadline and no download limit":     {deadline, 0, true, false},
+		"a download limit and no deadline":     {time.Time{}, 3, true, false},
+		"both":                                 {deadline, 3, true, false},
+		"neither":                              {time.Time{}, 0, true, true},
+		"neither, but the instance permits it": {time.Time{}, 0, false, false},
+		"a negative limit counts as none":      {time.Time{}, -1, true, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			svc := New(nil, nil, Policy{RequireLimit: tc.require}, slog.New(slog.DiscardHandler))
+
+			err := svc.EnsureBounded(tc.expires, tc.maxDownloads)
+			if tc.wantErr && !errors.Is(err, ErrUnbounded) {
+				t.Errorf("got %v, want ErrUnbounded", err)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("got %v, want nil", err)
+			}
+		})
+	}
+}

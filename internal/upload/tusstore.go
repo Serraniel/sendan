@@ -167,6 +167,11 @@ func (t *TusStore) newRow(info tus.FileInfo) (*store.Upload, error) {
 	}
 	u.ExpiresAt = expires
 
+	// Both bounds are known only now, and either alone is enough.
+	if err := t.svc.EnsureBounded(u.ExpiresAt, u.MaxDownloads); err != nil {
+		return nil, tus.NewError("ERR_RETENTION", err.Error(), 400)
+	}
+
 	if err := m.err(); err != nil {
 		return nil, err
 	}
