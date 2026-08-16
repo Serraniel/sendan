@@ -366,6 +366,13 @@ func (d *Decryptor) nextRecord() error {
 	if err != nil {
 		return ErrContent
 	}
+	// Spec §5.4: a record with no plaintext has no delimiter to inspect. This
+	// is load-bearing rather than defensive - the delimiter is read as
+	// plaintext[len(plaintext)-1] below, and on an empty slice that panics
+	// rather than returning something the switch can reject. The TypeScript
+	// implementation keeps the same check for the same rule, where an
+	// out-of-range read yields undefined and the delimiter switch would catch
+	// it anyway.
 	if len(plaintext) == 0 {
 		return ErrContent
 	}

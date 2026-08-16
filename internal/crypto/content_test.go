@@ -396,3 +396,68 @@ func TestEncodedContentLengthRefusesWhatIsNotAByteCount(t *testing.T) {
 		t.Error("a negative length was accepted")
 	}
 }
+
+// forgeStream builds a one-record stream whose plaintext is exactly what the
+// caller asks for, bypassing the encryptor.
+//
+// The encryptor cannot produce these: it always appends a delimiter and never
+// pads. That is the point — §5.4 says a decryptor must reject them anyway,
+// because a decryptor's job is to refuse what some other encoder might emit.
+func forgeStream(t *testing.T, fileKey, recordPlaintext []byte) []byte {
+	t.Helper()
+
+	contentSalt := bytes.Repeat([]byte{0x11}, ContentSaltSize)
+	cek, nonceBase, err := deriveContentKeys(fileKey, contentSalt)
+	if err != nil {
+		t.Fatalf("derive: %v", err)
+	}
+	aead, err := newAEAD(cek)
+	if err != nil {
+		t.Fatalf("aead: %v", err)
+	}
+
+	header := make([]byte, 0, headerSize)
+	header = append(header, contentSalt...)
+	header = binary.BigEndian.AppendUint32(header, RecordSize)
+	header = append(header, 0)
+
+	return aead.Seal(header, recordNonce(nonceBase, 0), recordPlaintext, nil)
+}
+
+// §5.4: "A record's plaintext ends in anything other than 0x01 or 0x02".
+//
+// RFC 8188 permits zero padding after the delimiter. Accepting it would make
+// two distinct encodings of one plaintext valid, which is malleability this
+// profile refuses. Nothing else in either language's tests covers this: both
+// implementations reject it, and until now neither would have noticed if they
+// stopped.
+func TestContentRejectsPaddingAfterTheDelimiter(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		payload []byte
+	}{
+		{"final delimiter then one zero", []byte{'h', 'i', delimiterFinal, 0x00}},
+		{"final delimiter then many zeros", append([]byte{'h', 'i', delimiterFinal}, make([]byte, 32)...)},
+		{"no delimiter at all", []byte{'h', 'i'}},
+		{"an unassigned delimiter", []byte{'h', 'i', 0x03}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			stream := forgeStream(t, testFileKey(), tc.payload)
+			if _, err := open(t, testFileKey(), stream); !errors.Is(err, ErrContent) {
+				t.Errorf("got %v, want ErrContent", err)
+			}
+		})
+	}
+}
+
+// §5.4: "A record's plaintext is empty — there is no delimiter to inspect."
+//
+// The record still authenticates, so this is not caught by the tag. Reading the
+// final octet of an empty slice is also how a decryptor panics.
+func TestContentRejectsAnEmptyRecordPlaintext(t *testing.T) {
+	stream := forgeStream(t, testFileKey(), nil)
+
+	if _, err := open(t, testFileKey(), stream); !errors.Is(err, ErrContent) {
+		t.Errorf("got %v, want ErrContent", err)
+	}
+}
