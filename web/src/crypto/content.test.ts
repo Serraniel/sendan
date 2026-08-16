@@ -265,3 +265,80 @@ describe("encoded length", () => {
     }
   });
 });
+
+/**
+ * Builds a one-record stream whose plaintext is exactly what is asked for.
+ *
+ * Keys are derived here from the specification rather than through the
+ * implementation's own helper, so this exercises the decryptor against an
+ * encoder that is not itself. `encryptBytes` cannot produce these streams: it
+ * always appends a delimiter and never pads, which is precisely why the
+ * obligation in §5.4 sits on the decryptor.
+ */
+async function forgeStream(fileKey: Uint8Array, recordPlaintext: Uint8Array): Promise<Uint8Array> {
+  const contentSalt = new Uint8Array(CONTENT_SALT_SIZE).fill(0x11);
+
+  const base = await crypto.subtle.importKey("raw", fileKey as BufferSource, "HKDF", false, [
+    "deriveBits",
+  ]);
+  const derive = async (info: string, bytes: number) =>
+    new Uint8Array(
+      await crypto.subtle.deriveBits(
+        {
+          name: "HKDF",
+          hash: "SHA-256",
+          salt: contentSalt as BufferSource,
+          info: new TextEncoder().encode(info) as BufferSource,
+        },
+        base,
+        bytes * 8,
+      ),
+    );
+
+  const raw = await derive("Content-Encoding: aes256gcm\u0000", 32);
+  const nonce = await derive("Content-Encoding: nonce\u0000", 12);
+  const key = await crypto.subtle.importKey("raw", raw as BufferSource, "AES-GCM", false, [
+    "encrypt",
+  ]);
+
+  const sealed = new Uint8Array(
+    await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: nonce as BufferSource },
+      key,
+      recordPlaintext as BufferSource,
+    ),
+  );
+
+  const header = new Uint8Array(HEADER_SIZE);
+  header.set(contentSalt, 0);
+  new DataView(header.buffer).setUint32(CONTENT_SALT_SIZE, RECORD_SIZE);
+  header[CONTENT_SALT_SIZE + 4] = 0;
+
+  const out = new Uint8Array(header.length + sealed.length);
+  out.set(header, 0);
+  out.set(sealed, header.length);
+  return out;
+}
+
+describe("specification \u00a75.4 strictness", () => {
+  const fileKey = new Uint8Array(32).fill(7);
+
+  // RFC 8188 permits zero padding after the delimiter. Accepting it would make
+  // two distinct encodings of one plaintext valid, which this profile refuses.
+  it.each([
+    ["final delimiter then one zero", Uint8Array.from([0x68, 0x69, 0x02, 0x00])],
+    ["final delimiter then many zeros", Uint8Array.from([0x68, 0x69, 0x02, ...new Uint8Array(32)])],
+    ["no delimiter at all", Uint8Array.from([0x68, 0x69])],
+    ["an unassigned delimiter", Uint8Array.from([0x68, 0x69, 0x03])],
+  ])("rejects %s", async (_name, payload) => {
+    const stream = await forgeStream(fileKey, payload);
+    await expect(decryptBytes(fileKey, stream)).rejects.toThrow(ContentError);
+  });
+
+  // The record authenticates, so the tag does not catch this. Reading the final
+  // octet of an empty plaintext is also how a decryptor crashes.
+  it("rejects an empty record plaintext", async () => {
+    const stream = await forgeStream(fileKey, new Uint8Array(0));
+    await expect(decryptBytes(fileKey, stream)).rejects.toThrow(ContentError);
+  });
+});

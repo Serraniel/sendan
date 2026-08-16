@@ -165,9 +165,17 @@ which is an acceptable price for the guarantee.
 
 Where post-quantum primitives *are* appropriate for this project is **artefact
 signing**, which protects against an adversary forging a release rather than
-reading an upload. Release signatures should use a post-quantum scheme, with
-SPHINCS+ preferred on conservatism grounds because its security rests only on
-hash functions, or ML-DSA where tooling requires it.
+reading an upload — and that is where they are used. Every release manifest
+carries an **SLH-DSA** signature (SPHINCS+ as standardised, parameter set
+SHA2-128s) alongside the Ed25519 one, and `sendan verify` requires both. SLH-DSA
+was chosen over ML-DSA on conservatism grounds: its security rests only on the
+hash function underneath it, with no structured hardness assumption.
+
+The threat is specific and worth naming, because it is the one case where
+"harvest now, decrypt later" has an analogue here: an adversary who archives a
+release today and has a quantum computer in a decade forges the Ed25519
+signature and not the SLH-DSA one. `SECURITY.md` sets out what the signatures do
+and do not establish.
 
 > [!IMPORTANT]
 > This analysis holds only while the design remains symmetric-only. Introducing
