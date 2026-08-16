@@ -299,7 +299,7 @@ startup line names the backend without disclosing its password.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `SENDAN_SEND_COMPAT` | `false` | Enable third-party client compatibility endpoints |
+| `SENDAN_SEND_COMPAT` | `false` | Enable third-party client compatibility endpoints. Uploads made through them are **less protected**; see [`docs/compatibility.md`](compatibility.md) |
 
 > [!WARNING]
 > Uploads made through the compatibility endpoints use that protocol's weaker,

@@ -27,6 +27,7 @@ command line client are produced from a single Go module.
 | `cmd/sendan-cli` | The command line client, deliberately a separate binary: it is the program a user is asked to obtain and trust, so it links none of the server's dependencies |
 | `internal/client` | Speaking the API from the outside — the Go half of what `web/src/lib` does in the browser |
 | `internal/manifest` | The published statement of what a client build contains, written by the release and read by `sendan verify` |
+| `internal/compat` | A third-party protocol, so its clients work against an instance. Off unless an operator asks for it, and confined here |
 | `internal/signature` | Verifying release signatures: minisign-format Ed25519, and SLH-DSA. Verification only — nothing here can sign |
 | `internal/crypto` | The Go half of the cryptographic scheme (spec §4–§7) |
 | `internal/store` | Upload metadata: SQLite and PostgreSQL, plus a conformance suite |
@@ -669,19 +670,46 @@ is not worth an unverifiable one.
 ## 5. Third-party client compatibility
 
 Adopting RFC 8188 encrypted-content-encoding and HKDF-SHA256 as the *native*
-format means that compatibility with the Firefox Send protocol is largely a
-matter of routing: `/api/upload` (a WebSocket in Send v3), `/api/download/:id`,
-`/api/metadata/:id`, and `/api/exists/:id`. Existing clients such as
-[`ffsend`](https://github.com/timvisee/ffsend) then interoperate without
-modification.
+format made compatibility with the Firefox Send protocol largely a matter of
+routing, and that is how it turned out: no second cryptographic implementation
+exists, and the ciphertext a third-party client produces is stored as it
+arrives. [`ffsend`](https://github.com/timvisee/ffsend) interoperates without
+modification, and does so in continuous integration on every pull request.
 
-Gated behind `SENDAN_SEND_COMPAT=true`, disabled by default.
+Gated behind `SENDAN_SEND_COMPAT=true`, disabled by default. Off means the
+routes are not registered at all rather than registered and refusing.
+
+The surface is larger than "mostly routing" suggested, and four parts of it were
+not what reading the protocol implied. Each was found by running a real client:
+
+| | |
+|---|---|
+| `GET /api/ws` | the upload, a WebSocket: one JSON header, binary frames, terminated by a single zero byte |
+| `GET /api/exists/:id` | existence and whether a password is set, before any authentication |
+| `GET /api/metadata/:id` | the client's own encrypted metadata |
+| `GET /api/download/token/:id` | a bearer credential — which the tested client never asks for, signing the nonce directly instead |
+| `GET /api/download/:id` | the ciphertext, accepting either credential |
+| `POST /api/password/:id` | owner-authenticated, sets the key the server checks against |
+| `GET /__version__` | probed first; without it a client falls back to an incompatible older API |
+| `GET /download/:id/` | the share link, and where a client fetches the nonce it signs |
+
+Authentication is a rotating nonce: the server holds the client's key, computes
+the expected HMAC itself, and issues a fresh nonce on every success. That the
+server holds a usable key at all is the difference from Sendan's own model,
+which stores a hash, and it is why the credential lives in a table of its own.
 
 > [!WARNING]
-> Uploads made through compatibility endpoints must use that protocol's weaker,
-> server-enforced password model, because that is what existing clients
-> implement. Such uploads are **less secure** than native ones, and the interface
-> must state so rather than conceal it.
+> Uploads made through these endpoints use that protocol's **server-enforced**
+> password model, because that is what existing clients implement. A password
+> replaces the key the server checks a downloader against; it does not change
+> the key that decrypts the content, so an operator can serve such a file to
+> anybody. Its derivation is PBKDF2-SHA256 at **100 iterations**, against
+> Argon2id at 64 MiB natively.
+>
+> Such uploads are **less secure** than native ones. They are marked as such in
+> the metadata endpoint and named in the transparency card with the reason
+> beside them. [`docs/compatibility.md`](compatibility.md) sets out what the mode
+> covers and what it does not.
 
 ## 6. Owner-held upload management
 

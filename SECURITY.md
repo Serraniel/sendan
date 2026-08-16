@@ -135,6 +135,8 @@ Also out of scope:
   ones, and are marked as such: the metadata endpoint reports which protocol
   produced an upload, and the transparency card names it with the reason beside
   it rather than in a footnote.
+  [`docs/compatibility.md`](docs/compatibility.md) sets out what the mode does
+  and does not cover, and which client is tested against it.
 
 ## Verifying the command line client
 
