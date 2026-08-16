@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { downloadLink, toBase64Url } from "$lib/link";
+  import { acknowledge, isSupported, mustWarn, remember } from "$lib/vault";
   import { TusError } from "$lib/tus";
   import { type UploadProgress, type UploadResult, uploadFile } from "$lib/upload";
   import TransparencyCard from "$lib/TransparencyCard.svelte";
@@ -97,6 +98,8 @@
             : null,
         maxDownloads: applied.maxDownloads,
       });
+
+      await keep(file.name, file.size, applied);
       // The password is not needed again and there is no reason to keep it in
       // memory, or in a field the next upload would silently reuse.
       password = "";
@@ -105,6 +108,54 @@
       progress = null;
     } finally {
       controller = null;
+    }
+  }
+
+  /**
+   * Adds the upload to this browser's list, having asked first.
+   *
+   * Asked before the first record is written rather than after, because what is
+   * being consented to is that the link and the owner token are kept here and
+   * nowhere else, with no way to recover them. Somebody who has already closed
+   * the tab has already relied on it.
+   *
+   * Failing to record an upload never fails the upload: the file is sent and
+   * the link is on screen, and this list is a convenience.
+   */
+  async function keep(
+    name: string,
+    size: number,
+    applied: { ttlSeconds: number; startedAt: number },
+  ) {
+    if (result === null || !isSupported()) return;
+
+    if (mustWarn()) {
+      const agreed = confirm(
+        "Keep a list of your uploads in this browser?\n\n" +
+          "The link and the owner token are stored here and nowhere else. " +
+          "Anybody who can use this browser profile can then open these files.\n\n" +
+          "There is no way to recover the list. Clearing site data, or using " +
+          "another browser, loses it permanently \u2014 the instance does not " +
+          "hold the key that opens your files or the token that removes them.",
+      );
+      if (!agreed) return;
+      acknowledge();
+    }
+
+    try {
+      await remember({
+        id: toBase64Url(result.fileID),
+        link,
+        ownerToken: toBase64Url(result.ownerToken),
+        name,
+        size,
+        createdAt: applied.startedAt,
+        expiresAt:
+          applied.ttlSeconds > 0 ? applied.startedAt + applied.ttlSeconds * 1000 : null,
+      });
+    } catch {
+      // The upload succeeded; only the note about it did not, and there is
+      // nothing the person can usefully do about that here.
     }
   }
 

@@ -569,3 +569,53 @@ test.describe("an instance without HTTPS", () => {
     await expect(alert).not.toContainText("does not offer the cryptography");
   });
 });
+
+// The list of uploads this browser made. Exercised in a real browser because
+// IndexedDB is the whole feature: a unit test of the decision around it proves
+// the sorting, not that anything was ever stored.
+test.describe("your uploads", () => {
+  test("an upload appears in the list, and forgetting it does not remove the file", async ({
+    page,
+  }) => {
+    const contents = Buffer.from("kept in this browser and nowhere else");
+
+    // The first upload asks before anything is written down. Accepting is what
+    // the person is consenting to: the link and the token live here only.
+    page.once("dialog", (dialog) => {
+      expect(dialog.message()).toContain("no way to recover");
+      void dialog.accept();
+    });
+
+    const link = await uploadThrough(page, "kept.txt", contents);
+
+    await page.goto("/uploads");
+    await expect(page.getByText("kept.txt")).toBeVisible();
+    // Read the value rather than matching an attribute selector: the value is
+    // set as a property, so the attribute does not carry it.
+    const shown = page.getByLabel(`Link for kept.txt`);
+    await expect(shown).toHaveValue(link);
+
+    // Forgetting the record must not touch the upload, and the page says so.
+    await page.getByRole("button", { name: /forget this link/i }).click();
+    await expect(page.getByText("kept.txt")).toHaveCount(0);
+
+    // The file is still there: the link a recipient was given still works.
+    await page.goto(link);
+    await expect(page.getByRole("button", { name: /download/i })).toBeVisible();
+  });
+
+  test("declining leaves nothing behind", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.dismiss());
+    await uploadThrough(page, "not-kept.txt", Buffer.from("declined"));
+
+    await page.goto("/uploads");
+    await expect(page.getByText("not-kept.txt")).toHaveCount(0);
+    await expect(page.getByText(/nothing here yet/i)).toBeVisible();
+  });
+
+  test("the page says the list cannot be recovered", async ({ page }) => {
+    await page.goto("/uploads");
+    await expect(page.getByText(/no way to recover it/i)).toBeVisible();
+    await expect(page.getByText(/does not know which uploads are yours/i)).toBeVisible();
+  });
+});

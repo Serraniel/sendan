@@ -28,6 +28,12 @@
       &middot;
       <a href={build.source} rel="noreferrer">source</a>
       &middot;
+      <!--
+        Reachable from every page, because a list kept only in this browser is
+        one somebody has to be able to find again without a bookmark.
+      -->
+      <a href="/uploads">your uploads</a>
+      &middot;
       {build.license}
     </p>
 

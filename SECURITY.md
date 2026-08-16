@@ -109,6 +109,16 @@ individual bug report.
 
 Also out of scope:
 
+- **Losing the browser that made an upload.** The web client can keep a list of
+  what this browser sent, holding the whole link — secret included — and the
+  owner token in IndexedDB, because the instance has no account and cannot know
+  which uploads are yours. Two consequences follow, and the interface states
+  both before the first record is written: anybody who can read that browser
+  profile can open those files, and clearing site data destroys the list with
+  **no way to recover it**. The instance holds neither the key that opens a file
+  nor a token that removes it, which is the same property that stops the
+  operator reading them.
+
 - **Anyone you gave the link to.** The link *is* the credential. Sendan has no
   way to distinguish an intended recipient from someone who read over their
   shoulder.
