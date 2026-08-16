@@ -211,7 +211,10 @@ func (p *Postgres) Close() error {
 // PostgreSQL instance is shared across tests where a SQLite file is not. It is
 // never called by the server.
 func (p *Postgres) TruncateForTesting(ctx context.Context) error {
-	if _, err := p.db.ExecContext(ctx, `TRUNCATE TABLE uploads`); err != nil {
+	// CASCADE because compat_uploads references this table. Without it
+	// PostgreSQL refuses outright rather than leaving orphans, which is the
+	// behaviour that makes the foreign key worth having.
+	if _, err := p.db.ExecContext(ctx, `TRUNCATE TABLE uploads CASCADE`); err != nil {
 		return fmt.Errorf("store: truncate: %w", err)
 	}
 	return nil

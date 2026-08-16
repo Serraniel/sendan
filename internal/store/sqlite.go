@@ -248,16 +248,30 @@ func nullableUnix(t time.Time) any {
 	return t.Unix()
 }
 
+// validate checks an upload in this project's own format.
+//
+// The envelope is required here and absent for a compatibility upload, whose
+// client encrypts with a key this server never sees; validateShared holds
+// everything the two have in common.
 func validate(u *Upload) error {
+	switch {
+	case u == nil:
+		return fmt.Errorf("%w: nil", ErrInvalid)
+	case len(u.WrappedFileKey) == 0 || len(u.WrapNonce) == 0:
+		return fmt.Errorf("%w: missing wrapped file key", ErrInvalid)
+	case len(u.MetadataEnvelope) == 0 || len(u.MetadataNonce) == 0:
+		return fmt.Errorf("%w: missing metadata envelope", ErrInvalid)
+	}
+	return validateShared(u)
+}
+
+// validateShared checks what every upload needs, whichever protocol created it.
+func validateShared(u *Upload) error {
 	switch {
 	case u == nil:
 		return fmt.Errorf("%w: nil", ErrInvalid)
 	case u.ID == "":
 		return fmt.Errorf("%w: empty identifier", ErrInvalid)
-	case len(u.WrappedFileKey) == 0 || len(u.WrapNonce) == 0:
-		return fmt.Errorf("%w: missing wrapped file key", ErrInvalid)
-	case len(u.MetadataEnvelope) == 0 || len(u.MetadataNonce) == 0:
-		return fmt.Errorf("%w: missing metadata envelope", ErrInvalid)
 	case len(u.AuthTokenHash) == 0:
 		return fmt.Errorf("%w: missing auth token hash", ErrInvalid)
 	case len(u.OwnerTokenHash) == 0:
