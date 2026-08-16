@@ -239,6 +239,42 @@ for why the alternatives are worse.
 
 ---
 
+## Removing an upload
+
+### `DELETE /api/uploads/{id}`
+
+Removes an upload before it would otherwise expire.
+
+```
+Authorization: Bearer <owner token, base64url>
+```
+
+The **owner token** is minted when the upload is created and shown once. This
+server stores only its SHA-256 hash, so it can check a token and cannot produce
+one: possession is the proof, and an operator cannot revoke an upload they did
+not make. Losing the token means losing the ability to remove the upload early,
+and nothing here can recover it.
+
+It travels in the header rather than the path for the same reason a link secret
+lives in the fragment: a path reaches access logs, proxies and browser history.
+
+| Status | Meaning |
+|---|---|
+| `204` | Removed. The row, the blob and the at-rest key are gone |
+| `401` | No credential, or not a bearer token |
+| `403` | The token does not match — **or the upload does not exist** |
+| `404` | The identifier is not the right shape |
+
+`403` covers both a wrong token and an absent upload, deliberately: telling them
+apart would let somebody discover which identifiers are real by asking about
+each in turn.
+
+Removing is idempotent in the way that matters. An upload that is already gone
+answers the same as one this request removed, so a client retrying a request
+whose response it never saw is not told that something went wrong.
+
+---
+
 ## Instance
 
 ### `GET /api/source`

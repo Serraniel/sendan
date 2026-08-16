@@ -128,7 +128,23 @@ sendan up --password --expires 7d --downloads 3 report.pdf
 > that the password did not work. Pressing return means no password at all.
 
 After an upload you are also given an **owner token**. It is shown once and
-stored nowhere; it is what removes the upload before it expires.
+stored nowhere; it is what removes the upload before it expires:
+
+```sh
+sendan delete 'https://files.example.org/d/…#…'
+```
+
+It asks for the token without echoing it, or reads it from `--token-file` or
+`SENDAN_OWNER_TOKEN`. There is deliberately no `--token <value>`, for the same
+reason there is no `--password <value>`: an argument appears in the process
+list and in shell history, and this is the only thing that can remove the file.
+
+The link identifies the upload; its secret is not sent. Removing a file does not
+require the ability to read it.
+
+The instance stores only a hash of the token, so it can check yours and cannot
+produce one. If you lose it, the upload stays until it expires or runs out of
+downloads — nobody can remove it early, including whoever runs the instance.
 
 ## Receiving a file
 

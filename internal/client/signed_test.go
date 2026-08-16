@@ -4,6 +4,7 @@
 package client_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -232,5 +233,74 @@ func TestWithoutAPostQuantumKeyOnlyTheClassicalOneIsRequired(t *testing.T) {
 	if _, err := c.FetchSignedManifest(context.Background(), url,
 		client.Keys{Ed25519: releasePublicKey(t)}); err != nil {
 		t.Fatalf("a build with no post-quantum key: %v", err)
+	}
+}
+
+// Removing an upload is authorised by the owner token, which the instance holds
+// only as a hash. These are the answers a client must tell apart.
+func TestRevokeReportsWhatHappened(t *testing.T) {
+	ownerToken := bytes.Repeat([]byte{0x5A}, 32)
+
+	for name, tc := range map[string]struct {
+		status  int
+		wantErr error
+	}{
+		"removed":                  {http.StatusNoContent, nil},
+		"the token does not match": {http.StatusForbidden, client.ErrNotOwner},
+		"no credential accepted":   {http.StatusUnauthorized, client.ErrNotOwner},
+		"no such upload":           {http.StatusNotFound, client.ErrNotOwner},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var gotAuth string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gotAuth = r.Header.Get("Authorization")
+				if r.Method != http.MethodDelete {
+					t.Errorf("method %s, want DELETE", r.Method)
+				}
+				w.WriteHeader(tc.status)
+			}))
+			defer server.Close()
+
+			c := &client.Client{Origin: server.URL}
+			err := c.Revoke(context.Background(), "anuploadidentifier0000", ownerToken)
+
+			if tc.wantErr == nil && err != nil {
+				t.Fatalf("got %v, want nil", err)
+			}
+			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+				t.Fatalf("got %v, want %v", err, tc.wantErr)
+			}
+
+			// The credential belongs in the header, never in the path: a path
+			// reaches access logs and browser history.
+			if !strings.HasPrefix(gotAuth, "Bearer ") {
+				t.Errorf("the owner token was not sent as a bearer credential: %q", gotAuth)
+			}
+		})
+	}
+}
+
+func TestRevokeRefusesAnEmptyToken(t *testing.T) {
+	c := &client.Client{Origin: "http://example.invalid"}
+	if err := c.Revoke(context.Background(), "anuploadidentifier0000", nil); err == nil {
+		t.Error("an empty owner token was sent to the instance")
+	}
+}
+
+func TestATokenIsReadBackAsItIsPrinted(t *testing.T) {
+	token := bytes.Repeat([]byte{0x11}, 32)
+
+	decoded, err := client.DecodeToken(client.EncodeToken(token))
+	if err != nil {
+		t.Fatalf("a token this client printed does not read back: %v", err)
+	}
+	if !bytes.Equal(decoded, token) {
+		t.Error("the token read back is not the token printed")
+	}
+
+	for _, bad := range []string{"", "   ", "!!!not base64!!!"} {
+		if _, err := client.DecodeToken(bad); err == nil {
+			t.Errorf("%q was accepted as an owner token", bad)
+		}
 	}
 }
