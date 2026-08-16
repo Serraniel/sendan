@@ -443,3 +443,21 @@ func TestAnAbandonedUploadIsDiscarded(t *testing.T) {
 	}
 	t.Error("an abandoned upload was left behind")
 }
+
+// An upload made through this protocol always carries a download limit, so it
+// can never be the unbounded kind an instance may refuse. The limit is applied
+// here rather than assumed, because that assumption is one function away from
+// being false.
+func TestACompatUploadIsAlwaysBounded(t *testing.T) {
+	h := newHarness(t)
+
+	// No limit asked for, and the protocol's default applies.
+	id, authKey := h.upload([]byte("ciphertext"), 0)
+
+	if status := h.download(id, authKey); status != http.StatusOK {
+		t.Fatalf("first download: status %d", status)
+	}
+	if status := h.download(id, authKey); status == http.StatusOK {
+		t.Error("an upload with no stated limit was served more than once")
+	}
+}
