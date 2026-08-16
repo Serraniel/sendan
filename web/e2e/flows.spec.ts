@@ -386,7 +386,13 @@ test.describe("what the client says about itself", () => {
     await page.goto("/");
     const footer = page.locator("footer");
     await expect(footer).toContainText("Sendan", { timeout: 30_000 });
-    await expect(footer.locator("a")).toHaveAttribute("href", /https?:\/\//);
+    // The source link specifically. The footer carries other links, and
+    // matching every anchor would assert that all of them are absolute, which
+    // is not what this is about.
+    await expect(footer.getByRole("link", { name: "source" })).toHaveAttribute(
+      "href",
+      /https?:\/\//,
+    );
   });
 });
 
