@@ -48,6 +48,14 @@ type Options struct {
 	// tagged binary can reach is a branch continuous integration never checks.
 	WebUI fs.FS
 
+	// Compat serves the third-party compatibility protocol. Nil disables it
+	// entirely, which is the default: the routes are not registered at all.
+	//
+	// Built by the caller rather than here, so this package does not need to
+	// know what that protocol requires - notably that its server holds a
+	// credential Sendan's own model never stores.
+	Compat http.Handler
+
 	// Uploads owns the upload lifecycle. Routes that need it are registered
 	// only when it is present, so a handler can never be reached with a nil
 	// service.
@@ -91,6 +99,19 @@ func New(opts Options) http.Handler {
 	}
 	mux.HandleFunc("GET /api/source", handleSource(
 		currentBuild(opts.Version, opts.Commit, source)))
+
+	// Registered before the native routes so its paths exist only when an
+	// operator asked for them. Nil unless SENDAN_SEND_COMPAT was set, so the
+	// mode being off means the endpoints are absent rather than present and
+	// refusing - an endpoint that says no is still one somebody can probe.
+	if opts.Compat != nil {
+		mux.Handle("/__version__", opts.Compat)
+		mux.Handle("/download/", opts.Compat)
+		mux.Handle("/api/ws", opts.Compat)
+		mux.Handle("/api/exists/", opts.Compat)
+		mux.Handle("/api/metadata/", opts.Compat)
+		mux.Handle("/api/download/", opts.Compat)
+	}
 
 	if opts.Uploads != nil {
 		mux.HandleFunc("GET /api/uploads/{id}/metadata", handleMetadata(opts.Uploads))

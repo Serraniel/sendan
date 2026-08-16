@@ -40,6 +40,12 @@ internal/client      85.0
 # about whether to trust a file. The uncovered statement is an io.ReadAll error
 # on a reader that has already been read.
 internal/signature   97.0
+# internal/compat speaks a protocol this project did not design, so its
+# uncovered statements are the error paths of a socket that has already gone -
+# a client that vanishes mid-upload, a frame that never arrives. What is
+# covered is every decision: who is authenticated, what is disclosed before
+# they are, and how many times an upload may be served.
+internal/compat      72.0
 # internal/manifest's gap is the same shape: a file that cannot be opened or
 # read while being digested. The format itself, and that it covers every file in
 # a build, are covered.
