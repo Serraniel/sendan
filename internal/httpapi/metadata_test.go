@@ -561,3 +561,19 @@ func TestDownloadsRemainingNeverGoesNegative(t *testing.T) {
 		t.Errorf("downloadsRemaining %d, want 0", *res.DownloadsRemaining)
 	}
 }
+
+// A client has to be able to tell which protocol produced an upload, because
+// the compatibility one protects a password in the server rather than in the
+// key. Omitted for a native upload rather than sent as a default, so a client
+// that does not know the field cannot mistake one for the other.
+func TestMetadataNamesTheProtocolThatProducedTheUpload(t *testing.T) {
+	native := newMetadataResponse(&upload.PublicMetadata{ID: "x", Compatibility: false})
+	if native.Endpoints != "" {
+		t.Errorf("a native upload reports endpoints %q, want none", native.Endpoints)
+	}
+
+	compatible := newMetadataResponse(&upload.PublicMetadata{ID: "x", Compatibility: true})
+	if compatible.Endpoints != "compatibility" {
+		t.Errorf("endpoints = %q, want \"compatibility\"", compatible.Endpoints)
+	}
+}

@@ -77,6 +77,15 @@ export interface UploadMetadata {
   expiresAt: Date | null;
   /** Absent when there is no limit. */
   downloadsRemaining: number | null;
+  /**
+   * Which protocol produced this upload.
+   *
+   * A compatibility upload is in another protocol's format: this client holds
+   * no key that opens it, and the password model that protected it is enforced
+   * by the instance rather than by the key. Both facts have to reach the person
+   * looking at it.
+   */
+  endpoints: "native" | "compatibility";
 }
 
 /**
@@ -151,12 +160,29 @@ export function parseMetadata(value: unknown): UploadMetadata | null {
   if (typeof v.id !== "string" || v.id === "") return null;
   if (typeof v.passwordRequired !== "boolean") return null;
 
-  const binary: Record<string, Uint8Array> = {};
-  for (const key of ["wrappedFileKey", "wrapNonce", "metadataEnvelope", "metadataNonce"]) {
-    if (typeof v[key] !== "string") return null;
-    const bytes = fromBase64Url(v[key] as string);
-    if (bytes === null) return null;
-    binary[key] = bytes;
+  // An upload made through the compatibility endpoints carries no envelope in
+  // this format, so it is recognised before the fields that would be empty are
+  // required. Reading it as a native upload with empty keys would fail later,
+  // during decryption, where the cause is no longer visible.
+  const endpoints = v.endpoints === "compatibility" ? "compatibility" : "native";
+
+  // Only a native upload has these. A compatibility one carries an envelope in
+  // another protocol's format, which this client never reads, so requiring
+  // fields that cannot be there would reject the upload instead of describing
+  // it.
+  const binary: Record<string, Uint8Array> = {
+    wrappedFileKey: new Uint8Array(),
+    wrapNonce: new Uint8Array(),
+    metadataEnvelope: new Uint8Array(),
+    metadataNonce: new Uint8Array(),
+  };
+  if (endpoints === "native") {
+    for (const key of ["wrappedFileKey", "wrapNonce", "metadataEnvelope", "metadataNonce"]) {
+      if (typeof v[key] !== "string") return null;
+      const bytes = fromBase64Url(v[key] as string);
+      if (bytes === null || bytes.length === 0) return null;
+      binary[key] = bytes;
+    }
   }
 
   let kdf: PasswordParams | null = null;
@@ -193,6 +219,7 @@ export function parseMetadata(value: unknown): UploadMetadata | null {
     kdf,
     expiresAt,
     downloadsRemaining,
+    endpoints,
   };
 }
 

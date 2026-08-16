@@ -59,6 +59,16 @@ type CompatStore interface {
 	// RotateCompatNonce replaces the stored nonce.
 	RotateCompatNonce(ctx context.Context, id string, nonce []byte) error
 
+	// SetCompatPassword replaces the authentication key and records that the
+	// upload is password protected.
+	//
+	// The password itself never reaches the server. What arrives is a key the
+	// client derived from it, which is exactly why this model is the weaker
+	// one: the server holds what it checks against, so it can authenticate as
+	// the downloader. Sendan's own password derives part of the content key,
+	// which no server-side policy can bypass.
+	SetCompatPassword(ctx context.Context, id string, authKey []byte) error
+
 	// FinishCompat records the size an upload turned out to be and marks it
 	// complete.
 	//
@@ -69,6 +79,38 @@ type CompatStore interface {
 	// at zero would serve without ever counting a download, and a download
 	// limit would silently not apply.
 	FinishCompat(ctx context.Context, id string, size int64, completedAt time.Time) error
+}
+
+// SetCompatPassword replaces the authentication key and marks the upload
+// password protected.
+func (s *SQLite) SetCompatPassword(ctx context.Context, id string, authKey []byte) error {
+	return setCompatPassword(ctx, s.db, identity, id, authKey)
+}
+
+// SetCompatPassword replaces the authentication key and marks the upload
+// password protected.
+func (p *Postgres) SetCompatPassword(ctx context.Context, id string, authKey []byte) error {
+	return setCompatPassword(ctx, p.db, rebind, id, authKey)
+}
+
+func setCompatPassword(ctx context.Context, db *sql.DB, bind func(string) string, id string, authKey []byte) error {
+	if len(authKey) == 0 {
+		return fmt.Errorf("%w: an empty authentication key would let anybody download", ErrInvalid)
+	}
+	res, err := db.ExecContext(ctx, bind(
+		`UPDATE compat_uploads SET auth_key = ?, requires_password = ? WHERE id = ?`),
+		authKey, true, id)
+	if err != nil {
+		return fmt.Errorf("store: set compat password: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("store: set compat password: %w", err)
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // FinishCompat records the final size and marks the upload complete.

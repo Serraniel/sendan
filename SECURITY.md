@@ -122,9 +122,19 @@ Also out of scope:
   response can infer roughly how large it is. Content padding is not
   implemented.
 - **Third-party client compatibility mode**, when enabled, uses that protocol's
-  weaker server-enforced password model for interoperability. Uploads made
-  through those endpoints are **less secure** than native ones, and the interface
-  states so.
+  weaker password model for interoperability. Setting a password there replaces
+  the key the **server** checks a downloader against; it does not change the key
+  that decrypts the content, which is derived from the link secret and is the
+  same with or without a password. So an operator can serve such a file to
+  anybody, password or not.
+
+  Sendan's own model derives part of the key-wrapping key from the password, so
+  an instance holding every byte it stores still cannot open a protected upload.
+
+  Uploads made through those endpoints are therefore **less secure** than native
+  ones, and are marked as such: the metadata endpoint reports which protocol
+  produced an upload, and the transparency card names it with the reason beside
+  it rather than in a footnote.
 
 ## Verifying the command line client
 

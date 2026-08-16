@@ -109,6 +109,7 @@ func New(opts Options) *Handler {
 	h.mux.HandleFunc("GET /api/metadata/{id}", h.handleMetadata)
 	h.mux.HandleFunc("GET /api/download/token/{id}", h.handleDownloadToken)
 	h.mux.HandleFunc("GET /api/download/{id}", h.handleDownload)
+	h.mux.HandleFunc("POST /api/password/{id}", h.handlePassword)
 
 	return h
 }

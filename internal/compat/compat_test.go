@@ -32,9 +32,14 @@ import (
 // harness is an instance with the compatibility protocol enabled, over a real
 // SQLite database and a real blob store.
 type harness struct {
-	t      *testing.T
-	server *httptest.Server
-	store  store.CompatStore
+	t       *testing.T
+	server  *httptest.Server
+	store   store.CompatStore
+	uploads *upload.Service
+
+	// ownerToken is what the most recent upload was given. Only the owner may
+	// change how a file is protected.
+	ownerToken string
 }
 
 func newHarness(t *testing.T) *harness {
@@ -56,7 +61,7 @@ func newHarness(t *testing.T) *harness {
 		DefaultTTL: time.Hour, MaxTTL: 24 * time.Hour, IncompleteTTL: time.Hour,
 	}, slog.New(slog.DiscardHandler))
 
-	h := &harness{t: t, store: metadata}
+	h := &harness{t: t, store: metadata, uploads: uploads}
 	h.server = httptest.NewServer(compat.New(compat.Options{
 		Store:    metadata,
 		Uploads:  uploads,
@@ -115,8 +120,9 @@ func (h *harness) upload(content []byte, dlimit int) (string, []byte) {
 		h.t.Fatalf("reply: %v", err)
 	}
 	var created struct {
-		ID  string `json:"id"`
-		URL string `json:"url"`
+		ID         string `json:"id"`
+		URL        string `json:"url"`
+		OwnerToken string `json:"ownerToken"`
 	}
 	if err := json.Unmarshal(reply, &created); err != nil {
 		h.t.Fatalf("reply is not the created upload: %v (%s)", err, reply)
@@ -137,7 +143,31 @@ func (h *harness) upload(content []byte, dlimit int) (string, []byte) {
 	if !bytes.Contains(done, []byte(`"ok":true`)) {
 		h.t.Fatalf("the upload did not complete: %s", done)
 	}
+	h.ownerToken = created.OwnerToken
 	return created.ID, authKey
+}
+
+// setPassword performs the owner-authenticated password change.
+func (h *harness) setPassword(id, ownerToken string, authKey []byte) int {
+	h.t.Helper()
+
+	body, _ := json.Marshal(map[string]any{
+		"auth":        b64(authKey),
+		"owner_token": ownerToken,
+	})
+	req, err := http.NewRequestWithContext(h.t.Context(), http.MethodPost,
+		h.server.URL+"/api/password/"+id, bytes.NewReader(body))
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	defer func() { _ = res.Body.Close() }()
+	return res.StatusCode
 }
 
 // nonce reads the value the server wants signed next.
@@ -459,5 +489,134 @@ func TestACompatUploadIsAlwaysBounded(t *testing.T) {
 	}
 	if status := h.download(id, authKey); status == http.StatusOK {
 		t.Error("an upload with no stated limit was served more than once")
+	}
+}
+
+// An upload made through this protocol must be marked as such wherever this
+// project's own clients can see it, because the password model that protected
+// it is weaker and an interface showing it beside a native upload without
+// saying so would be claiming protection the file does not have.
+func TestACompatUploadIsMarkedForNativeClients(t *testing.T) {
+	h := newHarness(t)
+	id, _ := h.upload([]byte("ciphertext"), 3)
+
+	m, err := h.uploads.Metadata(t.Context(), id)
+	if err != nil {
+		t.Fatalf("metadata: %v", err)
+	}
+	if !m.Compatibility {
+		t.Error("an upload made through the compatibility endpoints is not marked as one")
+	}
+
+	// And the envelope columns are genuinely absent, which is what the marking
+	// is derived from.
+	if len(m.WrappedFileKey) != 0 || len(m.MetadataEnvelope) != 0 {
+		t.Error("a compatibility upload carries an envelope in this project's format")
+	}
+}
+
+// Setting a password replaces the key the server checks against, and the
+// instance then says a password is required before anybody authenticates.
+func TestAPasswordCanBeSetByTheOwner(t *testing.T) {
+	h := newHarness(t)
+	id, _ := h.upload([]byte("ciphertext"), 3)
+
+	before := h.get("/api/exists/"+id, "")
+	var reported struct {
+		RequiresPassword bool `json:"requiresPassword"`
+	}
+	_ = json.NewDecoder(before.Body).Decode(&reported)
+	_ = before.Body.Close()
+	if reported.RequiresPassword {
+		t.Fatal("an upload with no password says it has one")
+	}
+
+	// Only the owner may set it. A stranger holding the link may not.
+	if status := h.setPassword(id, "not the owner token", []byte("derived")); status != http.StatusUnauthorized {
+		t.Errorf("a stranger set a password: status %d", status)
+	}
+
+	if status := h.setPassword(id, h.ownerToken, []byte("derived from the password")); status != http.StatusOK {
+		t.Fatalf("the owner could not set a password: status %d", status)
+	}
+
+	after := h.get("/api/exists/"+id, "")
+	defer func() { _ = after.Body.Close() }()
+	if err := json.NewDecoder(after.Body).Decode(&reported); err != nil {
+		t.Fatal(err)
+	}
+	if !reported.RequiresPassword {
+		t.Error("after setting a password, the instance does not say one is required")
+	}
+}
+
+// The old key stops working, or setting a password would protect nothing.
+func TestSettingAPasswordReplacesTheOldKey(t *testing.T) {
+	h := newHarness(t)
+	id, authKey := h.upload([]byte("ciphertext"), 3)
+
+	replacement := []byte("derived from the password")
+	if status := h.setPassword(id, h.ownerToken, replacement); status != http.StatusOK {
+		t.Fatalf("set password: status %d", status)
+	}
+
+	stale := h.get("/api/metadata/"+id, sign(authKey, h.nonce(id)))
+	_ = stale.Body.Close()
+	if stale.StatusCode != http.StatusUnauthorized {
+		t.Errorf("the key from before the password still works: status %d", stale.StatusCode)
+	}
+
+	fresh := h.get("/api/metadata/"+id, sign(replacement, h.nonce(id)))
+	_ = fresh.Body.Close()
+	if fresh.StatusCode != http.StatusOK {
+		t.Errorf("the new key does not work: status %d", fresh.StatusCode)
+	}
+}
+
+// The refusals on the password path, each of which would otherwise let
+// somebody change how a file is protected.
+func TestSettingAPasswordRefusesWhatItShould(t *testing.T) {
+	h := newHarness(t)
+	id, _ := h.upload([]byte("ciphertext"), 3)
+	owner := h.ownerToken
+
+	post := func(id, body string) int {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+			h.server.URL+"/api/password/"+id, strings.NewReader(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = res.Body.Close() }()
+		return res.StatusCode
+	}
+
+	for name, tc := range map[string]struct {
+		id, body string
+		want     int
+	}{
+		"not JSON at all": {id, "{", http.StatusBadRequest},
+		"no key": {
+			id, `{"auth":"","owner_token":"` + owner + `"}`, http.StatusBadRequest,
+		},
+		"a key that is not base64": {
+			id, `{"auth":"!!!!","owner_token":"` + owner + `"}`, http.StatusBadRequest,
+		},
+		"an upload that does not exist": {
+			"0123456789abcdef", `{"auth":"AAAA","owner_token":"` + owner + `"}`, http.StatusNotFound,
+		},
+		"no owner token": {
+			id, `{"auth":"AAAA"}`, http.StatusUnauthorized,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if got := post(tc.id, tc.body); got != tc.want {
+				t.Errorf("status %d, want %d", got, tc.want)
+			}
+		})
 	}
 }

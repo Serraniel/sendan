@@ -723,3 +723,45 @@ describe("a file sent and then received", () => {
     );
   }, 30_000);
 });
+
+describe("uploads made through the compatibility endpoints", () => {
+  // Those uploads carry no envelope in this format, so the fields a native
+  // upload requires are empty. Recognising the upload before requiring them is
+  // what turns a confusing decryption failure into a statement of fact.
+  const compatible = {
+    id: "aaaaaaaaaaaaaaaaaaaaaa",
+    wrappedFileKey: "",
+    wrapNonce: "",
+    metadataEnvelope: "",
+    metadataNonce: "",
+    passwordRequired: false,
+    endpoints: "compatibility",
+  };
+
+  it("is recognised and marked", () => {
+    const parsed = parseMetadata(compatible);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.endpoints).toBe("compatibility");
+  });
+
+  it("defaults to native when the instance says nothing", () => {
+    const { endpoints, ...rest } = compatible;
+    void endpoints;
+    const parsed = parseMetadata({
+      ...rest,
+      wrappedFileKey: "AAAA",
+      wrapNonce: "AAAA",
+      metadataEnvelope: "AAAA",
+      metadataNonce: "AAAA",
+    });
+    expect(parsed?.endpoints).toBe("native");
+  });
+
+  // A native upload with an empty envelope is not a compatibility upload, it is
+  // a broken one, and accepting it would defer the failure to decryption.
+  it("does not accept an empty envelope from a native upload", () => {
+    const { endpoints, ...rest } = compatible;
+    void endpoints;
+    expect(parseMetadata(rest)).toBeNull();
+  });
+});
