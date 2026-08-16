@@ -24,7 +24,7 @@
   import { fetchBuild } from "$lib/source";
   import TransparencyCard from "$lib/TransparencyCard.svelte";
 
-  type Phase = "reading" | "password" | "ready" | "downloading" | "saved";
+  type Phase = "reading" | "password" | "ready" | "downloading" | "saved" | "compatibility";
 
   let phase = $state<Phase>("reading");
   let published = $state<UploadMetadata | null>(null);
@@ -67,6 +67,16 @@
       published = await fetchMetadata(id);
     } catch (error) {
       report(error);
+      return;
+    }
+
+    // An upload made through the compatibility endpoints is in another
+    // protocol's format. This client holds no key that opens it, so it says so
+    // plainly rather than failing during decryption - and shows what did
+    // protect it, which is less than a native upload gets.
+    if (published.endpoints === "compatibility") {
+      protection = describeDownload(published, "compatibility");
+      phase = "compatibility";
       return;
     }
 
@@ -215,6 +225,28 @@
   <p aria-live="polite">Reading…</p>
 {/if}
 
+{#if phase === "compatibility"}
+  <!--
+    Not an error, and not a refusal to explain. The file is there; this client
+    simply cannot open it, and the reason is worth stating because it also says
+    something about how well the file was protected.
+  -->
+  <p class="failure" role="alert">
+    This file was uploaded with a third-party client, in another protocol's
+    format. This page cannot open it.
+  </p>
+  <p class="note">
+    Use the client it was uploaded with. The key is the part of the link after
+    the <code>#</code>, and it never reaches this instance.
+  </p>
+  <p class="note">
+    It is also protected less well than a file uploaded here: that protocol has
+    the instance check the password rather than the key, so the instance could
+    serve the file to somebody who does not know it. The card below sets out
+    what applied.
+  </p>
+{/if}
+
 {#if phase === "password"}
   <form onsubmit={submitPassword}>
     <p>This file is protected with a password.</p>
@@ -266,7 +298,12 @@
   {/if}
 {/if}
 
-{#if protection && opened !== null}
+<!--
+  Shown once there is something true to say: after the file has been opened, or
+  for a compatibility upload, which cannot be opened here and is precisely the
+  case where what protected it needs stating.
+-->
+{#if protection && (opened !== null || phase === "compatibility")}
   <TransparencyCard {protection} {source} />
 {/if}
 

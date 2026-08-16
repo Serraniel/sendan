@@ -44,6 +44,12 @@ type metadataResponse struct {
 	PasswordRequired bool       `json:"passwordRequired"`
 	KDF              *kdfParams `json:"kdf,omitempty"`
 
+	// Endpoints names the protocol that produced this upload, so a client can
+	// say which protections actually applied. Omitted for a native upload
+	// rather than sent as a default, so a client that does not know the field
+	// cannot mistake one for the other.
+	Endpoints string `json:"endpoints,omitempty"`
+
 	// ExpiresAt is omitted when the upload never expires, rather than sent as a
 	// zero time that a client would have to know to interpret.
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
@@ -61,6 +67,10 @@ func newMetadataResponse(m *upload.PublicMetadata) metadataResponse {
 		MetadataEnvelope: enc(m.MetadataEnvelope),
 		MetadataNonce:    enc(m.MetadataNonce),
 		PasswordRequired: m.Password != nil,
+	}
+
+	if m.Compatibility {
+		res.Endpoints = "compatibility"
 	}
 
 	if m.Password != nil {

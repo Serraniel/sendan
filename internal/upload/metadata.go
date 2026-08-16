@@ -44,6 +44,19 @@ type PublicMetadata struct {
 	// MaxDownloads is zero when there is no limit.
 	MaxDownloads  int
 	DownloadCount int
+
+	// Compatibility reports that this upload was made through the third-party
+	// compatibility endpoints rather than Sendan's own.
+	//
+	// It matters to whoever receives it: that protocol enforces a password in
+	// the server rather than in the key, so such an upload is protected less
+	// well than a native one and an interface showing the two alike would be
+	// claiming protection the file does not have.
+	//
+	// Answered by the row itself. An upload in this project's format carries an
+	// envelope in it, and one made through the other protocol carries none -
+	// which the schema enforces is all-or-nothing rather than partly each.
+	Compatibility bool
 }
 
 // Metadata returns what a client needs to decide what to do with an upload.
@@ -73,6 +86,7 @@ func (s *Service) Metadata(ctx context.Context, id string) (*PublicMetadata, err
 		ExpiresAt:        u.ExpiresAt,
 		MaxDownloads:     u.MaxDownloads,
 		DownloadCount:    u.DownloadCount,
+		Compatibility:    len(u.WrappedFileKey) == 0,
 	}, nil
 }
 

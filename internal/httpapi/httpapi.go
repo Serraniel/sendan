@@ -111,6 +111,7 @@ func New(opts Options) http.Handler {
 		mux.Handle("/api/exists/", opts.Compat)
 		mux.Handle("/api/metadata/", opts.Compat)
 		mux.Handle("/api/download/", opts.Compat)
+		mux.Handle("/api/password/", opts.Compat)
 	}
 
 	if opts.Uploads != nil {

@@ -271,3 +271,48 @@ func TestFinishingAnAbsentOrFinishedUploadIsRefused(t *testing.T) {
 		t.Errorf("a negative size gave %v, want ErrInvalid", err)
 	}
 }
+
+// Setting a password replaces the key the server checks a downloader against.
+// The password itself never arrives, which is exactly why this model is the
+// weaker one: the server holds what it checks.
+func TestAPasswordReplacesTheAuthenticationKey(t *testing.T) {
+	_, c := compatStore(t)
+	u, compat := aCompatUpload(t, "compatsetpassword0000x")
+
+	if err := c.CreateCompat(t.Context(), u, compat); err != nil {
+		t.Fatal(err)
+	}
+
+	replacement := bytes.Repeat([]byte{8}, 32)
+	if err := c.SetCompatPassword(t.Context(), u.ID, replacement); err != nil {
+		t.Fatalf("set password: %v", err)
+	}
+
+	got, err := c.Compat(t.Context(), u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got.AuthKey, replacement) {
+		t.Error("the authentication key was not replaced")
+	}
+	if !got.RequiresPassword {
+		t.Error("the upload does not report that a password is required")
+	}
+}
+
+func TestAnUnusablePasswordKeyIsRefused(t *testing.T) {
+	_, c := compatStore(t)
+	u, compat := aCompatUpload(t, "compatbadpassword0000x")
+
+	if err := c.CreateCompat(t.Context(), u, compat); err != nil {
+		t.Fatal(err)
+	}
+
+	// An empty key would authenticate anybody who sent an empty signature.
+	if err := c.SetCompatPassword(t.Context(), u.ID, nil); !errors.Is(err, store.ErrInvalid) {
+		t.Errorf("an empty key gave %v, want ErrInvalid", err)
+	}
+	if err := c.SetCompatPassword(t.Context(), "compatpwmissing00000x", []byte("k")); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("an absent upload gave %v, want ErrNotFound", err)
+	}
+}
