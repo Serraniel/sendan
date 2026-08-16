@@ -182,13 +182,22 @@ cleared in between, and fails the release if the checksums differ. That check
 runs the same script you would.
 
 > [!NOTE]
-> **The checksums are not yet signed.** Anybody who could replace a binary on
-> the releases page could replace the checksums beside it, so this establishes
-> that a download was not corrupted and that a build is reproducible — not that
-> the release came from this project. Signing is
-> [#104](https://github.com/Serraniel/sendan/issues/104). Until then, a
-> reproduction from source is the stronger check, because it does not depend on
-> the release page being honest.
+> **`SHA256SUMS` is signed**, with the same Sigstore signature as the manifest,
+> so replacing the checksums beside a binary does not go unnoticed:
+>
+> ```sh
+> cosign verify-blob \
+>   --bundle SHA256SUMS.sigstore.json \
+>   --certificate-identity-regexp '^https://github\.com/Serraniel/sendan/\.github/workflows/release\.yml@' \
+>   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+>   SHA256SUMS
+> ```
+>
+> What that establishes is that the file came from this project's release
+> workflow — not that the workflow was honest, since a compromise of this
+> repository can produce it. **A reproduction from source is the stronger
+> check**, because it does not depend on the release page, the signature, or the
+> pipeline being honest.
 
 ## Verifying an instance
 
