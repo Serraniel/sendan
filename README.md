@@ -54,7 +54,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
   implementation with the server. *(Sends and receives; not yet released as a
   binary.)*
 - **Optional compatibility endpoints** for existing third-party clients,
-  disabled by default. *(Not built.)*
+  disabled by default. Tested against a real one on every pull request.
+  *(Uploads made through them are **less protected** than native ones — that
+  protocol has the instance check the password rather than the key, and the
+  interface says so beside the file.)*
 
 ## Cryptographic design
 
@@ -143,6 +146,7 @@ fail. The first two are bounded by the disk.
 | [`docs/api.md`](docs/api.md) | Every endpoint: paths, methods, status codes and what each returns |
 | [`docs/configuration.md`](docs/configuration.md) | Every environment variable and its default |
 | [`docs/deployment.md`](docs/deployment.md) | Running the container image, the reverse proxy in front of it, and backups |
+| [`docs/compatibility.md`](docs/compatibility.md) | Third-party client support: what it covers, and why those uploads are less protected |
 | [`SECURITY.md`](SECURITY.md) | Threat model and vulnerability disclosure policy |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution process, DCO, and testing requirements |
 
