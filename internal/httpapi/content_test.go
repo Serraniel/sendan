@@ -6,12 +6,15 @@ package httpapi
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Serraniel/sendan/internal/blob"
 	"github.com/Serraniel/sendan/internal/crypto"
@@ -423,5 +426,89 @@ func TestContentThrottlesRepeatedWrongTokens(t *testing.T) {
 	}
 	if served, _ := h.counts(t, testID); served != 0 {
 		t.Errorf("refused attempts were charged %d bytes", served)
+	}
+}
+
+// The owner token is the only thing that removes an upload before it expires.
+// The server holds a hash of it, so it can check one and cannot produce one -
+// which is what makes possession proof of ownership rather than a record of it.
+func TestAnUploadIsRemovedByItsOwnerToken(t *testing.T) {
+	h := newAPIHarness(t)
+	ownerToken := bytes.Repeat([]byte{0x5A}, 32)
+
+	const id = "revokedbyitsowner00000"
+	key, err := blob.NewAtRestKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.blobs.Put(t.Context(), id, key, bytes.NewReader(content)); err != nil {
+		t.Fatal(err)
+	}
+	owner := sha256.Sum256(ownerToken)
+	h.put(t, &store.Upload{
+		ID:             id,
+		AtRestKey:      key,
+		AuthTokenHash:  crypto.AuthTokenHash(authToken),
+		OwnerTokenHash: owner[:],
+		Size:           int64(len(content)),
+	})
+
+	del := func(token []byte, malformed string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodDelete, "/api/uploads/"+id, nil)
+		switch {
+		case malformed != "":
+			req.Header.Set("Authorization", malformed)
+		case token != nil:
+			req.Header.Set("Authorization",
+				"Bearer "+base64.RawURLEncoding.EncodeToString(token))
+		}
+		rec := httptest.NewRecorder()
+		h.handler.ServeHTTP(rec, req)
+		return rec
+	}
+
+	if got := del(nil, ""); got.Code != http.StatusUnauthorized {
+		t.Errorf("with no credential: status %d, want 401", got.Code)
+	}
+	if got := del(nil, "Basic abc"); got.Code != http.StatusUnauthorized {
+		t.Errorf("with another scheme: status %d, want 401", got.Code)
+	}
+	if got := del(bytes.Repeat([]byte{0x01}, 32), ""); got.Code != http.StatusForbidden {
+		t.Errorf("with a wrong token: status %d, want 403", got.Code)
+	}
+
+	// Still there, because none of those were the owner.
+	if _, err := h.store.Get(t.Context(), id, time.Now()); err != nil {
+		t.Fatalf("a refused revocation removed the upload: %v", err)
+	}
+
+	if got := del(ownerToken, ""); got.Code != http.StatusNoContent {
+		t.Fatalf("with the owner token: status %d, want 204", got.Code)
+	}
+
+	// Gone, and nothing distinguishes it from an upload that never existed.
+	if _, err := h.store.Get(t.Context(), id, time.Now()); err == nil {
+		t.Error("the upload survived its own revocation")
+	}
+	if got := del(ownerToken, ""); got.Code != http.StatusForbidden {
+		t.Errorf("revoking an upload that is already gone: status %d, want 403", got.Code)
+	}
+}
+
+// An identifier of the wrong shape never reaches the store, so a malformed one
+// cannot be used to probe it.
+func TestRevokingRefusesAnIdentifierOfTheWrongShape(t *testing.T) {
+	h := newAPIHarness(t)
+
+	for _, id := range []string{"short", strings.Repeat("A", 23), "has/a/slash/in/it00000"} {
+		req := httptest.NewRequest(http.MethodDelete, "/api/uploads/"+id, nil)
+		req.Header.Set("Authorization", "Bearer "+base64.RawURLEncoding.EncodeToString(
+			bytes.Repeat([]byte{0x01}, 32)))
+		rec := httptest.NewRecorder()
+		h.handler.ServeHTTP(rec, req)
+
+		if rec.Code == http.StatusNoContent {
+			t.Errorf("%q was accepted as an identifier", id)
+		}
 	}
 }

@@ -70,6 +70,7 @@ const usage = `sendan — send and receive end-to-end encrypted files
 
   sendan up [file]        encrypt and upload; reads stdin when no file is given
   sendan down <link>      download and decrypt; writes the file named in it
+  sendan delete <link>    remove an upload before it expires, with its owner token
   sendan verify <url>     check an instance serves the published client
   sendan version          what this binary is, for checking against a release
 
@@ -84,6 +85,9 @@ Options for up:
 
 Options for down:
   -o <path>               write here instead; "-" means stdout
+
+Options for delete:
+  --token-file <path>     read the owner token from a file instead of asking
 
 Options for verify:
   --manifest <path|url>   compare against this manifest instead of the release
@@ -110,6 +114,8 @@ func run(ctx context.Context, args []string) error {
 		return up(ctx, args[1:])
 	case "down":
 		return down(ctx, args[1:])
+	case "delete":
+		return deleteUpload(ctx, args[1:])
 	case "verify":
 		return verify(ctx, args[1:])
 	case "version", "--version":

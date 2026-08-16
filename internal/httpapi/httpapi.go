@@ -118,6 +118,7 @@ func New(opts Options) http.Handler {
 		mux.HandleFunc("GET /api/uploads/{id}/metadata", handleMetadata(opts.Uploads))
 		mux.HandleFunc("POST /api/uploads/{id}/auth", handleAuth(opts.Uploads))
 		mux.HandleFunc("GET /api/uploads/{id}/content", handleContent(opts.Uploads))
+		mux.HandleFunc("DELETE /api/uploads/{id}", handleRevoke(opts.Uploads))
 
 		tusHandler, err := newTusHandler(opts)
 		if err != nil {
