@@ -29,7 +29,7 @@ COPY web/ ./
 RUN npm run build
 
 # ---- the binary -----------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.25.13-alpine@sha256:844b27705f54e73773e0f9bc3c780633b9d7f4b4831bf35cdad02a81a4c80bd0 AS build
+FROM --platform=$BUILDPLATFORM golang:1.26.6-alpine@sha256:3889b425f035be855a72fb4755265311293b6d414521f0a519d819df32222d83 AS build
 
 WORKDIR /src
 
