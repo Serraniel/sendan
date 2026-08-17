@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { explainRevoke, RevokeError, revokeUpload } from "$lib/revoke";
   import { forget, forgetAll, isSupported, list, type StoredUpload } from "$lib/vault";
 
   let uploads = $state<StoredUpload[]>([]);
@@ -23,6 +24,51 @@
     }
     loaded = true;
   });
+
+  let working = $state<string | null>(null);
+  let notice = $state<string | null>(null);
+
+  /**
+   * Removes the file itself, not just the record.
+   *
+   * Confirmed first, because it cannot be undone by anybody: the instance takes
+   * the same path it takes when an upload expires, so the row, the blob and the
+   * at-rest key are gone rather than marked.
+   */
+  async function remove(upload: StoredUpload) {
+    if (
+      !confirm(
+        `Delete ${upload.name} from the instance?\n\n` +
+          "Anybody holding the link loses access immediately, and this cannot be " +
+          "undone — not by you and not by whoever runs the instance.",
+      )
+    ) {
+      return;
+    }
+
+    working = upload.id;
+    notice = null;
+    try {
+      await revokeUpload(upload.id, upload.ownerToken);
+      await forget(upload.id);
+      uploads = uploads.filter((u) => u.id !== upload.id);
+      notice = `${upload.name} was deleted.`;
+    } catch (error) {
+      if (error instanceof RevokeError) {
+        notice = explainRevoke(error.fault);
+        // An upload the instance no longer has is one this list should stop
+        // showing, whatever the reason it is gone.
+        if (error.fault === "not-owner") {
+          await forget(upload.id);
+          uploads = uploads.filter((u) => u.id !== upload.id);
+        }
+      } else {
+        notice = "Something went wrong. The upload has not been removed.";
+      }
+    } finally {
+      working = null;
+    }
+  }
 
   async function drop(id: string) {
     await forget(id);
@@ -72,6 +118,10 @@
   instance reading them.
 </p>
 
+{#if notice}
+  <p class="note" role="status" aria-live="polite">{notice}</p>
+{/if}
+
 {#if !loaded}
   <p aria-live="polite">Reading…</p>
 {:else if !supported}
@@ -92,9 +142,23 @@
           which matters: somebody clearing this list to tidy up should not
           believe they have withdrawn the files.
         -->
-        <button type="button" onclick={() => drop(upload.id)}>
-          Forget this link
-        </button>
+        <p class="actions">
+          <!--
+            Deleting first, because it is what somebody looking at this list
+            usually wants: the file is out there and they want it back. The two
+            are labelled for what they do rather than sharing a word.
+          -->
+          <button
+            type="button"
+            onclick={() => remove(upload)}
+            disabled={working !== null}
+          >
+            {working === upload.id ? "Deleting…" : "Delete this file"}
+          </button>
+          <button type="button" onclick={() => drop(upload.id)} disabled={working !== null}>
+            Forget this link
+          </button>
+        </p>
       </li>
     {/each}
   </ul>
@@ -103,9 +167,13 @@
     <button type="button" onclick={dropEverything}>Forget every link</button>
   </p>
   <p class="note">
-    Forgetting a link removes it from this browser. It does not remove the
-    upload: the file stays until it expires, runs out of downloads, or is
-    deleted with its owner token.
+    <strong>Delete this file</strong> removes it from the instance, using the
+    owner token stored here. Anybody holding the link loses access at once, and
+    it cannot be undone.
+  </p>
+  <p class="note">
+    <strong>Forget this link</strong> removes only this browser's record of it.
+    The upload stays until it expires, runs out of downloads, or is deleted.
   </p>
 {/if}
 
@@ -136,5 +204,11 @@
 
   .note {
     font-size: 0.9rem;
+  }
+
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    margin: 0;
   }
 </style>
