@@ -610,6 +610,34 @@ test.describe("your uploads", () => {
     await expect(page.getByRole("button", { name: /download/i })).toBeVisible();
   });
 
+  test("deleting from the list removes the file for everybody", async ({ page }) => {
+    const contents = Buffer.from("withdrawn after sending");
+
+    page.once("dialog", (dialog) => void dialog.accept());
+    const link = await uploadThrough(page, "withdrawn.txt", contents);
+
+    // It is there first, or the assertion afterwards proves nothing.
+    await page.goto(link);
+    await expect(page.getByRole("button", { name: /download/i })).toBeVisible();
+
+    await page.goto("/uploads");
+    // Deleting is irreversible, so it asks before doing it.
+    page.once("dialog", (dialog) => {
+      expect(dialog.message()).toContain("cannot be undone");
+      void dialog.accept();
+    });
+    await page.getByRole("button", { name: /delete this file/i }).click();
+
+    await expect(page.getByText(/was deleted/i)).toBeVisible();
+    // Scoped to the list: the notice names the file too, and matching that
+    // would assert the confirmation away rather than the record.
+    await expect(page.locator("ul.uploads").getByText("withdrawn.txt")).toHaveCount(0);
+
+    // And the recipient's link no longer resolves to anything.
+    await page.goto(link);
+    await expect(page.getByText(/no longer available/i)).toBeVisible();
+  });
+
   test("declining leaves nothing behind", async ({ page }) => {
     page.once("dialog", (dialog) => void dialog.dismiss());
     await uploadThrough(page, "not-kept.txt", Buffer.from("declined"));
