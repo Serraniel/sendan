@@ -12,7 +12,9 @@
  * that calls a function.
  */
 
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type Page, expect, test } from "@playwright/test";
 
 /** Deterministic filler, so a failure is reproducible. */
@@ -645,6 +647,68 @@ test.describe("your uploads", () => {
     await page.goto("/uploads");
     await expect(page.getByText("not-kept.txt")).toHaveCount(0);
     await expect(page.getByText(/nothing here yet/i)).toBeVisible();
+  });
+
+  // The answer to the property the list has to warn about: an export is the
+  // only thing that survives losing the browser. Exercised across two contexts
+  // rather than one, because restoring into the same profile would prove
+  // nothing about a list that is gone.
+  test("an export restores the list in a browser that never had it", async ({ browser }) => {
+    const first = await browser.newContext();
+    const sender = await first.newPage();
+
+    sender.once("dialog", (dialog) => void dialog.accept());
+    const link = await uploadThrough(sender, "exported.txt", Buffer.from("carried across"));
+
+    await sender.goto("/uploads");
+    sender.once("dialog", (dialog) => {
+      expect(dialog.message()).toContain("no way to recover the passphrase");
+      void dialog.accept("a passphrase for the export");
+    });
+
+    const saved = sender.waitForEvent("download");
+    await sender.getByRole("button", { name: /export this list/i }).click();
+
+    // Saved somewhere of our own before the context goes: Playwright discards a
+    // download's artifact with the context that produced it, and the whole
+    // point here is that the file outlives the browser that wrote it.
+    const file = join(tmpdir(), `sendan-export-${Date.now()}.sendanbk`);
+    await (await saved).saveAs(file);
+    await first.close();
+
+    // A second browser: different profile, empty IndexedDB, nothing shared.
+    const second = await browser.newContext();
+    const receiver = await second.newPage();
+
+    await receiver.goto("/uploads");
+    await expect(receiver.getByText(/nothing here yet/i)).toBeVisible();
+
+    receiver.once("dialog", (dialog) => void dialog.accept("a passphrase for the export"));
+    await receiver.locator('input[type="file"]').setInputFiles(file);
+
+    await expect(receiver.getByText(/imported 1 upload/i)).toBeVisible();
+    await expect(receiver.locator("ul.uploads").getByText("exported.txt")).toBeVisible();
+
+    // And what was restored still works: the link opens the file.
+    await expect(receiver.getByLabel("Link for exported.txt")).toHaveValue(link);
+    await second.close();
+    await rm(file, { force: true });
+  });
+
+  test("the wrong passphrase does not open an export", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "guarded.txt", Buffer.from("guarded"));
+
+    await page.goto("/uploads");
+    page.once("dialog", (dialog) => void dialog.accept("the right passphrase"));
+    const saved = page.waitForEvent("download");
+    await page.getByRole("button", { name: /export this list/i }).click();
+    const file = await (await saved).path();
+
+    page.once("dialog", (dialog) => void dialog.accept("the wrong passphrase"));
+    await page.locator('input[type="file"]').setInputFiles(file);
+
+    await expect(page.getByText(/does not open the file/i)).toBeVisible();
   });
 
   test("the page says the list cannot be recovered", async ({ page }) => {

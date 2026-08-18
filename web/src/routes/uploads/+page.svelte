@@ -1,7 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { BackupError, exportUploads, explainBackup, importUploads } from "$lib/backup";
   import { explainRevoke, RevokeError, revokeUpload } from "$lib/revoke";
-  import { forget, forgetAll, isSupported, list, type StoredUpload } from "$lib/vault";
+  import {
+    forget,
+    forgetAll,
+    isSupported,
+    list,
+    remember,
+    type StoredUpload,
+  } from "$lib/vault";
 
   let uploads = $state<StoredUpload[]>([]);
   let loaded = $state(false);
@@ -25,7 +33,80 @@
     loaded = true;
   });
 
+  let busy = $state(false);
   let working = $state<string | null>(null);
+
+  /**
+   * Writes the list out as an encrypted file.
+   *
+   * The passphrase is asked for rather than derived from anything: this file
+   * leaves the machine, and the list it carries opens and deletes every upload
+   * in it. Argon2id with the project's own parameters stands between the two.
+   */
+  async function exportList() {
+    if (uploads.length === 0) return;
+
+    const passphrase = prompt(
+      "Choose a passphrase for the export.\n\n" +
+        "The file contains every link, its secret, and every owner token. " +
+        "Anybody who can open the file can open and delete those files.\n\n" +
+        "There is no way to recover the passphrase, and no way to open the " +
+        "export without it.",
+    );
+    if (passphrase === null || passphrase === "") return;
+
+    busy = true;
+    notice = null;
+    try {
+      const file = await exportUploads(uploads, passphrase);
+      const url = URL.createObjectURL(new Blob([file as BlobPart], { type: "application/octet-stream" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `sendan-uploads-${new Date().toISOString().slice(0, 10)}.sendanbk`;
+      link.click();
+      URL.revokeObjectURL(url);
+      notice = `Exported ${uploads.length} upload${uploads.length === 1 ? "" : "s"}.`;
+    } catch {
+      notice = "The export could not be written.";
+    } finally {
+      busy = false;
+    }
+  }
+
+  /**
+   * Reads an export back, adding what it holds to this browser's list.
+   *
+   * Added rather than replacing: somebody importing on a second machine
+   * usually wants both sets, and a list that silently discarded what was
+   * already there would lose uploads nothing else knows about.
+   */
+  async function importList(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+
+    const passphrase = prompt("Passphrase for this export:");
+    if (passphrase === null || passphrase === "") return;
+
+    busy = true;
+    notice = null;
+    try {
+      const imported = await importUploads(new Uint8Array(await file.arrayBuffer()), passphrase);
+      for (const upload of imported) {
+        await remember(upload);
+      }
+      uploads = await list();
+      notice = `Imported ${imported.length} upload${imported.length === 1 ? "" : "s"}.`;
+    } catch (error) {
+      notice =
+        error instanceof BackupError
+          ? explainBackup(error.fault)
+          : "That file could not be read.";
+    } finally {
+      busy = false;
+    }
+  }
   let notice = $state<string | null>(null);
 
   /**
@@ -122,6 +203,27 @@
   <p class="note" role="status" aria-live="polite">{notice}</p>
 {/if}
 
+{#if loaded && supported && !failure}
+  <p class="backup">
+    <button type="button" onclick={exportList} disabled={busy || uploads.length === 0}>
+      Export this list
+    </button>
+    <!--
+      A label rather than a button, because a file input cannot be opened from
+      script without one. It looks like its neighbour and does what it says.
+    -->
+    <label class="file">
+      Import a list
+      <input type="file" accept=".sendanbk,application/octet-stream" onchange={importList} disabled={busy} />
+    </label>
+  </p>
+  <p class="note">
+    An export is encrypted with a passphrase you choose, and is the only thing
+    that survives this browser. Importing adds to the list rather than replacing
+    it.
+  </p>
+{/if}
+
 {#if !loaded}
   <p aria-live="polite">Reading…</p>
 {:else if !supported}
@@ -164,7 +266,7 @@
   </ul>
 
   <p>
-    <button type="button" onclick={dropEverything}>Forget every link</button>
+    <button type="button" onclick={dropEverything} disabled={busy}>Forget every link</button>
   </p>
   <p class="note">
     <strong>Delete this file</strong> removes it from the instance, using the
@@ -204,6 +306,22 @@
 
   .note {
     font-size: 0.9rem;
+  }
+
+  .backup {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  /* The input itself is hidden; the label is the control. */
+  .file input {
+    display: none;
+  }
+
+  .file {
+    cursor: pointer;
+    text-decoration: underline;
   }
 
   .actions {
