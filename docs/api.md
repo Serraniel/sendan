@@ -142,7 +142,7 @@ answers only for uploads still being written; a completed one is `404`.
 ### Not offered
 
 `GET` on an upload (tus download), `DELETE` (tus termination) and the
-concatenation extension are disabled. Each is discussed in `docs/design.md` §4.0.
+concatenation extension are disabled. Each is discussed in `docs/design.md` §4.0.1.
 
 ---
 

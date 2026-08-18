@@ -21,8 +21,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > with encryption at rest; the expiry, revocation and reaping lifecycle;
 > configuration, structured logging and abuse controls; the web client's
 > upload and download flows, with per-upload password, expiry and download
-> limit; and optional wrapping of at-rest keys under an operator-held master
-> key, so a database backup carries nothing that opens a blob.
+> limit; owner-held management, so the browser that made an upload can list it,
+> delete it early, and export that list to a passphrase-encrypted file; and
+> optional wrapping of at-rest keys under an operator-held master key, so a
+> database backup carries nothing that opens a blob.
 >
 > **Partly built:** the command line client sends and receives (`sendan up`,
 > `sendan down`), with password, expiry and download-limit options. Releases
@@ -44,6 +46,13 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
   server-side policy.
 - **Expiry by deadline, by download count, or by manual revocation**, whichever
   occurs first.
+- **Owner-held management, with no account.** The browser that made an upload
+  keeps the link and an owner token, so it can list what it sent and delete a
+  file early — from the page or with `sendan delete`. The instance stores only
+  a hash of that token, so it cannot forge one, and cannot tell whose uploads
+  are whose. The list can be exported to a passphrase-encrypted file, which is
+  the only copy that survives the browser: *there is no recovery path, and the
+  interface says so before anything is stored rather than after.*
 - **Complete deletion.** Expired uploads leave no orphaned blobs, no tombstone
   rows, and no file identifiers in logs. Unlimited retention is available but
   must be enabled explicitly.
@@ -145,7 +154,7 @@ fail. The first two are bounded by the disk.
 | [`docs/cli.md`](docs/cli.md) | The command line client: installing it, and every command and option |
 | [`docs/api.md`](docs/api.md) | Every endpoint: paths, methods, status codes and what each returns |
 | [`docs/configuration.md`](docs/configuration.md) | Every environment variable and its default |
-| [`docs/deployment.md`](docs/deployment.md) | Running the container image, the reverse proxy in front of it, and backups |
+| [`docs/deployment.md`](docs/deployment.md) | Running the container image, the reverse proxy in front of it, backups, and what you can and cannot do when a user asks for help |
 | [`docs/compatibility.md`](docs/compatibility.md) | Third-party client support: what it covers, and why those uploads are less protected |
 | [`SECURITY.md`](SECURITY.md) | Threat model and vulnerability disclosure policy |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution process, DCO, and testing requirements |

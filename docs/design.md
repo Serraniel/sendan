@@ -39,8 +39,8 @@ command line client are produced from a single Go module.
 | `internal/logging` | Structured logging with identifier redaction |
 | `internal/ratelimit` | Structural abuse controls |
 | `web/src/crypto` | The TypeScript half of the cryptographic scheme |
-| `web/src/lib` | The client's own logic: transfer, save paths, links, capability checks |
-| `web/src/routes` | The two pages, which are deliberately thin over `lib` |
+| `web/src/lib` | The client's own logic: transfer, save paths, links, capability checks, and the browser-held list of uploads with its revocation and encrypted export |
+| `web/src/routes` | The three pages — send, receive, and the list of uploads this browser made — deliberately thin over `lib` |
 | `web/e2e` | Browser flows, run against a real instance |
 | `testdata/vectors` | Shared cross-language test vectors |
 | `scripts` | Checks continuous integration runs and contributors can run directly; `verify.sh` runs all of them |
@@ -314,7 +314,7 @@ A partial upload holds the same content a finished one would, so it is encrypted
 the same way and deleted the same way: `Delete` discards it whether or not a
 blob was ever finished.
 
-### 4.0 Uploading
+### 4.0.1 Uploading
 
 `POST /api/uploads` creates an upload and `PATCH /api/uploads/{id}` writes it, in
 chunks, over [tus](https://tus.io). The protocol is adopted rather than
@@ -396,7 +396,7 @@ never finished.
 > leaked three times, each found only because a test looked for it. An attribute
 > a future version of tus adds is now dropped rather than published.
 
-### 4.0.1 An upload before it is complete
+### 4.0.2 An upload before it is complete
 
 Chunks are encrypted with the row's at-rest key as they arrive, so the row has
 to exist from the moment an upload is created rather than from the moment it
