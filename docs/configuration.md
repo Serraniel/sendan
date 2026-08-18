@@ -20,7 +20,7 @@ require restarting repeatedly to discover the next fault.
 
 ## The command line client
 
-The client reads two variables. Neither is a server setting, and both are here
+The client reads three variables. None is a server setting, and all are here
 because this is where somebody looks; [`docs/cli.md`](cli.md) has the commands
 themselves.
 
@@ -28,6 +28,7 @@ themselves.
 |---|---|
 | `SENDAN_INSTANCE` | The instance `sendan up` uploads to, so `--to` need not be repeated. A link carries its own origin, so `sendan down` ignores this. |
 | `SENDAN_PASSWORD` | The password, for uploading and for opening a protected file. |
+| `SENDAN_OWNER_TOKEN` | The token `sendan delete` proves ownership with. Issued at upload and held nowhere else — an instance stores only its hash and cannot reissue it. |
 
 > [!IMPORTANT]
 > **There is no `--password <value>`, deliberately.** An argument appears in the
@@ -51,6 +52,11 @@ themselves.
 > script that is a secret which failed to resolve, not somebody choosing to go
 > without — and uploading unprotected there would leave the script believing it
 > had protected the file.
+>
+> The owner token is handled the same way and for the same reason: there is no
+> `--token <value>`. `sendan delete` prompts without echoing, reads
+> `--token-file <path>`, or takes `SENDAN_OWNER_TOKEN`. A token in a shell
+> history is a token somebody else can delete your upload with.
 
 ## Server
 

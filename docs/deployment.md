@@ -271,6 +271,50 @@ That is a property of restoring, not a defect, but it is at odds with what this
 project promises about deletion. Keep backups only as long as they are needed,
 and treat a restore as a decision rather than a routine.
 
+## What you can do when a user asks
+
+An operator running this will be asked for help, and most of the usual answers
+are not available here. That is the design working, but it sets support
+expectations badly if nobody says so in advance.
+
+| The request | What you can do |
+|---|---|
+| "I lost the link." | Nothing. The part after `#` never reaches the instance, is not in any log, and is not in the database. There is no reissue, and no partial recovery: the file is ciphertext nobody holds the key to. |
+| "I lost the fragment but have the rest of the link." | Nothing, for the same reason. The identifier alone names a blob that cannot be decrypted. |
+| "I forgot the password." | Nothing, for a native upload. The password contributes to the wrapping key rather than being checked, so there is no stored value to reset and no way to try one on a user's behalf. For an upload made through the compatibility endpoints the answer differs, and not in your favour — see below. |
+| "Delete my upload." | They can, if they still hold the owner token: from the page or with `sendan delete`. You cannot do it on their behalf without it — the instance keeps only a hash — and if they hand you the token you are simply another holder of it, which is worth being reluctant about. |
+| "Which files are mine?" | Nothing. There are no accounts, and no record connects an upload to a person. The list a browser shows is held in that browser. |
+| "I cleared my browser data." | Nothing, unless they exported the list beforehand. The export is encrypted under a passphrase you also cannot recover. |
+| "Take this file down." | Partly. There is **no administrative command for this** — the binary has no such subcommand and the API has no such endpoint. What you have is the database: deleting the upload's row destroys the at-rest key stored in it, and the blob is unreadable from that moment whether or not the object itself has gone yet. Remove the blob too, or the reaper's guarantee of leaving nothing behind stops holding for that upload. |
+
+The pattern is that possession is the only credential. Anything you could do on
+a user's behalf without it, an attacker could do by asking you for it — which is
+why the honest answer to most of these is that the instance genuinely cannot,
+not that policy forbids it.
+
+The one exception is the last row, and it is asymmetric on purpose: an operator
+can destroy an upload but cannot open one. Nothing in the removal path needs the
+key, and nothing an operator holds produces it.
+
+**Uploads made through the compatibility endpoints do not follow this pattern.**
+That protocol has the instance check the password instead of the password
+contributing to the key, so the value a password is checked against is a column
+in the database — and anything an operator can write, an operator can replace.
+The password gate on such an upload is therefore the operator's to reset, not
+only the uploader's. The file still cannot be read without the link, because the
+content key is still only in the fragment and no operator holds it, but a
+protection the uploader believed was theirs alone is not. This is one of the
+reasons those endpoints are off unless an operator turns them on;
+`docs/compatibility.md` sets out the rest.
+
+Two consequences worth stating to users before they rely on the service, rather
+than at the moment they need help:
+
+- **A lost link is a lost file.** Sending it to oneself is not paranoia.
+- **The browser holding an upload list is the only thing holding it.** The
+  export exists so that losing it is a decision rather than an accident;
+  `SECURITY.md` sets out what the export costs in exchange.
+
 ## What the image contains
 
 ```

@@ -76,13 +76,28 @@ version current when this was written was 0.2.77.
 Nothing in that list stops a file being sent or received. If one of them matters
 for how you use a client, it is worth an issue rather than a surprise.
 
-## One deliberate difference in behaviour
+## Where the behaviour differs
 
-That protocol spends a download when a client **asks for a token**, so a client
-that asks and never transfers still consumes one. Sendan counts bytes actually
-served: a download nobody received is not a download. The count still advances
-on transfer, so a limit is still a limit — it is simply not spent by a request
-that delivered nothing.
+**A download is spent on transfer, not on asking.** That protocol spends one
+when a client **asks for a token**, so a client that asks and never transfers
+still consumes one. Sendan counts bytes actually served: a download nobody
+received is not a download. The count still advances on transfer, so a limit is
+still a limit — it is simply not spent by a request that delivered nothing.
+
+**An upload with no stated download limit is single-use here, and unlimited
+natively.** The protocol's default is one, and its clients rely on that: a
+client that does not ask for a limit has already told the user the file may be
+downloaded once. A native upload that names no limit instead follows
+`SENDAN_DEFAULT_MAX_DOWNLOADS`, which is `0` — no limit — unless the operator
+says otherwise.
+
+> [!NOTE]
+> This is not a difference chosen for its own sake; it is what conformance
+> requires. Reading the absent value as "unlimited" — which is what this did
+> first — turns an upload its sender was told was single-use into a permanent
+> one. It was found by downloading the same link twice, and it is the reason
+> the compatibility suite runs a real client on every pull request rather than
+> a transcript of one.
 
 ## What it shares with a native upload
 
