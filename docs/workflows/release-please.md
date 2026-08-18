@@ -51,6 +51,24 @@ keep.
 The manifest is updated by release-please itself when a release pull request is
 merged. It is not a value to edit by hand afterwards.
 
+## Why pull request titles are not Conventional Commits
+
+Squash merging is disabled, so every commit enters `main` as written and each
+pull request also leaves a merge commit. GitHub fills that merge commit's body
+with the pull request's title, and this tool reads commit messages — so a
+Conventional Commit title is counted twice: once from the commit that did the
+work, and once from the merge commit repeating it. The changelog then lists the
+change twice, distinguishable only by the entry that carries `closes #N` being
+the real commit.
+
+No setting fixes this. The tool has no option to ignore merge commits, and
+GitHub permits only three title-and-body combinations for merge commits, each of
+which places the pull request title somewhere in the message. What works is
+giving pull requests plain-language titles, which `CONTRIBUTING.md` requires.
+
+Commits inside a pull request must still be Conventional Commits; only the pull
+request's own title must not look like one.
+
 ## What a failure means
 
 Usually a malformed commit subject that reached `main`, or insufficient token
