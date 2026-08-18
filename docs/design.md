@@ -721,6 +721,38 @@ Loss of browser state means loss of access, and the server is genuinely unable t
 assist. Encrypted export and import make this a deliberate choice rather than an
 accident.
 
+### 6.1 Export format
+
+An export carries the same secrets the list does, so it is encrypted under a
+passphrase supplied at the time, with the Argon2id parameters of §4 of the wire
+format. Its layout:
+
+```
+magic    8   "SENDANBK"
+version  1   1
+salt    16   Argon2id salt
+memory   4   Argon2id memory, KiB, big-endian
+passes   4   Argon2id iterations, big-endian
+lanes    1   Argon2id parallelism
+nonce   12   AES-256-GCM nonce
+body     …   AES-256-GCM(JSON of the records), tag included
+```
+
+The parameters travel with the file because whoever imports it has no other way
+to learn them, and they disclose only that a passphrase was used — which the
+magic already says. The header is bound to the body as additional authenticated
+data, so rewriting the cost parameters invalidates the tag rather than quietly
+weakening the derivation for the next reader. Every field bar the magic and the
+version also feeds the derivation or the cipher, which means altering one breaks
+decryption on its own; the binding covers the two that would otherwise be
+unauthenticated, and is not load-bearing for the rest.
+
+An import is refused on a wrong passphrase and on an altered file with the same
+answer, because the tag cannot distinguish them. Parameters are range-checked
+before they are used rather than after, so a file naming a gigabyte of memory is
+a refusal instead of a hang. Importing adds to the list rather than replacing it:
+a second machine usually holds uploads the export does not.
+
 ## 7. Transparency
 
 The upload and download interfaces report what actually protected a given file:

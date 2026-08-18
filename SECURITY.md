@@ -119,6 +119,15 @@ Also out of scope:
   nor a token that removes it, which is the same property that stops the
   operator reading them.
 
+  The list can be exported to a file, which is the only copy that survives the
+  browser. It carries the same secrets the list does — every link and every
+  owner token — so it is encrypted under a passphrase chosen at the time, using
+  the Argon2id parameters fixed in §4 of `docs/spec/wire-format-v1.md`; no
+  unencrypted form is written. That moves the exposure rather than removing it:
+  the export is the copy that ends up in cloud storage and on memory sticks,
+  and its passphrase is all that stands behind it. Losing that passphrase is not recoverable either, for the
+  same reason as everything else here.
+
 - **Anyone you gave the link to.** The link *is* the credential. Sendan has no
   way to distinguish an intended recipient from someone who read over their
   shoulder.
