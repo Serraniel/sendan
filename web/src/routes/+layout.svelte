@@ -44,7 +44,15 @@
       Sendan
       <span title={build.commit}>{build.version} ({shortCommit(build.commit)})</span>
       &middot;
-      <a href={build.source} rel="noreferrer">source</a>
+      <!--
+        Opened elsewhere rather than in place: this leads off the instance
+        entirely, and somebody who follows it with an upload in progress loses
+        it. noopener as well as noreferrer, so the opened page gets no handle
+        on this one.
+      -->
+      <a href={build.source} target="_blank" rel="noreferrer noopener">
+        source<span class="visually-hidden"> (opens in a new tab)</span>
+      </a>
       &middot;
       <!--
         Reachable from every page, because a list kept only in this browser is

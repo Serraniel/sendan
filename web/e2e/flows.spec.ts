@@ -902,3 +902,29 @@ test.describe("the size the instance accepts", () => {
     await expect(page.getByRole("button", { name: "Encrypt and send" })).toBeDisabled();
   });
 });
+
+test.describe("the footer", () => {
+  test("opens the source elsewhere, and keeps the page it is on", async ({ page }) => {
+    await page.goto("/");
+    const source = page.getByRole("link", { name: /^source/ });
+
+    await expect(source).toHaveAttribute("target", "_blank");
+    // noopener as well: without it the opened page holds a handle on this one,
+    // which is a page with a link fragment in its address bar.
+    const rel = (await source.getAttribute("rel")) ?? "";
+    expect(rel).toContain("noopener");
+    expect(rel).toContain("noreferrer");
+
+    // Said out loud, not only shown: somebody who cannot see a tab appear is
+    // otherwise left wondering where the page went.
+    await expect(source).toContainText("opens in a new tab");
+  });
+
+  test("keeps the link to this browser's own list in place", async ({ page }) => {
+    // Not every link should leave: this one stays on the instance, and opening
+    // it in a new tab would be a different kind of surprise.
+    await page.goto("/");
+    const uploads = page.getByRole("contentinfo").getByRole("link", { name: /your uploads/i });
+    await expect(uploads).not.toHaveAttribute("target", "_blank");
+  });
+});
