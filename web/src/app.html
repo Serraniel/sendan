@@ -4,7 +4,32 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
+    <meta name="color-scheme" content="light dark" />
     <title>Sendan</title>
+    <!--
+      Applies a stored theme before the first paint, so somebody who chose dark
+      on a system set to light does not see a flash of light first.
+
+      Inline of necessity: it has to run before the stylesheet is applied, and
+      an external file cannot be guaranteed to. The content security policy
+      forbids 'unsafe-inline' but hashes every inline script in this shell
+      (internal/webui/webui.go), so this needs no exception - and it must stay
+      byte-identical to what is served, or its hash will not match and it will
+      be blocked.
+
+      The key and the attribute are shared with src/lib/theme.ts, which has a
+      test holding the two together.
+    -->
+    <script>
+      try {
+        var t = localStorage.getItem("sendan.theme");
+        if (t === "light" || t === "dark") {
+          document.documentElement.setAttribute("data-theme", t);
+        }
+      } catch (e) {
+        /* Storage refused. Following the system is the right answer here. */
+      }
+    </script>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="off">
