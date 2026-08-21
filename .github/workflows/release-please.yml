@@ -22,7 +22,10 @@ jobs:
       # Accumulates Conventional Commits into a pull request that bumps the
       # version and updates CHANGELOG.md. Merging that pull request creates the
       # tag, which is what triggers release.yml. A human approves every release.
+      #
+      # Configured by release-please-config.json and .release-please-manifest.json
+      # rather than by inputs here: passing release-type would select the older
+      # single-package mode, in which there is nowhere to say that this project
+      # is pre-1.0. The manifest is also what stops a first release defaulting
+      # to 1.0.0 — see docs/workflows/release-please.md.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          release-type: simple
-          package-name: sendan

@@ -228,6 +228,21 @@ Vulnerabilities must not be reported as pull requests; see
 - Include tests, as described above.
 - Ensure continuous integration passes in full.
 - Write commit messages that explain the reasoning, not only the change.
+- **Do not give the pull request itself a Conventional Commit title.** Describe
+  it in plain words: "Encrypted export of the upload list", not
+  "feat(web): encrypted export of the upload list".
+
+The last one is not a style preference. Squash merging is disabled here so that
+every commit enters `main` as written, which means each pull request also
+produces a merge commit — and GitHub puts the pull request's title in that merge
+commit's body. Release tooling reads commit messages, so a Conventional Commit
+title reaches it twice: once from the commit that did the work, and once from
+the merge commit that carries the title. Every affected change is then listed
+twice in the changelog.
+
+The commits inside the pull request must still be Conventional Commits, and
+continuous integration checks each of their subjects. It is only the pull
+request's own title that must not look like one.
 
 ## Code of conduct
 
