@@ -27,6 +27,13 @@ jobs:
       contents: read
       packages: write
     steps:
+      # A registry rejects any uppercase in a repository name, and
+      # github.repository preserves the case of the account that owns it. This
+      # replaces the workflow-level IMAGE with a lowercase one, so every
+      # ${{ env.IMAGE }} below resolves to something a registry accepts.
+      - name: Take the image name down to lowercase
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: guard
         run: |
