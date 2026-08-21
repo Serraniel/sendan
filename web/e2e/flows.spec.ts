@@ -717,3 +717,149 @@ test.describe("your uploads", () => {
     await expect(page.getByText(/does not know which uploads are yours/i)).toBeVisible();
   });
 });
+
+test.describe("the inline script that applies a stored theme", () => {
+  // It must be inline to run before the first paint, and the policy forbids
+  // 'unsafe-inline'. What makes that work is the server hashing every inline
+  // script in the shell it serves. If the shell and the served bytes ever
+  // diverge, the browser blocks the script and the theme flashes - a failure
+  // that development never shows, because the dev server sets no policy.
+  test("is covered by the policy the instance serves", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+
+    const response = await page.goto("/");
+    const policy = response?.headers()["content-security-policy"] ?? "";
+    const scriptSrc = policy.split(";").find((d) => d.trim().startsWith("script-src")) ?? "";
+
+    // The framework's bootstrap and this one.
+    expect(scriptSrc.match(/'sha256-[^']+'/g) ?? []).toHaveLength(2);
+    expect(scriptSrc).not.toContain("unsafe-inline");
+    expect(errors.filter((message) => /Content Security Policy/i.test(message))).toEqual([]);
+  });
+});
+
+test.describe("choosing a theme", () => {
+  // The control cycles rather than toggling, because there are three states.
+  // Being able to get back to "following your system" is the property worth
+  // holding: a two-way toggle strands somebody in a preference they set once.
+  test("cycles through system, light and dark, and back", async ({ page }) => {
+    await page.goto("/");
+    const root = page.locator("html");
+    const control = page.getByRole("button", { name: /^Theme:/ });
+
+    // Nothing chosen yet, so the stylesheet's media query governs and no
+    // attribute is present at all.
+    await expect(root).not.toHaveAttribute("data-theme");
+
+    await control.click();
+    await expect(root).toHaveAttribute("data-theme", "light");
+
+    await control.click();
+    await expect(root).toHaveAttribute("data-theme", "dark");
+
+    await control.click();
+    await expect(root).not.toHaveAttribute("data-theme");
+  });
+
+  test("a chosen theme survives a reload, and is applied before the page paints", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const control = page.getByRole("button", { name: /^Theme:/ });
+    await control.click();
+    await control.click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+    await page.reload();
+
+    // Asserted on the first paint rather than after hydration: the inline
+    // script in the shell is what sets this, and if it were removed the
+    // attribute would only appear once the application had started - which is
+    // exactly the flash it exists to prevent.
+    const beforeScripts = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-theme"),
+    );
+    expect(beforeScripts).toBe("dark");
+    await expect(page.getByRole("button", { name: "Theme: dark. Press to change." })).toBeVisible();
+  });
+
+  test("an explicit light choice wins on a system set to dark", async ({ browser }) => {
+    // The direction that a single unguarded media query gets wrong.
+    const context = await browser.newContext({ colorScheme: "dark" });
+    const page = await context.newPage();
+
+    await page.goto("/");
+    await page.getByRole("button", { name: /^Theme:/ }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+    const background = await page.evaluate(() =>
+      getComputedStyle(document.body).backgroundColor,
+    );
+    expect(background).toBe("rgb(255, 255, 255)");
+    await context.close();
+  });
+});
+
+test.describe("choosing a file", () => {
+  test("a dropped file is chosen, as the file input would have", async ({ page }) => {
+    await page.goto("/");
+
+    // Built in the page: a DataTransfer cannot be constructed from the test
+    // side and handed across.
+    const zone = page.locator("label.drop");
+    await zone.evaluate((element) => {
+      const data = new DataTransfer();
+      data.items.add(new File(["dropped contents"], "dropped.txt", { type: "text/plain" }));
+      element.dispatchEvent(new DragEvent("drop", { dataTransfer: data, bubbles: true }));
+    });
+
+    await expect(zone).toContainText("dropped.txt");
+    // The action becomes available, which is the thing that proves the file was
+    // taken rather than only displayed.
+    await expect(page.getByRole("button", { name: "Encrypt and send" })).toBeEnabled();
+  });
+
+  test("the file input still works on its own", async ({ page }) => {
+    // Dropping is an addition. If it ever became the only route, this fails.
+    await page.goto("/");
+    await page.setInputFiles("#file", {
+      name: "chosen.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("chosen"),
+    });
+    await expect(page.locator("label.drop")).toContainText("chosen.txt");
+    await expect(page.getByRole("button", { name: "Encrypt and send" })).toBeEnabled();
+  });
+});
+
+test.describe("the layout at every width", () => {
+  // 320px is the narrowest width worth supporting, and the one where a single
+  // element that refuses to shrink takes the whole document sideways with it.
+  // A fieldset did exactly that: browsers give it a min-inline-size of
+  // min-content, so the widest control inside it became the page's minimum.
+  for (const [label, width] of [
+    ["a small phone", 320],
+    ["a tablet held upright", 768],
+    ["a tablet on its side", 1024],
+    ["a desktop display", 1440],
+  ] as const) {
+    test(`does not scroll sideways on ${label}`, async ({ browser }) => {
+      const context = await browser.newContext({ viewport: { width, height: 800 } });
+      const page = await context.newPage();
+
+      for (const path of ["/", "/uploads"]) {
+        await page.goto(path);
+        const { document: documentWidth, window: windowWidth } = await page.evaluate(() => ({
+          document: document.documentElement.scrollWidth,
+          window: window.innerWidth,
+        }));
+        expect(documentWidth, `${path} at ${width}px`).toBeLessThanOrEqual(windowWidth);
+      }
+
+      await context.close();
+    });
+  }
+});
