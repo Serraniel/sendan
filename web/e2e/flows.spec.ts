@@ -742,35 +742,55 @@ test.describe("the inline script that applies a stored theme", () => {
 });
 
 test.describe("choosing a theme", () => {
-  // The control cycles rather than toggling, because there are three states.
-  // Being able to get back to "following your system" is the property worth
-  // holding: a two-way toggle strands somebody in a preference they set once.
-  test("cycles through system, light and dark, and back", async ({ page }) => {
+  // Three explicit choices, not a cycle. The cycle it replaced had a state that
+  // could look broken: from "follow your system" on a light system, choosing
+  // light changed nothing visible, so the press appeared to do nothing.
+  test("offers every state, and shows which one is in effect", async ({ page }) => {
     await page.goto("/");
     const root = page.locator("html");
-    const control = page.getByRole("button", { name: /^Theme:/ });
 
-    // Nothing chosen yet, so the stylesheet's media query governs and no
-    // attribute is present at all.
+    const system = page.getByRole("radio", { name: /Follow your system/ });
+    const light = page.getByRole("radio", { name: "Light" });
+    const dark = page.getByRole("radio", { name: "Dark" });
+
+    // Nothing chosen: the stylesheet's media query governs and no attribute is
+    // present at all.
+    await expect(system).toBeChecked();
     await expect(root).not.toHaveAttribute("data-theme");
 
-    await control.click();
+    await dark.check();
+    await expect(root).toHaveAttribute("data-theme", "dark");
+    await expect(dark).toBeChecked();
+
+    await light.check();
     await expect(root).toHaveAttribute("data-theme", "light");
 
-    await control.click();
-    await expect(root).toHaveAttribute("data-theme", "dark");
-
-    await control.click();
+    // The property the cycle existed to protect, kept: getting back to
+    // following the system is one press, from any state.
+    await system.check();
     await expect(root).not.toHaveAttribute("data-theme");
+  });
+
+  test("selecting the theme already showing still registers", async ({ browser }) => {
+    // The failure that prompted this. On a light system, choosing light changes
+    // no colour - but it is a different state from following the system, and
+    // the control has to show that it took.
+    const context = await browser.newContext({ colorScheme: "light" });
+    const page = await context.newPage();
+    await page.goto("/");
+
+    await page.getByRole("radio", { name: "Light" }).check();
+
+    await expect(page.getByRole("radio", { name: "Light" })).toBeChecked();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await context.close();
   });
 
   test("a chosen theme survives a reload, and is applied before the page paints", async ({
     page,
   }) => {
     await page.goto("/");
-    const control = page.getByRole("button", { name: /^Theme:/ });
-    await control.click();
-    await control.click();
+    await page.getByRole("radio", { name: "Dark" }).check();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
 
     await page.reload();
@@ -783,7 +803,7 @@ test.describe("choosing a theme", () => {
       document.documentElement.getAttribute("data-theme"),
     );
     expect(beforeScripts).toBe("dark");
-    await expect(page.getByRole("button", { name: "Theme: dark. Press to change." })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
   });
 
   test("an explicit light choice wins on a system set to dark", async ({ browser }) => {
@@ -792,14 +812,20 @@ test.describe("choosing a theme", () => {
     const page = await context.newPage();
 
     await page.goto("/");
-    await page.getByRole("button", { name: /^Theme:/ }).click();
+    await page.getByRole("radio", { name: "Light" }).check();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
-    const background = await page.evaluate(() =>
-      getComputedStyle(document.body).backgroundColor,
-    );
+    const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(background).toBe("rgb(255, 255, 255)");
     await context.close();
+  });
+
+  test("is reachable and operable from the keyboard", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("radio", { name: /Follow your system/ }).focus();
+    // A radio group moves with the arrow keys, which is why it is one.
+    await page.keyboard.press("ArrowRight");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   });
 });
 
