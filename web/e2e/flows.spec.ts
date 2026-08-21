@@ -742,36 +742,50 @@ test.describe("the inline script that applies a stored theme", () => {
 });
 
 test.describe("choosing a theme", () => {
-  // The control cycles rather than toggling, because there are three states.
-  // Being able to get back to "following your system" is the property worth
-  // holding: a two-way toggle strands somebody in a preference they set once.
-  test("cycles through system, light and dark, and back", async ({ page }) => {
+  // One button, two states. It names what pressing it will do rather than what
+  // is already true, because a button labelled "dark" could mean either and the
+  // two readings are opposites.
+  test("switches between light and dark", async ({ browser }) => {
+    const context = await browser.newContext({ colorScheme: "light" });
+    const page = await context.newPage();
     await page.goto("/");
-    const root = page.locator("html");
-    const control = page.getByRole("button", { name: /^Theme:/ });
 
-    // Nothing chosen yet, so the stylesheet's media query governs and no
+    const root = page.locator("html");
+    // Nothing chosen yet: the stylesheet's media query governs, and no
     // attribute is present at all.
     await expect(root).not.toHaveAttribute("data-theme");
 
-    await control.click();
-    await expect(root).toHaveAttribute("data-theme", "light");
-
-    await control.click();
+    await page.getByRole("button", { name: "Switch to the dark theme" }).click();
     await expect(root).toHaveAttribute("data-theme", "dark");
 
-    await control.click();
-    await expect(root).not.toHaveAttribute("data-theme");
+    await page.getByRole("button", { name: "Switch to the light theme" }).click();
+    await expect(root).toHaveAttribute("data-theme", "light");
+    await context.close();
+  });
+
+  test("every press changes something visible", async ({ browser }) => {
+    // The fault that prompted the rewrite: an earlier version offered
+    // "follow your system" as a third state, so on a light system the first
+    // press selected light and nothing moved.
+    const context = await browser.newContext({ colorScheme: "light" });
+    const page = await context.newPage();
+    await page.goto("/");
+
+    const background = () =>
+      page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+    const before = await background();
+    await page.getByRole("button", { name: /^Switch to the/ }).click();
+    expect(await background()).not.toBe(before);
+    await context.close();
   });
 
   test("a chosen theme survives a reload, and is applied before the page paints", async ({
     page,
   }) => {
     await page.goto("/");
-    const control = page.getByRole("button", { name: /^Theme:/ });
-    await control.click();
-    await control.click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.getByRole("button", { name: /^Switch to the/ }).click();
+    const chosen = await page.locator("html").getAttribute("data-theme");
 
     await page.reload();
 
@@ -782,22 +796,38 @@ test.describe("choosing a theme", () => {
     const beforeScripts = await page.evaluate(() =>
       document.documentElement.getAttribute("data-theme"),
     );
-    expect(beforeScripts).toBe("dark");
-    await expect(page.getByRole("button", { name: "Theme: dark. Press to change." })).toBeVisible();
+    expect(beforeScripts).toBe(chosen);
   });
 
-  test("an explicit light choice wins on a system set to dark", async ({ browser }) => {
-    // The direction that a single unguarded media query gets wrong.
+  test("an explicit light choice wins on a system set to dark", async ({ browser, browserName }) => {
+    // Playwright's Firefox does not apply colour-scheme emulation: with
+    // colorScheme "dark" the page still renders light and matchMedia reports
+    // false, so the premise of this test cannot be established there. Verified
+    // by probing both, rather than assumed - the two agree with each other,
+    // which is what matters: the control says what the page is showing.
+    //
+    // Skipped rather than weakened, so that the property is still checked
+    // somewhere instead of being softened into something that passes
+    // everywhere and proves less.
+    test.skip(browserName === "firefox", "colour-scheme emulation is not applied there");
+
     const context = await browser.newContext({ colorScheme: "dark" });
     const page = await context.newPage();
 
     await page.goto("/");
-    await page.getByRole("button", { name: /^Theme:/ }).click();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
-    const background = await page.evaluate(() =>
-      getComputedStyle(document.body).backgroundColor,
-    );
+    // Waited for by name rather than clicked straight away. The label depends
+    // on the system setting, which the control only learns once it has
+    // hydrated, so clicking a fixed name races that - and loses by hanging on
+    // a locator that never matches, which reports a timeout rather than the
+    // reason. This says which of the two went wrong.
+    const toggle = page.getByRole("button", { name: /^Switch to the/ });
+    await expect(toggle).toHaveAccessibleName("Switch to the light theme");
+
+    await toggle.click();
+
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(background).toBe("rgb(255, 255, 255)");
     await context.close();
   });

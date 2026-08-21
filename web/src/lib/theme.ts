@@ -94,21 +94,20 @@ export function resolve(choice: ThemeChoice, systemPrefersDark: boolean): Theme 
 }
 
 /**
- * The next choice in the cycle: system, light, dark, and back.
+ * The other theme.
  *
- * A cycle rather than a menu because there are three states and one control.
- * The order starts from what is currently in effect, so the first press always
- * moves away from what is on screen.
+ * The control is a plain switch between two states, so this is all the
+ * arithmetic it needs. "Following the system" is where a browser starts and is
+ * not somewhere the control can return to: an earlier version offered it as a
+ * third state and the result was a press that could change nothing visible,
+ * because selecting light on a system already set to light looks identical.
+ *
+ * The cost of dropping it is that clearing the stored preference now needs site
+ * data cleared. That was judged the better trade against a control nobody could
+ * read.
  */
-export function nextChoice(choice: ThemeChoice): ThemeChoice {
-  switch (choice) {
-    case "system":
-      return "light";
-    case "light":
-      return "dark";
-    case "dark":
-      return "system";
-  }
+export function opposite(theme: Theme): Theme {
+  return theme === "dark" ? "light" : "dark";
 }
 
 /**
@@ -123,16 +122,15 @@ export function applyChoice(choice: ThemeChoice, root: ThemeRoot): void {
   else root.setAttribute("data-theme", choice);
 }
 
-/** What to call the control, given what it will do next. */
-export function labelFor(choice: ThemeChoice): string {
-  switch (choice) {
-    case "system":
-      return "Theme: following your system";
-    case "light":
-      return "Theme: light";
-    case "dark":
-      return "Theme: dark";
-  }
+/**
+ * What to call the control.
+ *
+ * Named for what pressing it does rather than for the state it is in. A button
+ * labelled "dark" is ambiguous - it could mean the theme is dark, or that
+ * pressing it makes the theme dark - and the two readings are opposites.
+ */
+export function labelFor(showing: Theme): string {
+  return showing === "dark" ? "Switch to the light theme" : "Switch to the dark theme";
 }
 
 function safeStore(): ThemeStore | null {

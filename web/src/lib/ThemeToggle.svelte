@@ -1,20 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import {
-    applyChoice,
-    labelFor,
-    nextChoice,
-    rememberChoice,
-    resolve,
-    storedChoice,
-    type ThemeChoice,
-  } from "$lib/theme";
+  import { applyChoice, labelFor, opposite, rememberChoice, resolve, storedChoice } from "$lib/theme";
 
-  // Starts at "system" so the server-rendered markup and the first client
-  // render agree. The stored value is read after mount; the inline script in
-  // app.html has already applied it to the document by then, so nothing
-  // changes visually at this point - only the label catches up.
-  let choice = $state<ThemeChoice>("system");
+  // "system" until a choice is stored, which is where every browser starts and
+  // is not a state the control offers. Reading it after mount keeps the
+  // server-rendered markup and the first client render in agreement; the inline
+  // script in app.html has already applied any stored choice to the document,
+  // so nothing moves on screen at this point.
+  let choice = $state<"system" | "light" | "dark">("system");
   let systemDark = $state(false);
 
   onMount(() => {
@@ -23,8 +16,8 @@
     const query = window.matchMedia("(prefers-color-scheme: dark)");
     systemDark = query.matches;
 
-    // Following the system means following it as it changes, not as it was
-    // when the page loaded.
+    // Until something is chosen, following the system means following it as it
+    // changes rather than as it was when the page loaded.
     const onChange = (event: MediaQueryListEvent) => {
       systemDark = event.matches;
     };
@@ -32,43 +25,46 @@
     return () => query.removeEventListener("change", onChange);
   });
 
-  let showing = $derived(resolve(choice, systemDark));
+  const showing = $derived(resolve(choice, systemDark));
 
-  function advance() {
-    choice = nextChoice(choice);
-    rememberChoice(choice);
-    applyChoice(choice, document.documentElement);
+  function toggle() {
+    const next = opposite(showing);
+    choice = next;
+    rememberChoice(next);
+    applyChoice(next, document.documentElement);
   }
 </script>
 
 <!--
-  A button rather than a select: it has three states and one of them is
-  "whatever you already chose elsewhere", which reads better as a cycle than as
-  a list. The accessible name says what the theme is now, and aria-live is
-  deliberately absent - the label changes as a result of a press the person
-  just made, so announcing it again would be noise.
+  One button, two states. The icon shows the theme it switches to rather than
+  the one in effect, which is what makes a single glyph readable: a moon means
+  "go dark", and it is beside a page that is plainly light.
+
+  The name says the same thing in words, because a glyph alone is a guess.
 -->
-<button type="button" class="theme" onclick={advance} title={labelFor(choice)}>
-  <span class="visually-hidden">{labelFor(choice)}. Press to change.</span>
-  <span aria-hidden="true">{#if choice === "system"}◐{:else if showing === "dark"}☾{:else}☀{/if}</span>
+<button type="button" class="theme" onclick={toggle} title={labelFor(showing)}>
+  <span class="visually-hidden">{labelFor(showing)}</span>
+  <span aria-hidden="true">{showing === "dark" ? "☀" : "☾"}</span>
 </button>
 
 <style>
   .theme {
-    /* Square, so the glyph sits centred rather than in a wide pill. */
-    width: 2.75rem;
-    min-width: 2.75rem;
-    padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
-    line-height: 1;
+    width: 2.75rem;
+    min-width: 2.75rem;
+    padding: 0;
+    border: 0;
     background: transparent;
-    border-color: var(--border);
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    line-height: 1;
+    border-radius: var(--radius);
   }
 
   .theme:hover {
+    color: var(--accent);
     background: var(--surface-raised);
   }
 </style>

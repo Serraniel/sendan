@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyChoice,
   labelFor,
-  nextChoice,
+  opposite,
   rememberChoice,
   resolve,
   storedChoice,
@@ -127,23 +127,17 @@ describe("resolving a choice", () => {
   });
 });
 
-describe("the cycle", () => {
-  it("returns to following the system", () => {
-    // The property that matters: every state is reachable from every other, so
-    // nobody is stranded in a preference they cannot clear.
-    const seen: ThemeChoice[] = [];
-    let choice: ThemeChoice = "system";
-    for (let i = 0; i < 3; i++) {
-      choice = nextChoice(choice);
-      seen.push(choice);
-    }
-    expect(seen).toEqual(["light", "dark", "system"]);
+describe("switching", () => {
+  it("goes to the other theme", () => {
+    expect(opposite("light")).toBe("dark");
+    expect(opposite("dark")).toBe("light");
   });
 
-  it("names every state it can be in", () => {
-    for (const choice of ["system", "light", "dark"] as const) {
-      expect(labelFor(choice)).toMatch(/^Theme: /);
-    }
+  it("names what pressing it will do, not what is already true", () => {
+    // A button labelled "dark" could mean the theme is dark or that pressing
+    // makes it dark, and the two readings are opposites.
+    expect(labelFor("light")).toBe("Switch to the dark theme");
+    expect(labelFor("dark")).toBe("Switch to the light theme");
   });
 });
 
