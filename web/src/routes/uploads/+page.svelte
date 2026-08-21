@@ -187,25 +187,27 @@
   arriving here later is deciding whether to rely on this list, and the answer
   depends on facts that are not visible from the list itself.
 -->
-<p class="note">
-  This list is kept in this browser and nowhere else. The instance has no account
-  and does not know which uploads are yours.
-</p>
-<p class="note">
-  <strong>There is no way to recover it.</strong> Clearing site data, using a
-  different browser, or a private window removes it, and nothing can bring it
-  back — the instance does not hold the key that opens your files or the token
-  that removes them. That is the same property that stops whoever runs the
-  instance reading them.
-</p>
+<div class="warning">
+  <p>
+    This list is kept in this browser and nowhere else. The instance has no
+    account and does not know which uploads are yours.
+  </p>
+  <p>
+    <strong>There is no way to recover it.</strong> Clearing site data, using a
+    different browser, or a private window removes it, and nothing can bring it
+    back — the instance does not hold the key that opens your files or the token
+    that removes them. That is the same property that stops whoever runs the
+    instance reading them.
+  </p>
+</div>
 
 {#if notice}
-  <p class="note" role="status" aria-live="polite">{notice}</p>
+  <p class="status" role="status" aria-live="polite">{notice}</p>
 {/if}
 
 {#if loaded && supported && !failure}
   <p class="backup">
-    <button type="button" onclick={exportList} disabled={busy || uploads.length === 0}>
+    <button type="button" class="primary" onclick={exportList} disabled={busy || uploads.length === 0}>
       Export this list
     </button>
     <!--
@@ -231,7 +233,9 @@
 {:else if failure}
   <p class="failure">{failure}</p>
 {:else if uploads.length === 0}
-  <p>Nothing here yet. Uploads you make in this browser will appear on this page.</p>
+  <div class="empty">
+    <p>Nothing here yet. Uploads you make in this browser will appear on this page.</p>
+  </div>
 {:else}
   <ul class="uploads">
     {#each uploads as upload (upload.id)}
@@ -252,6 +256,7 @@
           -->
           <button
             type="button"
+            class="danger"
             onclick={() => remove(upload)}
             disabled={working !== null}
           >
@@ -283,50 +288,137 @@
   .uploads {
     list-style: none;
     padding: 0;
+    margin: var(--space-5) 0;
+    display: grid;
+    gap: var(--space-3);
   }
 
+  /* Rows rather than a table: at 320px a table either scrolls sideways or
+     collapses into something a screen reader reads in the wrong order. */
   .uploads li {
-    border-top: 1px solid;
-    padding: 0.75rem 0;
+    padding: var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
   }
 
   .name {
-    font-weight: bold;
+    font-weight: 650;
     margin: 0;
+    overflow-wrap: anywhere;
   }
 
   .detail {
-    margin: 0.15rem 0 0.5rem;
-    font-size: 0.9rem;
+    margin: var(--space-1) 0 var(--space-3);
+    font-size: var(--text-sm);
+    color: var(--text-muted);
   }
 
   .uploads input {
     width: 100%;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
   }
 
   .note {
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+  }
+
+  .empty {
+    padding: var(--space-6) var(--space-5);
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+    text-align: center;
+    color: var(--text-muted);
+  }
+
+  .empty p {
+    margin: 0 auto;
+  }
+
+  /* The two most consequential sentences on the page. Set apart rather than
+     shrunk: somebody deciding whether to rely on this list has to read them,
+     and a footnote is a way of not being read. */
+  .warning {
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: var(--radius);
+    background: var(--surface-raised);
+    font-size: var(--text-sm);
+  }
+
+  .warning p {
+    margin: 0;
+  }
+
+  .warning p + p {
+    margin-top: var(--space-3);
   }
 
   .backup {
     display: flex;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    gap: var(--space-3);
     align-items: center;
+    margin-top: var(--space-5);
   }
 
-  /* The input itself is hidden; the label is the control. */
+  /* The input itself is hidden; the label is the control, styled to match the
+     button beside it so the pair reads as two controls rather than a button
+     and a link. */
   .file input {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .file {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 2.75rem;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    font-weight: 600;
     cursor: pointer;
-    text-decoration: underline;
+  }
+
+  .file:hover {
+    border-color: var(--text-muted);
+    background: var(--surface-raised);
+  }
+
+  .file:focus-within {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
   }
 
   .actions {
     display: flex;
-    gap: 0.5rem;
-    margin: 0;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: var(--space-3) 0 0;
+  }
+
+  .status {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-raised);
+    font-size: var(--text-sm);
+  }
+
+  .failure {
+    font-weight: 600;
+    color: var(--danger);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    background: var(--danger-quiet);
   }
 </style>

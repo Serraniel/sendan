@@ -57,6 +57,43 @@
     failure = null;
   }
 
+  // Dropping is an addition to the file input, never a replacement for it: the
+  // input stays in the markup and stays operable, so the keyboard path and the
+  // click path are unchanged for anybody who cannot drag.
+  let dragging = $state(false);
+
+  function overZone(event: DragEvent) {
+    if (busy) return;
+    event.preventDefault();
+    dragging = true;
+  }
+
+  function leaveZone() {
+    dragging = false;
+  }
+
+  function dropFile(event: DragEvent) {
+    if (busy) return;
+    event.preventDefault();
+    dragging = false;
+
+    const dropped = event.dataTransfer?.files?.[0];
+    if (!dropped) return;
+    file = dropped;
+    failure = null;
+  }
+
+  function sizeOf(bytes: number): string {
+    const units = ["B", "kB", "MB", "GB"];
+    let n = bytes;
+    let unit = 0;
+    while (n >= 1000 && unit < units.length - 1) {
+      n /= 1000;
+      unit++;
+    }
+    return `${unit === 0 ? n : n.toFixed(1)} ${units[unit]}`;
+  }
+
   async function send(event: SubmitEvent) {
     event.preventDefault();
     if (file === null || busy) return;
@@ -234,13 +271,34 @@
 
 {#if result === null}
   <form onsubmit={send}>
-    <p>
-      <label for="file">File</label><br />
+    <!--
+      The label is the visible control and the input is behind it, so the whole
+      area is clickable and the input keeps its own keyboard behaviour. The
+      drag handlers sit on the label rather than the input because a hidden
+      input is not a drop target anybody can hit.
+    -->
+    <label
+      class="drop"
+      class:dragging
+      class:chosen={file !== null}
+      for="file"
+      ondragover={overZone}
+      ondragleave={leaveZone}
+      ondrop={dropFile}
+    >
       <input id="file" type="file" onchange={chooseFile} disabled={busy} required />
-    </p>
+      {#if file === null}
+        <span class="drop-main">Choose a file, or drop one here</span>
+        <span class="drop-sub muted small">It is encrypted here, before it leaves this browser</span>
+      {:else}
+        <span class="drop-main break">{file.name}</span>
+        <span class="drop-sub muted small">{sizeOf(file.size)} · choose or drop another to replace it</span>
+      {/if}
+    </label>
 
     <fieldset disabled={busy}>
       <legend>Options</legend>
+      <p class="muted small options-note">Most people change none of these.</p>
 
       <p>
         <label for="password">Password (optional)</label><br />
@@ -276,8 +334,8 @@
       </p>
     </fieldset>
 
-    <p>
-      <button type="submit" disabled={file === null || busy}>Encrypt and send</button>
+    <p class="actions">
+      <button type="submit" class="primary" disabled={file === null || busy}>Encrypt and send</button>
       {#if busy}
         <button type="button" onclick={cancel}>Cancel</button>
       {/if}
@@ -300,8 +358,8 @@
 {:else}
   <h2>Ready to share</h2>
 
-  <p>
-    <label for="link">Link</label><br />
+  <p class="result">
+    <label for="link">Link</label>
     <!--
       Readonly rather than a paragraph of text: a field can be selected whole in
       one gesture, and cannot be partially selected by a stray drag. The link is
@@ -311,9 +369,9 @@
     <input id="link" type="text" value={link} readonly />
   </p>
 
-  <p>
-    <button type="button" onclick={copy}>Copy link</button>
-    {#if copied}<span aria-live="polite">Copied.</span>{/if}
+  <p class="actions">
+    <button type="button" class="primary" onclick={copy}>Copy link</button>
+    {#if copied}<span class="copied" aria-live="polite">Copied.</span>{/if}
   </p>
 
   <p class="split">
@@ -356,30 +414,165 @@
 {/if}
 
 <style>
+  /* The file input is behind its label rather than removed: it keeps its
+     keyboard behaviour, its required validation and the id the browser tests
+     drive it by. */
+  .drop input[type="file"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .drop {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    text-align: center;
+    min-height: 8.5rem;
+    padding: var(--space-5) var(--space-4);
+    border: 2px dashed var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    cursor: pointer;
+  }
+
+  .drop:hover {
+    border-color: var(--accent);
+  }
+
+  /* The input is hidden, so its focus ring would be invisible; the label wears
+     it instead. Without this the keyboard path has no visible focus at all. */
+  .drop:focus-within {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  .drop.dragging {
+    border-color: var(--accent);
+    border-style: solid;
+    background: var(--accent-quiet);
+  }
+
+  .drop.chosen {
+    border-style: solid;
+    border-color: var(--accent);
+  }
+
+  .drop-main {
+    font-weight: 600;
+  }
+
   fieldset {
-    border: 1px solid;
-    margin: 1rem 0;
+    /* Browsers give a fieldset a min-inline-size of min-content, which stops it
+       shrinking with the page: at 320px it stayed wider than the viewport and
+       took the whole document sideways with it. Nothing else on the page
+       behaves this way. */
+    min-inline-size: 0;
+    margin: var(--space-5) 0;
+    padding: var(--space-4) var(--space-5) var(--space-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+  }
+
+  legend {
+    padding-inline: var(--space-2);
+    font-weight: 600;
+  }
+
+  .options-note {
+    margin-top: 0;
+  }
+
+  fieldset label,
+  .result label {
+    display: block;
+    margin-bottom: var(--space-1);
+    font-weight: 600;
+    font-size: var(--text-sm);
   }
 
   input[type="text"] {
     width: 100%;
-    font-family: monospace;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+  }
+
+  select {
+    /* No minimum: a minimum here becomes the fieldset's minimum, and then the
+       page's. Full width up to a cap keeps it from spanning a desktop column
+       on its own. */
+    width: 100%;
+    max-width: 22rem;
+  }
+
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: center;
   }
 
   progress {
     width: 100%;
+    height: 0.6rem;
   }
 
   .note {
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
   }
 
+  /* The fragment, shown apart from the rest so it is visible rather than
+     scrolled out of sight. The emphasis is the point of the paragraph beneath
+     it, so it is not decoration. */
   .split {
-    font-family: monospace;
+    /* The link is one unbroken token; without this it is the widest thing on
+       the page at every width. */
     overflow-wrap: anywhere;
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    overflow-wrap: anywhere;
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface-sunken);
+  }
+
+  .split strong {
+    color: var(--accent);
+  }
+
+  details {
+    margin: var(--space-4) 0;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+    min-height: 1.75rem;
   }
 
   .failure {
-    font-weight: bold;
+    font-weight: 600;
+    color: var(--danger);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    background: var(--danger-quiet);
+  }
+
+  .copied {
+    color: var(--positive);
+    font-weight: 600;
+    font-size: var(--text-sm);
   }
 </style>

@@ -49,15 +49,22 @@
 {/if}
 
 <style>
+  /* A refusal, not a warning: whatever is missing, the cryptography cannot run
+     and nothing on the page will work. It reads as the most serious thing on
+     screen because it is. */
   .check {
-    border: 2px solid;
-    padding: 0.5rem 1rem;
-    margin-bottom: 1rem;
+    padding: var(--space-4) var(--space-5);
+    margin-bottom: var(--space-5);
+    border: 1px solid var(--danger);
+    border-left: 3px solid var(--danger);
+    border-radius: var(--radius);
+    background: var(--danger-quiet);
   }
 
   dt {
-    font-weight: bold;
-    margin-top: 0.5rem;
+    font-weight: 650;
+    margin-top: var(--space-3);
+    color: var(--danger);
   }
 
   dd {

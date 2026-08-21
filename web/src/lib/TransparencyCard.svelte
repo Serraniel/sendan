@@ -44,19 +44,28 @@
 </details>
 
 <style>
+  /* Quiet by design. It states what protected a file, which somebody consults
+     rather than reads, so it sits below the action instead of competing with
+     it. */
   .transparency {
-    margin: 1rem 0;
-    font-size: 0.9rem;
+    margin: var(--space-5) 0;
+    padding: var(--space-4) var(--space-5);
+    font-size: var(--text-sm);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
   }
 
   dl {
     display: grid;
     grid-template-columns: max-content 1fr;
-    gap: 0.25rem 1rem;
+    gap: var(--space-1) var(--space-5);
+    margin: 0;
   }
 
   dt {
-    font-weight: bold;
+    font-weight: 600;
+    color: var(--text-muted);
   }
 
   dd {
@@ -64,12 +73,26 @@
     overflow-wrap: anywhere;
   }
 
+  @media (max-width: 26rem) {
+    dl {
+      grid-template-columns: 1fr;
+    }
+
+    dt {
+      margin-top: var(--space-2);
+    }
+  }
+
   .caution {
     display: block;
+    color: var(--danger);
+    font-weight: 600;
   }
 
   .caveat {
-    border-top: 1px solid;
-    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    color: var(--text-muted);
   }
 </style>
