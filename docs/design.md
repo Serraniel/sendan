@@ -39,8 +39,8 @@ command line client are produced from a single Go module.
 | `internal/logging` | Structured logging with identifier redaction |
 | `internal/ratelimit` | Structural abuse controls |
 | `web/src/crypto` | The TypeScript half of the cryptographic scheme |
-| `web/src/lib` | The client's own logic: transfer, save paths, links, capability checks, and the browser-held list of uploads with its revocation and encrypted export |
-| `web/src/routes` | The three pages — send, receive, and the list of uploads this browser made — deliberately thin over `lib` |
+| `web/src/lib` | The client's own logic: transfer, save paths, links, capability checks, the browser-held list of uploads with its revocation and encrypted export, and the theme preference |
+| `web/src/routes` | The three pages — send, receive, and the list of uploads this browser made — deliberately thin over `lib`. `web/src/app.css` holds the tokens they share |
 | `web/e2e` | Browser flows, run against a real instance |
 | `testdata/vectors` | Shared cross-language test vectors |
 | `scripts` | Checks continuous integration runs and contributors can run directly; `verify.sh` runs all of them |
@@ -1047,7 +1047,85 @@ spoke last and, on a deployment without a proxy, is the client.
 > than merge them. Operators terminating TLS should confirm the policy reaching
 > the browser is the one below, particularly `connect-src`.
 
-## 9. Licence
+## 9. Interface
+
+The three pages are deliberately thin over `web/src/lib`, and the styling is
+deliberately thin over `web/src/app.css`. What follows is the part that is a
+decision rather than a preference.
+
+### 9.1 Tokens, and why they are named for their role
+
+`app.css` defines one vocabulary — surfaces, text, borders, an accent, a
+destructive colour, spacing, a type scale, a focus ring — and the pages use
+nothing else. Tokens are named for what they do (`--accent`, `--danger`) rather
+than for the colour they hold, because the dark theme changes those colours and
+a token named after one of them becomes a lie at that moment.
+
+Two conventions carry across this project's interfaces: **teal occupies the
+position green usually would**, and **magenta the position red usually would**.
+There is deliberately no green or red token to reach for.
+
+### 9.2 Contrast is measured, not asserted
+
+`web/src/theme.test.ts` reads `app.css`, extracts both themes, and computes the
+contrast of every pair a page can produce — text on each of three surfaces, the
+accent on each surface it can land on, the label of a filled control, the
+boundary of a control, the focus ring. Body text must clear 4.5:1 and non-text
+boundaries 3:1.
+
+It reads the stylesheet rather than holding its own copy of the values, because
+a test with its own copy keeps passing after somebody edits the stylesheet,
+which is the only moment it exists to catch.
+
+Two of the house colours did not survive that check as given. The magenta
+carries 4.34:1 on white — below the threshold for text — and less than that on
+the dark theme's raised surface, so the token that carries destructive *text* is
+that colour darkened until it clears on every surface it can land on. The teal
+was kept exactly as given; the two lightest surfaces were lightened instead,
+which was the smaller change and left the brand colour intact.
+
+### 9.3 Themes, and the flash that does not happen
+
+The light palette is defined on bare `:root`, the dark one twice: under
+`prefers-color-scheme` for somebody who has never chosen, and under
+`[data-theme="dark"]` for somebody who has. The media query is guarded against
+`[data-theme="light"]`, without which an explicit light choice loses to a dark
+system setting and the override only works one way.
+
+The choice is one of three — system, light, dark — and the control cycles
+through all three, so somebody who once chose dark can get back to following
+their system. It is stored in `localStorage` and never sent to the instance.
+
+Applying a stored choice before the first paint needs code that runs before the
+stylesheet, which means an inline script, which `style-src`'s neighbour
+`script-src 'self'` would normally forbid. It works here because the server
+already hashes **every** inline script in the shell it serves (§8.2) rather than
+forbidding them wholesale: the theme script is covered by the same mechanism as
+the framework's bootstrap, and needed no exception. A browser test asserts that
+the served policy carries two hashes and that no policy violation is reported,
+because a mismatch there is invisible in development — the dev server sends no
+policy at all — and would show up only as a flash on a real instance.
+
+### 9.4 One layout
+
+There is no mobile variant. One column with a maximum width and one gutter,
+verified from 320 px to a wide display; at tablet widths the column simply
+reaches its maximum, which is why tablets need no rule of their own.
+
+A browser test asserts that the document never becomes wider than the viewport
+at four widths. It found a real fault: browsers give `fieldset` a
+`min-inline-size` of `min-content`, so the widest control inside the options
+group became the page's minimum width and took the whole document sideways at
+320 px. Nothing else on the page behaves that way.
+
+### 9.5 What it costs
+
+No web font: the system stack, which transfers nothing, cannot flash, and adds
+nothing to the asset manifest that `sendan verify` checks. The whole stylesheet
+is 13.1 KB uncompressed and 4.2 KB compressed, against a client that transfers
+about 71 KB compressed in total.
+
+## 10. Licence
 
 **AGPL-3.0-or-later**, with a Developer Certificate of Origin and no contributor
 licence agreement.
@@ -1065,3 +1143,4 @@ Alternatives considered and rejected:
 - **OSL-3.0** — GPL-incompatible and effectively unused.
 - **CPAL-1.0** and **RPL-1.5** — obscure, with attribution and internal-use
   triggers respectively.
+
