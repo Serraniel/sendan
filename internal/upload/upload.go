@@ -90,6 +90,14 @@ func New(s store.Store, blobs *blob.Shredder, policy Policy, log *slog.Logger) *
 	return &Service{store: s, blobs: blobs, policy: policy, log: log, now: time.Now}
 }
 
+// Policy returns the retention policy this service enforces.
+//
+// Read-only and by value, so a caller can describe the policy without being
+// able to change it. The HTTP layer publishes some of it, because a person
+// deciding whether to use an instance should not have to discover its rules by
+// being refused.
+func (s *Service) Policy() Policy { return s.policy }
+
 // WithPasswordAttempts attaches a password attempt limiter whose state is
 // cleared when an upload is deleted.
 func (s *Service) WithPasswordAttempts(a *ratelimit.PasswordAttempts) *Service {

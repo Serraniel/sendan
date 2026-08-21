@@ -8,6 +8,8 @@
     type MaxUploadSize,
     tooLargeMessage,
   } from "$lib/limits";
+  import { fetchInstancePolicy, type InstancePolicy, nothingKnown } from "$lib/instance";
+  import InstanceRules from "$lib/InstanceRules.svelte";
   import { acknowledge, isSupported, mustWarn, remember } from "$lib/vault";
   import { TusError } from "$lib/tus";
   import { type UploadProgress, type UploadResult, uploadFile } from "$lib/upload";
@@ -253,9 +255,22 @@
     maxDownloads = 0;
   }
 
+  // What the instance permits, so somebody can see the rules rather than
+  // discover them by being refused.
+  let policy = $state<InstancePolicy>(nothingKnown);
+  // Read from the protocol, not from isSecureContext. A browser grants
+  // localhost the privileges of a secure context over plain HTTP, so
+  // isSecureContext is true there - and reporting "encrypted" about a
+  // connection that is not would be exactly the kind of comfortable falsehood
+  // this panel exists to avoid.
+  const secureConnection = $derived(
+    typeof window === "undefined" ? true : window.location.protocol === "https:",
+  );
+
   onMount(async () => {
     source = (await fetchBuild())?.source ?? null;
     maxUploadSize = await fetchMaxUploadSize();
+    policy = await fetchInstancePolicy();
   });
 
   const percent = $derived(
@@ -298,8 +313,9 @@
       {#if file === null}
         <span class="drop-main">Choose a file, or drop one here</span>
         <span class="drop-sub muted small">
-          It is encrypted here, before it leaves this browser{#if maxUploadSize !== null}
-            · up to {formatSize(maxUploadSize)}{/if}
+          It is encrypted here, before it leaves this browser{#if maxUploadSize !== null}{" · up to "}{formatSize(
+              maxUploadSize,
+            )}{/if}
         </span>
       {:else}
         <span class="drop-main break">{file.name}</span>
@@ -377,6 +393,8 @@
     </p>
     <p id="stage" aria-live="polite">{stageText}</p>
   {/if}
+
+  <InstanceRules {policy} secure={secureConnection} />
 {:else}
   <h2>Ready to share</h2>
 

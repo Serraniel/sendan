@@ -958,3 +958,52 @@ test.describe("the footer", () => {
     await expect(uploads).not.toHaveAttribute("target", "_blank");
   });
 });
+
+test.describe("what the instance allows", () => {
+  test("can be read before uploading anything", async ({ page }) => {
+    await page.goto("/");
+
+    // Folded away: somebody sending a file should not have to step over this,
+    // and somebody deciding whether to trust an instance is doing something
+    // deliberate.
+    //
+    // Located by the words on screen rather than by role. A summary does label
+    // its details for a reader, but it is not the element's accessible name as
+    // far as the role engine is concerned, so a role query finds nothing here
+    // while the panel is plainly visible.
+    const summary = page.getByText("What this instance allows");
+    await expect(summary).toBeVisible();
+    await expect(page.getByText(/largest upload/i)).toBeHidden();
+
+    await summary.click();
+
+    // The values come from the instance rather than from anything invented
+    // here, so they are matched loosely: the assertion is that the rule is
+    // named and answered, not what this particular instance was configured to.
+    await expect(page.getByText(/largest upload/i)).toBeVisible();
+    await expect(page.getByText(/kept by default/i)).toBeVisible();
+    await expect(page.getByText(/third-party client endpoints/i)).toBeVisible();
+  });
+
+  test("says the connection is not encrypted when it is not", async ({ page }) => {
+    // The e2e instance is served over plain HTTP, so this is the true answer
+    // here - and it is the answer that matters most, since a page served
+    // without transport encryption is one whose client could have been
+    // replaced in transit.
+    await page.goto("/");
+    await page.getByText("What this instance allows").click();
+
+    await expect(page.getByText("This connection")).toBeVisible();
+    await expect(page.getByText("not encrypted")).toBeVisible();
+  });
+
+  test("says plainly that the instance is the one making these claims", async ({ page }) => {
+    await page.goto("/");
+    await page.getByText("What this instance allows").click();
+
+    // Without this the panel reads as a guarantee, which it is not: an instance
+    // can report whatever it likes.
+    await expect(page.getByText(/convenience rather than a guarantee/i)).toBeVisible();
+    await expect(page.getByText(/the key is made and used in this browser/i)).toBeVisible();
+  });
+});

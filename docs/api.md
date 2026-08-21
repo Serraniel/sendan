@@ -304,6 +304,45 @@ running, and the default names upstream.
 Unauthenticated: a user deciding whether to trust an instance needs it before
 they have anything to authenticate with.
 
+### `GET /api/instance`
+
+What the instance permits. Answers `200` with the policy it enforces:
+
+```json
+{
+  "maxUploadSize": 1073741824,
+  "defaultTtlSeconds": 86400,
+  "maxTtlSeconds": 604800,
+  "allowInfiniteTtl": false,
+  "requireLimit": true,
+  "defaultMaxDownloads": 0,
+  "compatEnabled": false
+}
+```
+
+Every value is policy: what an upload may ask for, and what it will be refused.
+`maxUploadSize` is also advertised as `Tus-Max-Size` on the upload endpoint,
+where a transfer reads it; it is repeated here so that everything shown before a
+file is chosen comes from one answer.
+
+`compatEnabled` is published because it is the one setting that changes what
+protection an upload can have: through those endpoints the instance checks the
+password rather than the password contributing to the key.
+
+**Nothing here describes the deployment.** Which storage backend is in use,
+which database, whether at-rest keys are wrapped, how many proxies stand in
+front, and what the rate limits are, are all absent — none of it changes what a
+person may upload, and all of it helps somebody attacking the instance more than
+somebody using it. A test asserts their absence from the encoded response, so a
+field added later cannot quietly widen this.
+
+An instance may state whatever it likes here, so it is a convenience rather than
+a guarantee. The client says so where it shows it.
+
+Cached for a minute: the answer changes only when an operator changes
+configuration and restarts, but a client that cached it for a day would show a
+limit that no longer applies.
+
 ### `GET /healthz`
 
 Liveness. Reports that the process is serving, not that its backends are

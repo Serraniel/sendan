@@ -100,6 +100,11 @@ func New(opts Options) http.Handler {
 	mux.HandleFunc("GET /api/source", handleSource(
 		currentBuild(opts.Version, opts.Commit, source)))
 
+	// What the instance permits, so that somebody deciding whether to use it
+	// can see the rules rather than discover them by being refused. Policy
+	// only: nothing here describes the deployment, and instance.go says why.
+	mux.HandleFunc("GET /api/instance", handleInstance(describeInstance(opts)))
+
 	// Registered before the native routes so its paths exist only when an
 	// operator asked for them. Nil unless SENDAN_SEND_COMPAT was set, so the
 	// mode being off means the endpoints are absent rather than present and
