@@ -742,47 +742,41 @@ test.describe("the inline script that applies a stored theme", () => {
 });
 
 test.describe("choosing a theme", () => {
-  // Three explicit choices, not a cycle. The cycle it replaced had a state that
-  // could look broken: from "follow your system" on a light system, choosing
-  // light changed nothing visible, so the press appeared to do nothing.
-  test("offers every state, and shows which one is in effect", async ({ page }) => {
-    await page.goto("/");
-    const root = page.locator("html");
-
-    const system = page.getByRole("radio", { name: /Follow your system/ });
-    const light = page.getByRole("radio", { name: "Light" });
-    const dark = page.getByRole("radio", { name: "Dark" });
-
-    // Nothing chosen: the stylesheet's media query governs and no attribute is
-    // present at all.
-    await expect(system).toBeChecked();
-    await expect(root).not.toHaveAttribute("data-theme");
-
-    await dark.check();
-    await expect(root).toHaveAttribute("data-theme", "dark");
-    await expect(dark).toBeChecked();
-
-    await light.check();
-    await expect(root).toHaveAttribute("data-theme", "light");
-
-    // The property the cycle existed to protect, kept: getting back to
-    // following the system is one press, from any state.
-    await system.check();
-    await expect(root).not.toHaveAttribute("data-theme");
-  });
-
-  test("selecting the theme already showing still registers", async ({ browser }) => {
-    // The failure that prompted this. On a light system, choosing light changes
-    // no colour - but it is a different state from following the system, and
-    // the control has to show that it took.
+  // One button, two states. It names what pressing it will do rather than what
+  // is already true, because a button labelled "dark" could mean either and the
+  // two readings are opposites.
+  test("switches between light and dark", async ({ browser }) => {
     const context = await browser.newContext({ colorScheme: "light" });
     const page = await context.newPage();
     await page.goto("/");
 
-    await page.getByRole("radio", { name: "Light" }).check();
+    const root = page.locator("html");
+    // Nothing chosen yet: the stylesheet's media query governs, and no
+    // attribute is present at all.
+    await expect(root).not.toHaveAttribute("data-theme");
 
-    await expect(page.getByRole("radio", { name: "Light" })).toBeChecked();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.getByRole("button", { name: "Switch to the dark theme" }).click();
+    await expect(root).toHaveAttribute("data-theme", "dark");
+
+    await page.getByRole("button", { name: "Switch to the light theme" }).click();
+    await expect(root).toHaveAttribute("data-theme", "light");
+    await context.close();
+  });
+
+  test("every press changes something visible", async ({ browser }) => {
+    // The fault that prompted the rewrite: an earlier version offered
+    // "follow your system" as a third state, so on a light system the first
+    // press selected light and nothing moved.
+    const context = await browser.newContext({ colorScheme: "light" });
+    const page = await context.newPage();
+    await page.goto("/");
+
+    const background = () =>
+      page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+    const before = await background();
+    await page.getByRole("button", { name: /^Switch to the/ }).click();
+    expect(await background()).not.toBe(before);
     await context.close();
   });
 
@@ -790,8 +784,8 @@ test.describe("choosing a theme", () => {
     page,
   }) => {
     await page.goto("/");
-    await page.getByRole("radio", { name: "Dark" }).check();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.getByRole("button", { name: /^Switch to the/ }).click();
+    const chosen = await page.locator("html").getAttribute("data-theme");
 
     await page.reload();
 
@@ -802,8 +796,7 @@ test.describe("choosing a theme", () => {
     const beforeScripts = await page.evaluate(() =>
       document.documentElement.getAttribute("data-theme"),
     );
-    expect(beforeScripts).toBe("dark");
-    await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
+    expect(beforeScripts).toBe(chosen);
   });
 
   test("an explicit light choice wins on a system set to dark", async ({ browser }) => {
@@ -812,20 +805,12 @@ test.describe("choosing a theme", () => {
     const page = await context.newPage();
 
     await page.goto("/");
-    await page.getByRole("radio", { name: "Light" }).check();
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await page.getByRole("button", { name: "Switch to the light theme" }).click();
 
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(background).toBe("rgb(255, 255, 255)");
     await context.close();
-  });
-
-  test("is reachable and operable from the keyboard", async ({ page }) => {
-    await page.goto("/");
-    await page.getByRole("radio", { name: /Follow your system/ }).focus();
-    // A radio group moves with the arrow keys, which is why it is one.
-    await page.keyboard.press("ArrowRight");
-    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   });
 });
 
