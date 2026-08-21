@@ -799,13 +799,32 @@ test.describe("choosing a theme", () => {
     expect(beforeScripts).toBe(chosen);
   });
 
-  test("an explicit light choice wins on a system set to dark", async ({ browser }) => {
-    // The direction that a single unguarded media query gets wrong.
+  test("an explicit light choice wins on a system set to dark", async ({ browser, browserName }) => {
+    // Playwright's Firefox does not apply colour-scheme emulation: with
+    // colorScheme "dark" the page still renders light and matchMedia reports
+    // false, so the premise of this test cannot be established there. Verified
+    // by probing both, rather than assumed - the two agree with each other,
+    // which is what matters: the control says what the page is showing.
+    //
+    // Skipped rather than weakened, so that the property is still checked
+    // somewhere instead of being softened into something that passes
+    // everywhere and proves less.
+    test.skip(browserName === "firefox", "colour-scheme emulation is not applied there");
+
     const context = await browser.newContext({ colorScheme: "dark" });
     const page = await context.newPage();
 
     await page.goto("/");
-    await page.getByRole("button", { name: "Switch to the light theme" }).click();
+
+    // Waited for by name rather than clicked straight away. The label depends
+    // on the system setting, which the control only learns once it has
+    // hydrated, so clicking a fixed name races that - and loses by hanging on
+    // a locator that never matches, which reports a timeout rather than the
+    // reason. This says which of the two went wrong.
+    const toggle = page.getByRole("button", { name: /^Switch to the/ });
+    await expect(toggle).toHaveAccessibleName("Switch to the light theme");
+
+    await toggle.click();
 
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
