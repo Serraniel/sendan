@@ -863,3 +863,42 @@ test.describe("the layout at every width", () => {
     });
   }
 });
+
+test.describe("the size the instance accepts", () => {
+  test("is stated before a file is chosen", async ({ page }) => {
+    // Read from Tus-Max-Size, which the transfer protocol advertises. There is
+    // no configuration endpoint to ask, so this is where the number comes from.
+    await page.goto("/");
+    await expect(page.locator("label.drop")).toContainText(/up to \d/);
+  });
+
+  test("a file over it is refused before anything is uploaded", async ({ page }) => {
+    await page.goto("/");
+    // The limit arrives from a request made after mount, so wait for it rather
+    // than racing it. In use the race is harmless - a file chosen first is
+    // still refused by the instance - but a test that sometimes checks the
+    // wrong state is worse than no test.
+    await expect(page.locator("label.drop")).toContainText(/up to \d/);
+
+    // Larger than the instance accepts, without writing a file that large: the
+    // page reads size from the File object, and this one reports what it is
+    // told to. Uploading a real gigabyte to prove a refusal would be absurd.
+    await page.evaluate(() => {
+      const input = document.querySelector("#file") as HTMLInputElement;
+      const file = new File(["small"], "enormous.bin");
+      Object.defineProperty(file, "size", { value: 8 * 1024 * 1024 * 1024 });
+      const data = new DataTransfer();
+      data.items.add(file);
+      input.files = data.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    // Names both sizes, so the next attempt is not a guess.
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText("8.6 GB");
+    await expect(alert).toContainText(/accepts up to/);
+
+    // And refuses to start, rather than uploading until the instance says no.
+    await expect(page.getByRole("button", { name: "Encrypt and send" })).toBeDisabled();
+  });
+});

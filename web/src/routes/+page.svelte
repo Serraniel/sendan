@@ -2,6 +2,12 @@
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import { downloadLink, toBase64Url } from "$lib/link";
+  import {
+    fetchMaxUploadSize,
+    formatSize,
+    type MaxUploadSize,
+    tooLargeMessage,
+  } from "$lib/limits";
   import { acknowledge, isSupported, mustWarn, remember } from "$lib/vault";
   import { TusError } from "$lib/tus";
   import { type UploadProgress, type UploadResult, uploadFile } from "$lib/upload";
@@ -83,16 +89,12 @@
     failure = null;
   }
 
-  function sizeOf(bytes: number): string {
-    const units = ["B", "kB", "MB", "GB"];
-    let n = bytes;
-    let unit = 0;
-    while (n >= 1000 && unit < units.length - 1) {
-      n /= 1000;
-      unit++;
-    }
-    return `${unit === 0 ? n : n.toFixed(1)} ${units[unit]}`;
-  }
+  // The limit the instance advertises, and what to say when a file exceeds it.
+  // Read once on mount; null means the instance did not say, in which case the
+  // interface behaves exactly as it did before this existed.
+  let maxUploadSize = $state<MaxUploadSize>(null);
+
+  const overSize = $derived(file === null ? null : tooLargeMessage(file.size, maxUploadSize));
 
   async function send(event: SubmitEvent) {
     event.preventDefault();
@@ -213,7 +215,12 @@
     if (error instanceof TusError) {
       switch (error.status) {
         case 413:
-          return "This file is larger than the instance accepts.";
+          // Still reachable: an instance can be reconfigured between this page
+          // loading and the upload finishing, and a limit read early is a hint
+          // rather than a promise.
+          return maxUploadSize === null
+            ? "This file is larger than the instance accepts."
+            : `This file is larger than the instance accepts (${formatSize(maxUploadSize)}).`;
         case 429:
           return "The instance is rate limiting this connection. Try again shortly.";
         default:
@@ -248,6 +255,7 @@
 
   onMount(async () => {
     source = (await fetchBuild())?.source ?? null;
+    maxUploadSize = await fetchMaxUploadSize();
   });
 
   const percent = $derived(
@@ -289,10 +297,13 @@
       <input id="file" type="file" onchange={chooseFile} disabled={busy} required />
       {#if file === null}
         <span class="drop-main">Choose a file, or drop one here</span>
-        <span class="drop-sub muted small">It is encrypted here, before it leaves this browser</span>
+        <span class="drop-sub muted small">
+          It is encrypted here, before it leaves this browser{#if maxUploadSize !== null}
+            · up to {formatSize(maxUploadSize)}{/if}
+        </span>
       {:else}
         <span class="drop-main break">{file.name}</span>
-        <span class="drop-sub muted small">{sizeOf(file.size)} · choose or drop another to replace it</span>
+        <span class="drop-sub muted small">{formatSize(file.size)} · choose or drop another to replace it</span>
       {/if}
     </label>
 
@@ -334,8 +345,19 @@
       </p>
     </fieldset>
 
+    {#if overSize !== null}
+      <!--
+        Said when the file is chosen rather than after an upload that was never
+        going to be accepted, and it names the limit: without the number the
+        next attempt is a guess.
+      -->
+      <p class="failure" role="alert">{overSize}</p>
+    {/if}
+
     <p class="actions">
-      <button type="submit" class="primary" disabled={file === null || busy}>Encrypt and send</button>
+      <button type="submit" class="primary" disabled={file === null || busy || overSize !== null}>
+        Encrypt and send
+      </button>
       {#if busy}
         <button type="button" onclick={cancel}>Cancel</button>
       {/if}
