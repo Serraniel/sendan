@@ -1118,7 +1118,30 @@ at four widths. It found a real fault: browsers give `fieldset` a
 group became the page's minimum width and took the whole document sideways at
 320 px. Nothing else on the page behaves that way.
 
-### 9.5 What it costs
+### 9.5 What the instance permits
+
+Everything an instance would refuse was previously discoverable only by trying:
+the size it accepts, how long an upload may live, whether it may live forever,
+whether a limit is compulsory. `GET /api/instance` publishes that policy, and
+the send page shows it folded away — most people sending a file do not need it,
+and the ones who do are deciding whether to trust an instance at all, which is a
+deliberate act rather than something to interrupt with.
+
+The line between policy and deployment is the interesting part. Storage backend,
+database, master key, proxy count and rate limits are absent: none changes what a
+person may upload, and all help somebody attacking the instance more than
+somebody using it. A test checks the encoded response for those words, so a
+field added later cannot widen the disclosure without failing.
+
+Two honesty constraints shape how it is shown. An instance can report whatever
+it likes, so the panel says it is a convenience rather than a guarantee, and
+names what does not depend on the instance's honesty: the key is made and used
+in the browser regardless. And the one line the browser can establish for
+itself - whether the connection is encrypted - is read from the protocol rather
+than from `isSecureContext`, which is true on `localhost` over plain HTTP and
+would have reported an encrypted connection where there is none.
+
+### 9.6 What it costs
 
 No web font: the system stack, which transfers nothing, cannot flash, and adds
 nothing to the asset manifest that `sendan verify` checks. The whole stylesheet
