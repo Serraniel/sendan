@@ -38,10 +38,22 @@ Two settings enforce that, because neither is the default:
   at `0.0.0`, which is what makes the first release `0.1.0`. Without a manifest,
   release-please has no prior version to reason from and calls a first release
   `1.0.0`.
-- `bump-minor-pre-major` in `release-please-config.json` keeps a breaking change
-  inside `0.x` rather than declaring 1.0.0 on its own. A project below 1.0.0 is
-  saying its interfaces may still move; a breaking change is expected there and
-  is not the moment to make a claim about trustworthiness.
+- `bump-minor-pre-major` keeps a breaking change inside `0.x` rather than
+  declaring 1.0.0 on its own. A project below 1.0.0 is saying its interfaces may
+  still move; a breaking change is expected there and is not the moment to make
+  a claim about trustworthiness. It is set **inside the package entry** as well
+  as at the top level: set only at the top level it did not take effect, and the
+  proposed release stayed at 1.0.0.
+- `include-component-in-tag` is `false`. It defaults to **true**, and naming the
+  package would then put that name in the tag — `sendan-v0.1.0` rather than
+  `v0.1.0`. [release](release.md) triggers on `v*`, so a component in the tag
+  means the release workflow never runs at all: no binaries, no image, no
+  signatures, and nothing failing loudly enough to notice.
+
+The package is deliberately left unnamed for the same reason. A name makes
+release-please treat this as one component among several, which also moves the
+pull request onto its own branch — and a second release pull request appeared
+beside the first, proposing the same version under a different name.
 
 `bump-patch-for-minor-pre-major` is deliberately left off, so a `feat:` still
 bumps the minor version: `0.1.0` to `0.2.0`. Turning it on would flatten every
