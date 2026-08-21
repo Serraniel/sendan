@@ -33,10 +33,13 @@
 
   const showing = $derived(resolve(choice, systemDark));
 
-  const options: Array<{ value: ThemeChoice; glyph: string; name: string }> = [
-    { value: "system", glyph: "◐", name: "Follow your system" },
-    { value: "light", glyph: "☀", name: "Light" },
-    { value: "dark", glyph: "☾", name: "Dark" },
+  // Words rather than glyphs. A sun and a moon are guessable; a half-filled
+  // circle for "whatever your system says" is not, and it was the state people
+  // would most need explained. Three short words need no legend.
+  const options: Array<{ value: ThemeChoice; label: string; name: string }> = [
+    { value: "system", label: "Auto", name: "Follow your system" },
+    { value: "light", label: "Light", name: "Light" },
+    { value: "dark", label: "Dark", name: "Dark" },
   ];
 
   function choose(next: ThemeChoice) {
@@ -70,7 +73,7 @@
         checked={choice === option.value}
         onchange={() => choose(option.value)}
       />
-      <span aria-hidden="true">{option.glyph}</span>
+      <span aria-hidden="true">{option.label}</span>
       <span class="visually-hidden">{option.name}</span>
     </label>
   {/each}
@@ -89,14 +92,21 @@
 </span>
 
 <style>
+  /*
+    Quiet by design. This is a preference, not an action, and it sits beside the
+    only navigation on the page - a bordered widget there competed with the
+    thing people came to do.
+
+    So: no box, no background, no segments. Three small words, the one in effect
+    picked out in the accent colour. Colour carries the state, and the word says
+    which state it is, so neither has to be guessed.
+  */
   .theme {
     display: inline-flex;
-    gap: 0;
+    gap: var(--space-1);
     margin: 0;
-    padding: 2px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface-raised);
+    padding: 0;
+    border: 0;
     min-inline-size: 0;
   }
 
@@ -105,30 +115,40 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    /* 40px each, so the group of three still clears a touch target vertically
-       while staying narrow enough for a phone header. */
-    width: 2.5rem;
-    height: 2.5rem;
-    border-radius: calc(var(--radius) - 1px);
+    padding: 0 var(--space-2);
+    /* Still a touch target, even without a visible edge. */
+    min-height: 2.75rem;
+    border-radius: var(--radius);
     cursor: pointer;
-    font-size: 1rem;
-    line-height: 1;
+    font-size: var(--text-sm);
     color: var(--text-muted);
+    white-space: nowrap;
   }
 
   .theme label:hover {
     color: var(--text);
-    background: var(--surface);
   }
 
   .theme label.selected {
-    background: var(--surface);
     color: var(--accent);
-    box-shadow: inset 0 0 0 1px var(--border);
+    font-weight: 650;
+  }
+
+  /* Colour alone would leave the state invisible to anybody who cannot
+     distinguish these two, so the selected word is underlined as well. */
+  .theme label.selected::after {
+    content: "";
+    position: absolute;
+    left: var(--space-2);
+    right: var(--space-2);
+    bottom: 0.55rem;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
   }
 
   /* Invisible but not moved out of the way: it covers the whole control, so a
-     press lands on the input itself rather than on the glyph drawn over it.
+     press lands on the input itself rather than on the word drawn over it.
      A one-pixel input tucked into a corner is a control that a pointer, and a
      browser test, cannot actually hit. */
   .theme input {
