@@ -119,6 +119,11 @@ Also out of scope:
   nor a token that removes it, which is the same property that stops the
   operator reading them.
 
+  The only other thing kept in the browser is which theme to display, under one
+  key beside the list's acknowledgement flag. It is a fact about the browser
+  rather than about any upload, it is never sent to the instance, and clearing
+  it changes nothing but the colours.
+
   The list can be exported to a file, which is the only copy that survives the
   browser. It carries the same secrets the list does — every link and every
   owner token — so it is encrypted under a passphrase chosen at the time, using

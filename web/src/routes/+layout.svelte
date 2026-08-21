@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import BrowserCheck from "$lib/BrowserCheck.svelte";
   import { type Build, fetchBuild, shortCommit, sourceIsExact } from "$lib/source";
+  import ThemeToggle from "$lib/ThemeToggle.svelte";
+  import "../app.css";
 
   let { children } = $props();
   let build = $state<Build | null>(null);
@@ -14,7 +16,23 @@
   });
 </script>
 
-<main>
+<!--
+  Visible only once focused, and first in the order, so somebody arriving by
+  keyboard can pass the header rather than tabbing through it on every page.
+-->
+<a class="skip" href="#main">Skip to content</a>
+
+<header>
+  <div class="bar">
+    <a class="wordmark" href="/">Sendan</a>
+    <nav aria-label="Main">
+      <a href="/uploads">Your uploads</a>
+      <ThemeToggle />
+    </nav>
+  </div>
+</header>
+
+<main id="main" tabindex="-1">
   <BrowserCheck>
     {@render children()}
   </BrowserCheck>
@@ -71,11 +89,114 @@
     height: 1px;
   }
 
+  .skip {
+    position: absolute;
+    left: var(--space-2);
+    top: -4rem;
+    z-index: 2;
+    padding: var(--space-2) var(--space-3);
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+    transition: top 0.12s ease-out;
+  }
+
+  .skip:focus {
+    top: var(--space-2);
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .bar,
+  main,
   footer {
-    font-size: 0.85rem;
+    /* One column, one gutter, everywhere. A page that sets its own width is a
+       page that disagrees with the others at some viewport nobody tested. */
+    max-width: var(--page);
+    margin: 0 auto;
+    padding-inline: var(--space-4);
+  }
+
+  .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    min-height: 3.5rem;
+  }
+
+  .wordmark {
+    font-weight: 700;
+    font-size: var(--text-lg);
+    letter-spacing: -0.02em;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .wordmark:hover {
+    color: var(--accent);
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  nav a {
+    padding: var(--space-2);
+    border-radius: var(--radius);
+    text-decoration: none;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    /* The link is a touch target as much as the button beside it. */
+    display: inline-flex;
+    align-items: center;
+    min-height: 2.75rem;
+  }
+
+  nav a:hover {
+    color: var(--accent);
+    background: var(--surface-raised);
+  }
+
+  main {
+    padding-block: var(--space-6) var(--space-7);
+  }
+
+  /* Removed rather than styled: focusing the region after the skip link should
+     not draw a box around the whole page. */
+  main:focus {
+    outline: none;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding-block: var(--space-4) var(--space-6);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+  }
+
+  footer p {
+    margin: 0;
   }
 
   .caveat {
-    font-weight: bold;
+    margin-top: var(--space-2);
+    color: var(--danger);
+    font-weight: 600;
+  }
+
+  @media (max-width: 26rem) {
+    /* At the narrowest widths the wordmark and the two controls stop fitting
+       on one line together; the nav wraps beneath rather than shrinking the
+       touch targets. */
+    .bar {
+      flex-wrap: wrap;
+      padding-block: var(--space-2);
+    }
   }
 </style>

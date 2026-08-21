@@ -251,7 +251,7 @@
   <form onsubmit={submitPassword}>
     <p>This file is protected with a password.</p>
     <p>
-      <label for="password">Password</label><br />
+      <label for="password">Password</label>
       <input
         id="password"
         type="password"
@@ -265,7 +265,7 @@
       <p class="failure" role="alert">{explain(fault)}</p>
     {/if}
     <p>
-      <button type="submit" disabled={working}>
+      <button type="submit" class="primary" disabled={working}>
         {working ? "Checking…" : "Unlock"}
       </button>
     </p>
@@ -309,7 +309,9 @@
 
 {#if phase === "ready"}
   <p>
-    <button type="button" onclick={download} disabled={working}>Download and decrypt</button>
+    <button type="button" class="primary" onclick={download} disabled={working}>
+      Download and decrypt
+    </button>
   </p>
 {:else if phase === "downloading"}
   <p>
@@ -342,14 +344,25 @@
 {/if}
 
 <style>
+  /* Name, type and size, as a pair of columns that becomes one at narrow
+     widths - a two-column grid with a long filename in it is the main way this
+     page ends up wider than a phone. */
   dl {
     display: grid;
     grid-template-columns: max-content 1fr;
-    gap: 0.25rem 1rem;
+    gap: var(--space-1) var(--space-5);
+    margin: 0 0 var(--space-5);
+    padding: var(--space-4) var(--space-5);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
   }
 
   dt {
-    font-weight: bold;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: var(--text-sm);
+    align-self: center;
   }
 
   dd {
@@ -357,15 +370,55 @@
     overflow-wrap: anywhere;
   }
 
+  @media (max-width: 26rem) {
+    dl {
+      grid-template-columns: 1fr;
+    }
+
+    dt {
+      margin-top: var(--space-2);
+    }
+  }
+
+  form label {
+    display: block;
+    margin-bottom: var(--space-1);
+    font-weight: 600;
+    font-size: var(--text-sm);
+  }
+
+  input[type="password"] {
+    width: 100%;
+    max-width: 22rem;
+  }
+
   progress {
     width: 100%;
+    height: 0.6rem;
   }
 
   .note {
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
+    color: var(--text-muted);
   }
 
+  /*
+    Every failure on this page is a specific one, and each keeps its own words.
+    Styling them alike is the point: it says "this is the answer" rather than
+    "something broke", which is what a generic error box would imply.
+  */
   .failure {
-    font-weight: bold;
+    font-weight: 600;
+    color: var(--danger);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--danger);
+    border-radius: var(--radius);
+    background: var(--danger-quiet);
+  }
+
+  code {
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+    background: var(--surface-sunken);
   }
 </style>

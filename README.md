@@ -22,9 +22,11 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > configuration, structured logging and abuse controls; the web client's
 > upload and download flows, with per-upload password, expiry and download
 > limit; owner-held management, so the browser that made an upload can list it,
-> delete it early, and export that list to a passphrase-encrypted file; and
-> optional wrapping of at-rest keys under an operator-held master key, so a
-> database backup carries nothing that opens a blob.
+> delete it early, and export that list to a passphrase-encrypted file; the
+> interface itself, in light and dark themes, on one layout that holds from a
+> small phone to a desktop display; and optional wrapping of at-rest keys under
+> an operator-held master key, so a database backup carries nothing that opens
+> a blob.
 >
 > **Partly built:** the command line client sends and receives (`sendan up`,
 > `sendan down`), with password, expiry and download-limit options. Releases
@@ -62,6 +64,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 - **Cross-platform command line client**, sharing one cryptographic
   implementation with the server. *(Sends and receives; not yet released as a
   binary.)*
+- **Light and dark themes**, following the system by default with a control to
+  override it, on one layout that holds from a small phone to a desktop
+  display. No web font is loaded and no request leaves the instance: the whole
+  stylesheet is 4 KB compressed.
 - **Optional compatibility endpoints** for existing third-party clients,
   disabled by default. Tested against a real one on every pull request.
   *(Uploads made through them are **less protected** than native ones — that
@@ -117,8 +123,15 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 ## Browser requirements
 
 The encryption happens in the browser, so the browser has to be able to perform
-it. A recent Firefox, Chrome, Edge or Safari can; the build targets roughly
-Chrome and Edge 107, Firefox 104, and Safari 16.
+it. A recent Firefox, Chrome, Edge or Safari can.
+
+What decides it is the list of capabilities below, not a version number. Those
+capabilities became available around Chrome and Edge 107, Firefox 104 and
+Safari 16, which is the floor the interface is styled to — but no build setting
+enforces that figure, and it is a snapshot of where browsers were rather than a
+promise. The list is the thing to read: it stays true as browsers move, and it
+is what the client checks at runtime, naming whichever capability is missing
+instead of failing somewhere inside the cryptography.
 
 > [!IMPORTANT]
 > **An instance must be served over HTTPS.** Browsers withhold WebCrypto outside

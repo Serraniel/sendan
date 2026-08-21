@@ -1,0 +1,383 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later
+ * Copyright (C) 2026 Serraniel and the Sendan contributors
+ *
+ * The interface's vocabulary: colour, spacing, type and the base element
+ * styles every page inherits.
+ *
+ * ## Tokens are named for their role
+ *
+ * `--accent`, not `--teal`. A token named for its colour becomes a lie the
+ * first time a theme changes it, and the dark theme changes this one.
+ *
+ * ## Two themes, three states
+ *
+ * The light palette is defined on bare `:root`, so it is what a browser gets
+ * before any preference is known. The dark palette is defined twice: once under
+ * `prefers-color-scheme` for somebody who has never chosen, and once under
+ * `[data-theme="dark"]` for somebody who has. The media query is guarded
+ * against `[data-theme="light"]` so an explicit light choice wins over a dark
+ * system setting. Without that guard the override only works in one direction.
+ *
+ * ## Every pair here was measured
+ *
+ * `src/theme.test.ts` reads this file and computes the contrast of each pair,
+ * so a token edited to something prettier fails a test rather than quietly
+ * failing a person. Two of the brand colours needed adjusting to get there and
+ * the derivations are noted where they appear.
+ *
+ * ## Browser floor
+ *
+ * The same one the cryptography sets: roughly Chrome and Edge 107, Firefox 104,
+ * Safari 16. Styling for anything older would be styling for a browser that
+ * cannot decrypt. That rules out `oklch()`, native nesting and `light-dark()`;
+ * custom properties, grid, flexbox and `clamp()` are all available.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces, from the page backwards. */
+  --surface: #ffffff;
+  --surface-raised: #f5f7f9;
+  --surface-sunken: #eef2f5;
+
+  /* Text. The muted tone is the house blue-grey darkened until it carries
+     4.5:1 on white; the blue-grey itself is a border here, not a text colour. */
+  --text: #1c2124;
+  --text-muted: #5c7082;
+
+  /* Borders. The strong one is for anything a person can operate, where the
+     boundary itself has to be perceivable; the plain one separates. */
+  --border: #d5dde4;
+  --border-strong: #8497a8;
+
+  /* The accent carries the primary action and nothing decorative. */
+  --accent: #137a7f;
+  --accent-hover: #0f6165;
+  --on-accent: #ffffff;
+  --accent-quiet: #e9f3f3;
+
+  /* Destructive. The house magenta is too light to carry text at this size, so
+     this is that colour darkened until it clears 4.5:1 on every surface it can
+     land on — near enough to read as the same colour, far enough to be legible
+     as words. The undarkened magenta failed at 4.34:1 on white alone. */
+  --danger: #cd1d76;
+  --danger-hover: #a81861;
+  --on-danger: #ffffff;
+  --danger-quiet: #fdeaf3;
+
+  /* Positive. Deliberately the accent rather than a green: this palette uses
+     teal where an interface would normally reach for green. */
+  --positive: #137a7f;
+
+  --focus: #137a7f;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  --radius: 6px;
+  --radius-lg: 10px;
+
+  /* Type. Clamped rather than stepped at breakpoints, so it holds at every
+     width between 320px and a wide display instead of only at the tested ones. */
+  --text-xs: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: clamp(1.25rem, 1.1rem + 0.75vw, 1.5rem);
+  --text-2xl: clamp(1.5rem, 1.25rem + 1.25vw, 2rem);
+
+  --measure: 68ch;
+  --page: 52rem;
+
+  /* No web font is loaded. Zero bytes, no flash of unstyled text, and nothing
+     to add to the asset manifest that `sendan verify` checks. */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+
+  --shadow: 0 1px 2px rgb(28 33 36 / 0.06), 0 2px 8px rgb(28 33 36 / 0.04);
+}
+
+/* Dark, for somebody who has never chosen. Guarded so that an explicit light
+   choice still wins on a system set to dark. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --surface: #22262a;
+    --surface-raised: #373b3e;
+    --surface-sunken: #1b1f22;
+
+    --text: #e7ecef;
+    --text-muted: #bec8d1;
+
+    --border: #454b50;
+    --border-strong: #78828a;
+
+    --accent: #86cecb;
+    --accent-hover: #a3dbd9;
+    --on-accent: #16292c;
+    --accent-quiet: #2b3a3b;
+
+    --danger: #ee80b7;
+    --danger-hover: #f4a3cb;
+    --on-danger: #24121b;
+    --danger-quiet: #3a2430;
+
+    --positive: #86cecb;
+
+    --focus: #86cecb;
+
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px rgb(0 0 0 / 0.2);
+  }
+}
+
+/* Dark, chosen. Identical values; kept separate because a media query cannot
+   express "this person asked for it". */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface: #22262a;
+  --surface-raised: #373b3e;
+  --surface-sunken: #1b1f22;
+
+  --text: #e7ecef;
+  --text-muted: #bec8d1;
+
+  --border: #454b50;
+  --border-strong: #78828a;
+
+  --accent: #86cecb;
+  --accent-hover: #a3dbd9;
+  --on-accent: #16292c;
+  --accent-quiet: #2b3a3b;
+
+  --danger: #ee80b7;
+  --danger-hover: #f4a3cb;
+  --on-danger: #24121b;
+  --danger-quiet: #3a2430;
+
+  --positive: #86cecb;
+
+  --focus: #86cecb;
+
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 2px 8px rgb(0 0 0 / 0.2);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Nothing here scrolls to an anchor, but a future in-page link should not
+     jump for somebody who asked for less motion. */
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: var(--text-base);
+  line-height: 1.6;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0 0 var(--space-3);
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: var(--text-2xl);
+}
+h2 {
+  font-size: var(--text-xl);
+}
+h3 {
+  font-size: var(--text-lg);
+}
+
+p {
+  margin: 0 0 var(--space-4);
+  max-width: var(--measure);
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.15em;
+}
+
+a:hover {
+  color: var(--accent-hover);
+}
+
+/* One focus style for everything, defined once. `:focus-visible` so a mouse
+   click does not leave a ring behind, with a plain `:focus` fallback first for
+   anything that does not support it. */
+:focus {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* The shared control shape. Buttons carry it too, so a button and a field on
+   the same row are the same height. */
+button,
+select,
+input[type="text"],
+input[type="password"],
+input[type="number"],
+input[type="search"] {
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+input[readonly] {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+
+button {
+  cursor: pointer;
+  font-weight: 600;
+  /* 44px is the touch target this has to clear, and padding rather than a
+     fixed height is what keeps it clearing when the label wraps. */
+  min-width: 2.75rem;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--text-muted);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* The primary action. Exactly one per view: on this interface the filled
+   control is a claim about what to do next, and two of them make neither. */
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+button.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+/* Destructive. Outlined rather than filled, because a filled magenta button
+   reads as the thing to press. */
+button.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--surface);
+}
+
+button.danger:hover:not(:disabled) {
+  background: var(--danger-quiet);
+  border-color: var(--danger-hover);
+  color: var(--danger-hover);
+}
+
+code,
+kbd,
+samp {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+/* Long, unbreakable things — links with a fragment, filenames, tokens — are
+   the main way a page ends up wider than the display. */
+.break {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+.small {
+  font-size: var(--text-sm);
+}
+
+.stack > * + * {
+  margin-top: var(--space-4);
+}
+
+.card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+/* Visible only to a screen reader. Used for labels that would be noise on
+   screen but are the only name an assistive technology has. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Anything that scrolls sideways does so inside its own box; the page itself
+   never does. */
+.scroll-x {
+  overflow-x: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
