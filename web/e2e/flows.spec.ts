@@ -1165,3 +1165,34 @@ test.describe("an operator's banner", () => {
     await expect(page.locator(".banner")).toHaveCount(0);
   });
 });
+
+test.describe("the list survives leaving the page at once", () => {
+  // The shape of the fault this was written for: an IndexedDB request succeeds
+  // while its transaction is still open, so code that resolved there handed
+  // control back before the write was durable. Navigating on the next line -
+  // which is what somebody does after sending a file - could leave the browser
+  // to discard it. The upload arrived and the record did not.
+  //
+  // Deliberately harsher than the other tests: no waiting, no assertions in
+  // between, straight from the confirmation to the list.
+  test("a record written and immediately left behind is still there", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "hurried.txt", Buffer.from("hurried"), "text/plain", {
+      limit: "1 download",
+    });
+
+    await page.goto("/uploads");
+    await expect(page.getByText("hurried.txt")).toBeVisible();
+  });
+
+  test("survives a reload straight after, too", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "reloaded.txt", Buffer.from("reloaded"), "text/plain", {
+      limit: "1 download",
+    });
+
+    await page.reload();
+    await page.goto("/uploads");
+    await expect(page.getByText("reloaded.txt")).toBeVisible();
+  });
+});
