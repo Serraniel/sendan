@@ -1007,3 +1007,53 @@ test.describe("what the instance allows", () => {
     await expect(page.getByText(/the key is made and used in this browser/i)).toBeVisible();
   });
 });
+
+test.describe("the retention options", () => {
+  test("name the instance's own default rather than alluding to it", async ({ page }) => {
+    // "This instance's default" is the option most people leave selected, and
+    // it told them nothing about what they were agreeing to.
+    await page.goto("/");
+
+    const expiry = page.locator("#ttl");
+    await expect(expiry).toContainText(/\(this instance's default\)/);
+    // The value itself, not just the words: a duration in the option is the
+    // whole point of the change.
+    await expect(expiry).toContainText(/\d+\s+(second|minute|hour|day)s?\s+\(this instance/);
+  });
+
+  test("offer no lifetime the instance would refuse", async ({ page }) => {
+    // An option that is present and then rejected is worse than one that is
+    // absent: it invites a choice and takes it back.
+    await page.goto("/");
+
+    const offered = await page.locator("#ttl option").evaluateAll((options) =>
+      options.map((o) => Number((o as HTMLOptionElement).value)),
+    );
+
+    const rules = await page.evaluate(async () => {
+      const response = await fetch("/api/instance");
+      return (await response.json()) as { maxTtlSeconds: number; allowInfiniteTtl: boolean };
+    });
+
+    for (const seconds of offered) {
+      if (seconds > 0) expect(seconds).toBeLessThanOrEqual(rules.maxTtlSeconds);
+    }
+
+    // And "never" only where the instance permits it. On the test instance it
+    // does not, so the option must be absent rather than present and refused.
+    expect(offered.includes(-1)).toBe(rules.allowInfiniteTtl);
+  });
+
+  test("say what was applied, including when nothing will remove it", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "kept-briefly.txt", Buffer.from("brief"), "text/plain", {
+      limit: "1 download",
+    });
+
+    // Previously this said nothing at all unless a deadline had been chosen
+    // explicitly, so an upload taking the instance's default was described by
+    // silence.
+    await expect(page.getByText(/This upload/)).toBeVisible();
+    await expect(page.getByText(/allows 1 download/)).toBeVisible();
+  });
+});
