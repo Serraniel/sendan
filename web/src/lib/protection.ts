@@ -263,3 +263,114 @@ export function protectionLines(protection: Protection): ProtectionLine[] {
 
   return lines;
 }
+
+/** Whether a plain-language claim holds, and why. */
+export interface Assurance {
+  /** What is being claimed, in words somebody can act on. */
+  claim: string;
+  /** Whether it holds. */
+  holds: boolean;
+  /** Why it holds, or why it does not. Never omitted: a mark without a reason
+   *  is a claim, and this list exists to replace claims with facts. */
+  because: string;
+}
+
+/**
+ * The same protection, said in words rather than in parameters.
+ *
+ * The card above states the cipher, the derivation and the parameters, which is
+ * the right thing to keep and is not what most people can act on. This is the
+ * other half: short claims, each plainly true or plainly not, each carrying the
+ * reason it is one or the other.
+ *
+ * Two rules govern what may appear here.
+ *
+ * **Nothing is claimed that is not established.** Every line comes from the
+ * protection record, from the constants the cryptography actually uses, or from
+ * something the browser can see for itself. Nothing comes from an assumption
+ * about how an instance is configured.
+ *
+ * **An honest "no" is the point.** A compatibility upload is protected less
+ * well, an instance served over plain HTTP could have delivered altered code,
+ * and a file with no password can be opened by anyone holding the link. Those
+ * are the lines worth showing, and hiding them would make the rest worthless.
+ *
+ * @param secureTransport whether the page itself arrived over an encrypted
+ *   connection. Passed in rather than read here so this stays testable, and
+ *   because it is the one fact on the list the instance does not report.
+ */
+export function assurances(protection: Protection, secureTransport: boolean): Assurance[] {
+  const compat = protection.endpoints === "compatibility";
+
+  return [
+    {
+      claim: "Encrypted before it left the sender",
+      // True of both kinds of upload: the key is made in the browser and never
+      // sent, which is what makes the instance unable to read the content.
+      holds: true,
+      because:
+        `The file was encrypted with ${protection.content.cipher} in the sender's ` +
+        "browser. The key travels in the link, which is never sent to the instance.",
+    },
+    {
+      claim: "The instance cannot read it",
+      holds: !compat,
+      because: compat
+        ? "This upload was made through the compatibility endpoints, where the " +
+          "instance checks the password itself. It cannot read the content, but " +
+          "it can serve the file to somebody who does not know the password."
+        : "Nothing the instance holds opens the file: not the key, not the " +
+          "password, and not a way to derive either.",
+    },
+    {
+      claim: "Protected with a password",
+      holds: protection.password !== null,
+      because:
+        protection.password === null
+          ? "No password was set, so anyone holding the link can open this file."
+          : compat
+            ? `Checked by the instance rather than by the key, using ` +
+              `${protection.password.function}.`
+            : `The password is part of the key, derived with ` +
+              `${protection.password.function}. A wrong one produces a key that does not fit.`,
+    },
+    {
+      claim: "Filename and size hidden from the instance",
+      holds: protection.metadataEncrypted,
+      because: protection.metadataEncrypted
+        ? "Both are encrypted and padded, so the instance sees neither."
+        : "Neither is encrypted on this upload, so the instance can read both.",
+    },
+    {
+      claim: "Removed on its own",
+      holds:
+        protection.lifetime.expiresAt !== null || protection.lifetime.downloadsRemaining !== null,
+      because:
+        protection.lifetime.expiresAt === null && protection.lifetime.downloadsRemaining === null
+          ? "This upload has neither a deadline nor a download limit, so nothing " +
+            "removes it until somebody does."
+          : "It goes when its deadline passes or its downloads run out, whichever " +
+            "comes first.",
+    },
+    {
+      claim: "Delivered over an encrypted connection",
+      holds: secureTransport,
+      because: secureTransport
+        ? "This page arrived over HTTPS."
+        : "This page arrived without transport encryption, so the code doing the " +
+          "decryption could have been altered on the way to you.",
+    },
+    {
+      claim: "Beyond the reach of a future quantum computer",
+      // Not a post-quantum algorithm, and saying so matters: the claim invites
+      // the assumption that one is involved. What makes it hold is that there
+      // is nothing here for Shor's algorithm to attack, and that the secrets
+      // are long enough to stay out of Grover's reach (docs/design.md §2.4).
+      holds: true,
+      because:
+        "Nothing here is negotiated over the wire, so there is no key exchange " +
+        `to record and break later. The keys are ${protection.content.keyBits} ` +
+        "bits, which leaves them out of reach even halved.",
+    },
+  ];
+}

@@ -1057,3 +1057,49 @@ test.describe("the retention options", () => {
     await expect(page.getByText(/allows 1 download/)).toBeVisible();
   });
 });
+
+test.describe("what protected this file, in words", () => {
+  test("answers each claim, and says why", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "plain.txt", Buffer.from("plain"), "text/plain", {
+      limit: "1 download",
+    });
+
+    // The claim, and the reason beneath it. A mark on its own is an assertion;
+    // this list exists to replace assertions with facts.
+    await expect(page.getByText("Encrypted before it left the sender")).toBeVisible();
+    await expect(page.getByText(/The key travels in the link/)).toBeVisible();
+
+    // The honest negatives, which are the lines worth having. No password was
+    // set on this upload, and the test instance is served without TLS.
+    await expect(page.getByText(/anyone holding the link can open this file/)).toBeVisible();
+    await expect(page.getByText(/could have been altered on the way to you/)).toBeVisible();
+  });
+
+  test("keeps the parameters, folded away", async ({ page }) => {
+    // The technical card is not replaced by the plain list; it moves behind it.
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "folded.txt", Buffer.from("folded"), "text/plain", {
+      limit: "1 download",
+    });
+
+    await expect(page.getByText("Argon2id")).toBeHidden();
+    await page.getByText("The same, in cryptographic terms").click();
+    await expect(page.getByText(/AES-GCM with a 256-bit key/)).toBeVisible();
+  });
+
+  test("does not carry a parameter into a claim", async ({ page }) => {
+    // The split is the whole point: a claim somebody can act on above, the
+    // cryptography below.
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "split.txt", Buffer.from("split"), "text/plain", {
+      limit: "1 download",
+    });
+
+    const claims = await page.locator(".claims .what").allTextContents();
+    expect(claims.length).toBeGreaterThan(4);
+    for (const claim of claims) {
+      expect(claim).not.toMatch(/AES|Argon2|HKDF|\d+-bit/);
+    }
+  });
+});
