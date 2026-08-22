@@ -38,6 +38,11 @@ type Options struct {
 	// MaxUploadSize bounds a single upload, in bytes. Zero means unbounded.
 	MaxUploadSize int64
 
+	// Banner is an operator's notice, shown on every page. Empty means none.
+	// BannerSeverity is "info" or "warning".
+	Banner         string
+	BannerSeverity string
+
 	// ServeUI serves the web client. A build without one serves nothing
 	// regardless, so this only decides whether an instance that has a client
 	// offers it.

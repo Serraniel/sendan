@@ -88,6 +88,8 @@ themselves.
 > it serves an explanation rather than the client, whatever this setting says,
 > and logs a warning at startup. See [`docs/design.md`](design.md) §4.5.
 | `SENDAN_SOURCE_URL` | the upstream repository | Where this instance's corresponding source can be obtained, reported at `/api/source` |
+| `SENDAN_BANNER` | *(none)* | A notice shown at the top of every page. Plain text; it is delivered and rendered as text, never as markup. Empty means no banner and no reserved space |
+| `SENDAN_BANNER_SEVERITY` | `info` | How loudly the banner is drawn: `info` or `warning`. Refused at startup if it is neither |
 
 > [!IMPORTANT]
 > **If you run modified code, you must set `SENDAN_SOURCE_URL`.** AGPL §13

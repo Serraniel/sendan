@@ -154,3 +154,65 @@ func TestTheInstanceReportIsCacheableButNotForLong(t *testing.T) {
 		t.Errorf("Cache-Control = %q", got)
 	}
 }
+
+func TestTheInstanceCarriesAnOperatorsBanner(t *testing.T) {
+	t.Parallel()
+
+	_, in := getInstance(t, Options{Banner: "  This is a demonstration.  ", BannerSeverity: "warning"})
+
+	if in.Banner == nil {
+		t.Fatal("no banner reported")
+	}
+	// Trimmed, because a value from configuration usually arrives with the
+	// whitespace somebody's shell left on it.
+	if in.Banner.Text != "This is a demonstration." {
+		t.Errorf("text = %q", in.Banner.Text)
+	}
+	if in.Banner.Severity != "warning" {
+		t.Errorf("severity = %q, want warning", in.Banner.Severity)
+	}
+}
+
+func TestAnAbsentBannerIsAbsentRatherThanEmpty(t *testing.T) {
+	t.Parallel()
+
+	// The client should not have to decide whether to draw an empty bar, and a
+	// banner of spaces is not a banner.
+	for _, text := range []string{"", "   ", "\t\n"} {
+		rec, in := getInstance(t, Options{Banner: text})
+		if in.Banner != nil {
+			t.Errorf("banner %q reported as %+v", text, in.Banner)
+		}
+		if strings.Contains(rec.Body.String(), "banner") {
+			t.Errorf("the key is present for %q: %s", text, rec.Body.String())
+		}
+	}
+}
+
+func TestAnUnknownBannerSeverityBecomesTheQuietOne(t *testing.T) {
+	t.Parallel()
+
+	// Configuration refuses an unknown value at startup, so this is the second
+	// line of defence rather than the first. Falling back to the loud one would
+	// let a typo shout at every visitor.
+	_, in := getInstance(t, Options{Banner: "notice", BannerSeverity: "catastrophe"})
+
+	if in.Banner == nil || in.Banner.Severity != "info" {
+		t.Errorf("severity = %+v, want info", in.Banner)
+	}
+}
+
+func TestTheBannerIsDeliveredAsTextRatherThanMarkup(t *testing.T) {
+	t.Parallel()
+
+	// The operator controls this string. It reaches the client as JSON and is
+	// rendered as text there; what matters here is that nothing on this side
+	// interprets it, so what goes in is what comes out.
+	const hostile = `<script>alert(1)</script> & "quoted"`
+
+	_, in := getInstance(t, Options{Banner: hostile})
+
+	if in.Banner == nil || in.Banner.Text != hostile {
+		t.Errorf("text = %+v, want it unchanged", in.Banner)
+	}
+}

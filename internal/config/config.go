@@ -55,6 +55,19 @@ type Config struct {
 	// not what the user is talking to.
 	SourceURL *url.URL
 
+	// Banner is a notice shown at the top of every page, set by the operator.
+	// Empty means no banner at all: no bar, no reserved space.
+	//
+	// Plain text, and it must stay that way. An operator-controlled string
+	// rendered as markup would be a cross-site scripting hole handed over by
+	// configuration, and no content security policy saves a page that renders
+	// it as HTML on purpose.
+	Banner string
+
+	// BannerSeverity decides how loudly the banner is drawn. "info" or
+	// "warning"; anything else is refused at startup rather than guessed at.
+	BannerSeverity string
+
 	// RateLimit is the sustained requests per minute permitted per address.
 	// Zero disables rate limiting entirely.
 	RateLimit int
@@ -144,6 +157,9 @@ func Load(getenv Getenv) (*Config, error) {
 		Listen:     l.str("SENDAN_LISTEN", DefaultListen),
 		ServeUI:    l.boolean("SENDAN_SERVE_UI", true),
 		SendCompat: l.boolean("SENDAN_SEND_COMPAT", false),
+
+		Banner:         l.str("SENDAN_BANNER", ""),
+		BannerSeverity: l.enum("SENDAN_BANNER_SEVERITY", "info", "info", "warning"),
 
 		DefaultTTL:       l.duration("SENDAN_DEFAULT_TTL", DefaultTTL),
 		MaxTTL:           l.duration("SENDAN_MAX_TTL", DefaultMaxTTL),

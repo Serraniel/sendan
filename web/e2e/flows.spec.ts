@@ -1103,3 +1103,65 @@ test.describe("what protected this file, in words", () => {
     }
   });
 });
+
+test.describe("an operator's banner", () => {
+  const hostile = '<img src=x onerror="window.__owned = true"> & "quoted"';
+
+  /** Answers the policy request with a banner, without reconfiguring the instance. */
+  async function withBanner(page: Page, text: string, severity = "info") {
+    await page.route("**/api/instance", async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      await route.fulfill({ json: { ...body, banner: { text, severity } } });
+    });
+  }
+
+  test("is shown on every page, and can be dismissed", async ({ page }) => {
+    await withBanner(page, "This is a demonstration instance.");
+
+    await page.goto("/");
+    await expect(page.getByText("This is a demonstration instance.")).toBeVisible();
+
+    // Every page, not just the first: it is a notice about the instance.
+    await page.goto("/uploads");
+    await expect(page.getByText("This is a demonstration instance.")).toBeVisible();
+
+    await page.getByRole("button", { name: /dismiss this notice/i }).click();
+    await expect(page.getByText("This is a demonstration instance.")).toBeHidden();
+
+    await page.reload();
+    await expect(page.getByText("This is a demonstration instance.")).toBeHidden();
+  });
+
+  test("comes back when the operator changes it", async ({ page }) => {
+    // A flag saying "dismissed" would silence every future notice, including
+    // the one that matters.
+    await withBanner(page, "Maintenance on Friday.");
+    await page.goto("/");
+    await page.getByRole("button", { name: /dismiss this notice/i }).click();
+    await expect(page.getByText("Maintenance on Friday.")).toBeHidden();
+
+    await page.unrouteAll();
+    await withBanner(page, "Shutting down on Monday.");
+    await page.goto("/");
+    await expect(page.getByText("Shutting down on Monday.")).toBeVisible();
+  });
+
+  test("is rendered as text, whatever the operator put in it", async ({ page }) => {
+    // The operator controls this string. Rendered as markup it would be a
+    // scripting hole granted by configuration, and one no policy could save the
+    // page from, because the page would be doing it on purpose.
+    await withBanner(page, hostile);
+    await page.goto("/");
+
+    await expect(page.getByText(hostile)).toBeVisible();
+    expect(await page.evaluate(() => "__owned" in window)).toBe(false);
+    expect(await page.locator(".banner img").count()).toBe(0);
+  });
+
+  test("takes no room at all when none is set", async ({ page }) => {
+    // The instance under test sets none, so this is the default path.
+    await page.goto("/");
+    await expect(page.locator(".banner")).toHaveCount(0);
+  });
+});

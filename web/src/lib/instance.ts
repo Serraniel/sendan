@@ -27,6 +27,13 @@
 
 import type { Transport } from "$lib/tus";
 
+/** A notice the operator set. */
+export interface Banner {
+  /** Plain text. Rendered as text, never as markup. */
+  text: string;
+  severity: "info" | "warning";
+}
+
 /** The policy an instance reports. Any field may be absent. */
 export interface InstancePolicy {
   maxUploadSize: number | null;
@@ -36,6 +43,7 @@ export interface InstancePolicy {
   requireLimit: boolean | null;
   defaultMaxDownloads: number | null;
   compatEnabled: boolean | null;
+  banner: Banner | null;
 }
 
 /** What is known when the instance has said nothing. */
@@ -47,6 +55,7 @@ export const nothingKnown: InstancePolicy = {
   requireLimit: null,
   defaultMaxDownloads: null,
   compatEnabled: null,
+  banner: null,
 };
 
 /**
@@ -96,7 +105,25 @@ export function parsePolicy(value: unknown): InstancePolicy {
     // admits it while the durations above do not.
     defaultMaxDownloads: whole(v.defaultMaxDownloads),
     compatEnabled: boolean(v.compatEnabled),
+    banner: parseBanner(v.banner),
   };
+}
+
+/**
+ * Reads an operator's notice.
+ *
+ * The text is taken as it arrives and rendered as text by whatever shows it.
+ * The severity is not: an unrecognised value becomes the quiet one, because a
+ * typo in configuration should not shout at every visitor.
+ */
+function parseBanner(value: unknown): Banner | null {
+  if (typeof value !== "object" || value === null) return null;
+  const v = value as Record<string, unknown>;
+
+  const text = typeof v.text === "string" ? v.text.trim() : "";
+  if (text === "") return null;
+
+  return { text, severity: v.severity === "warning" ? "warning" : "info" };
 }
 
 function positive(value: unknown): number | null {

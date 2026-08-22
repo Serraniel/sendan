@@ -216,6 +216,9 @@ func run() error {
 		WebUI:         clientAssets(),
 		MaxUploadSize: cfg.MaxUploadSize,
 
+		Banner:         cfg.Banner,
+		BannerSeverity: cfg.BannerSeverity,
+
 		RateLimit:      limiter,
 		TrustedProxies: cfg.TrustedProxies,
 
