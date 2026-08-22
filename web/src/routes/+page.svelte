@@ -9,6 +9,11 @@
     tooLargeMessage,
   } from "$lib/limits";
   import { fetchInstancePolicy, type InstancePolicy, nothingKnown } from "$lib/instance";
+  import {
+    describeRetention,
+    downloadChoices as downloadChoices2,
+    expiryChoices,
+  } from "$lib/retention";
   import InstanceRules from "$lib/InstanceRules.svelte";
   import { acknowledge, isSupported, mustWarn, remember } from "$lib/vault";
   import { TusError } from "$lib/tus";
@@ -43,21 +48,12 @@
   const linkPath = $derived(link === "" ? "" : link.slice(0, link.indexOf("#") + 1));
   const linkSecretText = $derived(link === "" ? "" : link.slice(link.indexOf("#") + 1));
 
-  const ttlChoices = [
-    { seconds: 0, label: "This instance's default" },
-    { seconds: 3600, label: "1 hour" },
-    { seconds: 86400, label: "1 day" },
-    { seconds: 7 * 86400, label: "7 days" },
-    { seconds: 30 * 86400, label: "30 days" },
-  ];
+  // What the instance permits, so somebody can see the rules rather than
+  // discover them by being refused.
+  let policy = $state<InstancePolicy>(nothingKnown);
 
-  const downloadChoices = [
-    { count: 0, label: "No limit" },
-    { count: 1, label: "1 download" },
-    { count: 5, label: "5 downloads" },
-    { count: 20, label: "20 downloads" },
-    { count: 100, label: "100 downloads" },
-  ];
+  const ttlChoices = $derived(expiryChoices(policy));
+  const downloadChoices = $derived(downloadChoices2(policy));
 
   function chooseFile(event: Event) {
     const input = event.currentTarget as HTMLInputElement;
@@ -95,6 +91,7 @@
   // Read once on mount; null means the instance did not say, in which case the
   // interface behaves exactly as it did before this existed.
   let maxUploadSize = $state<MaxUploadSize>(null);
+
 
   const overSize = $derived(file === null ? null : tooLargeMessage(file.size, maxUploadSize));
 
@@ -233,6 +230,17 @@
     return "The upload failed.";
   }
 
+  /**
+   * What was actually applied, said in full.
+   *
+   * The previous version said nothing at all when an upload was set never to
+   * expire, which is the choice that most needs stating: an upload with no
+   * deadline and no download limit is one that stays until somebody removes it
+   * by hand, and the reason this project deletes anything is that nobody
+   * remembers to.
+   */
+  const retention = $derived(describeRetention(ttlSeconds, maxDownloads, policy));
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(link);
@@ -255,9 +263,6 @@
     maxDownloads = 0;
   }
 
-  // What the instance permits, so somebody can see the rules rather than
-  // discover them by being refused.
-  let policy = $state<InstancePolicy>(nothingKnown);
   // Read from the protocol, not from isSecureContext. A browser grants
   // localhost the privileges of a secure context over plain HTTP, so
   // isSecureContext is true there - and reporting "encrypted" about a
@@ -345,8 +350,8 @@
       <p>
         <label for="ttl">Expires after</label><br />
         <select id="ttl" bind:value={ttlSeconds}>
-          {#each ttlChoices as choice (choice.seconds)}
-            <option value={choice.seconds}>{choice.label}</option>
+          {#each ttlChoices as choice (choice.value)}
+            <option value={choice.value}>{choice.label}</option>
           {/each}
         </select>
       </p>
@@ -354,8 +359,8 @@
       <p>
         <label for="downloads">Download limit</label><br />
         <select id="downloads" bind:value={maxDownloads}>
-          {#each downloadChoices as choice (choice.count)}
-            <option value={choice.count}>{choice.label}</option>
+          {#each downloadChoices as choice (choice.value)}
+            <option value={choice.value}>{choice.label}</option>
           {/each}
         </select>
       </p>
@@ -424,14 +429,7 @@
     ends in those {linkSecretText.length} characters.
   </p>
 
-  {#if maxDownloads > 0 || ttlSeconds > 0}
-    <p class="note">
-      This upload {#if ttlSeconds > 0}expires after
-        {ttlChoices.find((c) => c.seconds === ttlSeconds)?.label.toLowerCase()}{/if}{#if maxDownloads > 0 && ttlSeconds > 0}, and{/if}{#if maxDownloads > 0}
-        allows {maxDownloads} download{maxDownloads === 1 ? "" : "s"}{/if}. Whichever
-      comes first removes it.
-    </p>
-  {/if}
+  <p class="note" class:standout={retention.neverRemoved}>{retention.text}</p>
 
   {#if protection}
     <TransparencyCard {protection} {source} />
@@ -608,6 +606,12 @@
     border: 1px solid var(--danger);
     border-radius: var(--radius);
     background: var(--danger-quiet);
+  }
+
+  /* An upload nothing will remove on its own is worth reading twice. */
+  .standout {
+    color: var(--text);
+    font-weight: 600;
   }
 
   .copied {
