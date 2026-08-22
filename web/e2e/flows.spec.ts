@@ -1196,3 +1196,69 @@ test.describe("the list survives leaving the page at once", () => {
     await expect(page.getByText("reloaded.txt")).toBeVisible();
   });
 });
+
+test.describe("generating a password", () => {
+  test("produces words, shows them, and says what they are worth", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("button", { name: "Generate" }).click();
+
+    const field = page.locator("#password");
+    // Shown, necessarily: a password nobody can read is a file nobody can open,
+    // and one hidden behind dots is one somebody retypes wrongly.
+    await expect(field).toHaveAttribute("type", "text");
+    await expect(field).toHaveValue(/^[a-z]+(-[a-z]+){5}$/);
+
+    // Stated rather than implied. "Strong" means nothing; a number can be
+    // checked.
+    await expect(page.getByText(/60 bits of randomness/)).toBeVisible();
+    await expect(page.getByText(/not\s+stored anywhere/)).toBeVisible();
+  });
+
+  test("says to send it by another route", async ({ page }) => {
+    // The point the generator must not obscure: this password is the second
+    // half of the protection, and it is only a second half while it travels
+    // separately from the link.
+    await page.goto("/");
+    await page.getByRole("button", { name: "Generate" }).click();
+
+    await expect(page.getByText(/route other than the link/)).toBeVisible();
+    await expect(page.getByText(/whoever reads the message has\s+both/)).toBeVisible();
+  });
+
+  test("gives a different one every time", async ({ page }) => {
+    await page.goto("/");
+    const generate = page.getByRole("button", { name: "Generate" });
+    const field = page.locator("#password");
+
+    const seen = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      await generate.click();
+      seen.add((await field.inputValue()) ?? "");
+    }
+    expect(seen.size).toBe(5);
+  });
+
+  test("the generated password actually opens the file", async ({ page }) => {
+    // The whole point, and the thing a generator can quietly get wrong: what is
+    // shown must be what was used.
+    await page.goto("/");
+    await page.getByRole("button", { name: "Generate" }).click();
+    const password = await page.locator("#password").inputValue();
+
+    await page.setInputFiles("#file", {
+      name: "guarded.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("guarded contents"),
+    });
+    page.once("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Encrypt and send" }).click();
+
+    const link = await page.locator("#link").inputValue();
+    expect(link).not.toContain(password);
+
+    await page.goto(link);
+    await page.fill("#password", password);
+    await page.getByRole("button", { name: "Unlock" }).click();
+    await expect(page.getByText("guarded.txt")).toBeVisible();
+  });
+});
