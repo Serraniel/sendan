@@ -950,6 +950,21 @@ test.describe("the footer", () => {
     await expect(source).toContainText("opens in a new tab");
   });
 
+  test("marks the source link without letting the mark name it", async ({ page }) => {
+    await page.goto("/");
+    const source = page.getByRole("link", { name: /^source/ });
+
+    // Drawn in the page: the policy allows no external image, and a remote one
+    // would report every visitor of every instance to whoever hosts it.
+    await expect(source.locator("svg.mark")).toBeVisible();
+    expect(await source.locator("img").count()).toBe(0);
+
+    // Decorative. The word is what names the link, so the mark must not reach
+    // the accessible name - and the link must still work where images do not.
+    await expect(source.locator("svg.mark")).toHaveAttribute("aria-hidden", "true");
+    await expect(source).toHaveAccessibleName(/^source/);
+  });
+
   test("keeps the link to this browser's own list in place", async ({ page }) => {
     // Not every link should leave: this one stays on the instance, and opening
     // it in a new tab would be a different kind of surprise.

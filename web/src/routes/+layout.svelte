@@ -60,7 +60,35 @@
         it. noopener as well as noreferrer, so the opened page gets no handle
         on this one.
       -->
-      <a href={build.source} target="_blank" rel="noreferrer noopener">
+      <a class="source" href={build.source} target="_blank" rel="noreferrer noopener">
+        <!--
+          A neutral mark rather than a host's logo, and that is a correctness
+          decision before it is a trademark one: SENDAN_SOURCE_URL is the
+          operator's to set, and an operator running modified code is obliged to
+          point it at their own source. A logo would therefore be wrong exactly
+          on the instances where this link matters most.
+
+          Inline and aria-hidden: the policy allows no external image, a remote
+          one would report every visitor to its host, and the word beside it is
+          what names the link.
+        -->
+        <svg
+          class="mark"
+          viewBox="0 0 16 16"
+          width="14"
+          height="14"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <path
+            d="M4.5 2.5v7M4.5 13.5a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM4.5 2.5a2 2 0 1 0 0-.001M11.5 6.5a2 2 0 1 0 0-.001M11.5 6.5v1a3 3 0 0 1-3 3h-4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
         source<span class="visually-hidden"> (opens in a new tab)</span>
       </a>
       &middot;
@@ -200,6 +228,21 @@
 
   footer p {
     margin: 0;
+  }
+
+  .source {
+    /* The mark sits on the text baseline rather than above it, and the pair
+       never breaks across a line. */
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3em;
+    white-space: nowrap;
+  }
+
+  .mark {
+    /* Takes the link's colour, including on hover, because it is part of the
+       link rather than an image beside one. */
+    flex: none;
   }
 
   .caveat {
