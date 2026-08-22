@@ -1141,7 +1141,39 @@ itself - whether the connection is encrypted - is read from the protocol rather
 than from `isSecureContext`, which is true on `localhost` over plain HTTP and
 would have reported an encrypted connection where there is none.
 
-### 9.6 What it costs
+### 9.6 What protected a file, in words
+
+The transparency card states the cipher, the derivation and the parameters. That
+is the right thing to keep and it is not what most people can act on, so a short
+list of plain claims sits above it and the parameters move behind a fold.
+
+Two rules govern what may appear in that list, and they are what make it worth
+showing at all.
+
+**Nothing is claimed that is not established.** Every line comes from the
+protection record, from the constants the cryptography actually uses, or from
+something the browser can see for itself. A test asserts that no claim contains
+a parameter, because a line that reads `AES-GCM` has stopped being a claim
+somebody can act on.
+
+**An honest "no" is the point.** A compatibility upload does not get "the
+instance cannot read it"; it gets the reason it cannot have that line. An upload
+with no password says that anyone holding the link can open it. An instance
+served without transport encryption says the code doing the decryption could
+have been altered on the way. Hiding those would make the rest worthless.
+
+Every line carries its reason, whether it holds or not: a mark without one is an
+assertion, and this list exists to replace assertions with facts. The answer is
+carried by a glyph as well as by colour, since colour alone says nothing to
+somebody who cannot tell the two apart.
+
+Quantum resistance appears, and holds. That surprises people, so the reason is
+given rather than the conclusion: nothing here is negotiated over the wire, so
+there is no key agreement to record and break later, and the secrets are sized
+so that halving them still leaves them out of reach (§2.4). No post-quantum
+algorithm is involved, which is exactly why the line has to explain itself.
+
+### 9.7 What it costs
 
 No web font: the system stack, which transfers nothing, cannot flash, and adds
 nothing to the asset manifest that `sendan verify` checks. The whole stylesheet
