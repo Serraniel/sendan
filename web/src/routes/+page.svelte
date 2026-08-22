@@ -9,6 +9,7 @@
     tooLargeMessage,
   } from "$lib/limits";
   import { fetchInstancePolicy, type InstancePolicy, nothingKnown } from "$lib/instance";
+  import { DEFAULT_WORDS, describeStrength, generate } from "$lib/passphrase";
   import {
     describeRetention,
     downloadChoices as downloadChoices2,
@@ -241,6 +242,33 @@
    */
   const retention = $derived(describeRetention(ttlSeconds, maxDownloads, policy));
 
+  /**
+   * Puts a generated passphrase in the field.
+   *
+   * Shown, necessarily: a password nobody can read is a file nobody can open.
+   * So the field is switched to plain text at the same moment, because a
+   * generated secret hidden behind dots is one somebody will retype wrongly.
+   */
+  let passwordVisible = $state(false);
+  let generated = $state(false);
+
+  function generatePassword() {
+    password = generate(DEFAULT_WORDS);
+    passwordVisible = true;
+    generated = true;
+  }
+
+  async function copyPassword() {
+    try {
+      await navigator.clipboard.writeText(password);
+      passwordCopied = true;
+    } catch {
+      passwordCopied = false;
+      failure = "Could not reach the clipboard. Select the password and copy it.";
+    }
+  }
+  let passwordCopied = $state(false);
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(link);
@@ -333,15 +361,37 @@
       <p class="muted small options-note">Most people change none of these.</p>
 
       <p>
-        <label for="password">Password (optional)</label><br />
-        <input
-          id="password"
-          type="password"
-          bind:value={password}
-          autocomplete="new-password"
-          aria-describedby="password-note"
-        />
+        <label for="password">Password (optional)</label>
+        <span class="password-row">
+          <input
+            id="password"
+            type={passwordVisible ? "text" : "password"}
+            bind:value={password}
+            autocomplete="new-password"
+            aria-describedby="password-note"
+          />
+          <button type="button" onclick={generatePassword}>Generate</button>
+        </span>
       </p>
+
+      {#if generated}
+        <!--
+          Said out loud, because the consequences are not obvious: it is on
+          screen, it is not stored anywhere, and it has to reach the recipient
+          by some route other than the link.
+        -->
+        <p class="note generated" role="status">
+          <strong>Copy this now.</strong> It is {describeStrength(DEFAULT_WORDS)} It is not
+          stored anywhere and will not be shown again after this upload.
+          <button type="button" onclick={copyPassword}>Copy password</button>
+          {#if passwordCopied}<span class="copied">Copied.</span>{/if}
+        </p>
+        <p class="note">
+          Send it by some route other than the link. A password in the same
+          message as the link protects nothing: whoever reads the message has
+          both.
+        </p>
+      {/if}
       <p id="password-note" class="note">
         The password becomes part of the key. Nobody can open the file without
         it, including whoever runs this instance — and nobody can reset it.
@@ -612,6 +662,30 @@
   .standout {
     color: var(--text);
     font-weight: 600;
+  }
+
+  .password-row {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+  }
+
+  .password-row input {
+    flex: 1;
+    min-width: 0;
+    /* A generated passphrase is long, and hyphenated words are easier to check
+       against a written copy in a monospaced face. */
+    font-family: var(--font-mono);
+  }
+
+  .generated {
+    color: var(--text);
+  }
+
+  .generated button {
+    min-height: 2rem;
+    padding: 0 var(--space-2);
+    font-size: var(--text-sm);
   }
 
   .copied {
