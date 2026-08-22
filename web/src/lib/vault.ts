@@ -108,9 +108,23 @@ function run<T>(
       new Promise<T>((resolve, reject) => {
         const tx = db.transaction(STORE, mode);
         const request = work(tx.objectStore(STORE));
-        request.onsuccess = () => resolve(request.result);
+
+        // Resolved when the transaction commits, not when the request
+        // succeeds. A request succeeds while its transaction is still open, so
+        // resolving there hands control back before anything is durable - and
+        // a caller that navigates on the next line, as the upload page does,
+        // can leave the browser to discard the write. The upload arrives, the
+        // record does not, and the list is empty for a file that was sent.
+        let result: T | undefined;
+        request.onsuccess = () => {
+          result = request.result;
+        };
         request.onerror = () => reject(request.error ?? new Error("indexeddb: request failed"));
-        tx.oncomplete = () => db.close();
+
+        tx.oncomplete = () => {
+          db.close();
+          resolve(result as T);
+        };
         tx.onabort = () => {
           db.close();
           reject(tx.error ?? new Error("indexeddb: transaction aborted"));
