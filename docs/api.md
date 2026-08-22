@@ -325,6 +325,22 @@ Every value is policy: what an upload may ask for, and what it will be refused.
 where a transfer reads it; it is repeated here so that everything shown before a
 file is chosen comes from one answer.
 
+`banner` is present only when an operator set one, and carries `text` and a
+`severity` of `info` or `warning`. It is not policy, unlike everything else
+here, but it belongs on the same answer: it is a fact about the instance that
+every page needs, and a second endpoint for one string would be a second request
+on every visit. The text is delivered as text and rendered as text; an
+operator-controlled string interpreted as markup would be a scripting hole
+granted by configuration.
+
+`banner` is present only when an operator set one, and carries `text` and a
+`severity` of `info` or `warning`. It is not policy, unlike everything else
+here, but it belongs on the same answer: it is a fact about the instance that
+every page needs, and a second endpoint for one string would be a second request
+on every visit. It is delivered as text and rendered as text — an
+operator-controlled string interpreted as markup would be a scripting hole
+granted by configuration.
+
 `compatEnabled` is published because it is the one setting that changes what
 protection an upload can have: through those endpoints the instance checks the
 password rather than the password contributing to the key.

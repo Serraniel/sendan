@@ -2,17 +2,25 @@
   import { onMount } from "svelte";
   import BrowserCheck from "$lib/BrowserCheck.svelte";
   import { type Build, fetchBuild, shortCommit, sourceIsExact } from "$lib/source";
+  import { fetchInstancePolicy, nothingKnown } from "$lib/instance";
+  import OperatorBanner from "$lib/OperatorBanner.svelte";
   import ThemeToggle from "$lib/ThemeToggle.svelte";
   import "../app.css";
 
   let { children } = $props();
   let build = $state<Build | null>(null);
 
+  // Fetched here rather than per page, because a notice about the instance
+  // belongs on every page. The send page asks for the same answer and gets it
+  // from the browser's cache.
+  let policy = $state(nothingKnown);
+
   // Read after mount rather than during render: the footer is not worth
   // delaying the page for, and an instance that cannot answer should still
   // serve one that works.
   onMount(async () => {
     build = await fetchBuild();
+    policy = await fetchInstancePolicy();
   });
 </script>
 
@@ -21,6 +29,8 @@
   keyboard can pass the header rather than tabbing through it on every page.
 -->
 <a class="skip" href="#main">Skip to content</a>
+
+<OperatorBanner banner={policy.banner} />
 
 <header>
   <div class="bar">

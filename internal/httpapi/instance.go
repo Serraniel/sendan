@@ -6,6 +6,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -55,6 +56,13 @@ type Instance struct {
 	// not choose one. Zero means no limit.
 	DefaultMaxDownloads int `json:"defaultMaxDownloads"`
 
+	// Banner is a notice the operator set, or nil when none is set.
+	//
+	// Not policy, unlike everything else here, but it belongs on the same
+	// answer: it is a fact about this instance that every page needs, and a
+	// second endpoint for one string would be a second request on every visit.
+	Banner *Banner `json:"banner,omitempty"`
+
 	// CompatEnabled reports whether the third-party compatibility endpoints are
 	// served.
 	//
@@ -63,6 +71,17 @@ type Instance struct {
 	// rather than the password contributing to the key. Somebody choosing an
 	// instance is entitled to know that before they use it, not after.
 	CompatEnabled bool `json:"compatEnabled"`
+}
+
+// Banner is an operator's notice.
+type Banner struct {
+	// Text is plain text and is delivered as such. The client renders it as
+	// text, never as markup: an operator-controlled string interpreted as HTML
+	// would be a scripting hole granted by configuration.
+	Text string `json:"text"`
+
+	// Severity is "info" or "warning", and decides only how loudly it is drawn.
+	Severity string `json:"severity"`
 }
 
 // handleInstance reports the policy an instance enforces.
@@ -88,6 +107,16 @@ func describeInstance(opts Options) Instance {
 	in := Instance{
 		MaxUploadSize: opts.MaxUploadSize,
 		CompatEnabled: opts.Compat != nil,
+	}
+
+	// Absent rather than empty: a banner with no text is not a banner, and the
+	// client should not have to decide whether to draw an empty bar.
+	if text := strings.TrimSpace(opts.Banner); text != "" {
+		severity := opts.BannerSeverity
+		if severity != "warning" {
+			severity = "info"
+		}
+		in.Banner = &Banner{Text: text, Severity: severity}
 	}
 
 	// A service is absent in a backend-only assembly and in tests that exercise

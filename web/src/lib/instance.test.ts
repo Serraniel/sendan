@@ -12,6 +12,7 @@ const full = {
   requireLimit: true,
   defaultMaxDownloads: 3,
   compatEnabled: false,
+  banner: null,
 };
 
 describe("reading what an instance says", () => {
@@ -82,6 +83,33 @@ describe("asking the instance", () => {
       fetch: async () => new Response("<html>an error page</html>"),
     });
     expect(policy).toEqual(nothingKnown);
+  });
+});
+
+describe("an operator's notice", () => {
+  it("is read when one is set", () => {
+    const policy = parsePolicy({ ...full, banner: { text: "Demo", severity: "warning" } });
+    expect(policy.banner).toEqual({ text: "Demo", severity: "warning" });
+  });
+
+  it("takes an unrecognised severity as the quiet one", () => {
+    // A typo in configuration should not shout at every visitor.
+    const policy = parsePolicy({ ...full, banner: { text: "Demo", severity: "catastrophe" } });
+    expect(policy.banner?.severity).toBe("info");
+  });
+
+  it("is absent when the text is empty or missing", () => {
+    for (const banner of [null, {}, { text: "   " }, { severity: "warning" }, "a banner"]) {
+      expect(parsePolicy({ ...full, banner }).banner).toBeNull();
+    }
+  });
+
+  it("does not alter the text it was given", () => {
+    // The operator's words reach the interface as written; what stops them
+    // being markup is that they are rendered as text, not that they are
+    // sanitised here.
+    const hostile = "<script>alert(1)</script>";
+    expect(parsePolicy({ ...full, banner: { text: hostile } }).banner?.text).toBe(hostile);
   });
 });
 
