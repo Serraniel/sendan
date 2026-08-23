@@ -11,6 +11,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Runs against the toolchain go.mod names, not whatever is installed. Sourced
+# by a path relative to the repository root, because the cd above has already
+# moved there and $0 no longer resolves from here.
+# shellcheck source=scripts/go-toolchain.sh
+. ./scripts/go-toolchain.sh
+
 data="$(mktemp -d)"
 trap 'rm -rf "$data"' EXIT
 

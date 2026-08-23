@@ -16,6 +16,12 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Runs against the toolchain go.mod names, not whatever is installed. Sourced
+# by a path relative to the repository root, because the cd above has already
+# moved there and $0 no longer resolves from here.
+# shellcheck source=scripts/go-toolchain.sh
+. ./scripts/go-toolchain.sh
+
 # Tools installed by `go install` land here and are not always on PATH.
 PATH="$PATH:$(go env GOPATH)/bin"
 export PATH
@@ -69,6 +75,7 @@ dir=web check "vitest"            npm run --silent test:coverage
 dir=web check "vite build"        npm run --silent build
 dir=. check "asset audit"         ./scripts/audit-assets.sh
 dir=. check "third-party notices" ./scripts/check-notices.sh
+dir=. check "go version"          ./scripts/check-go-version.sh
 
 echo
 if [ "$failed" -ne 0 ]; then
