@@ -20,6 +20,7 @@
   import { TusError } from "$lib/tus";
   import { type UploadProgress, type UploadResult, uploadFile } from "$lib/upload";
   import TransparencyCard from "$lib/TransparencyCard.svelte";
+  import LinkCode from "$lib/LinkCode.svelte";
   import { describeUpload, type Protection } from "$lib/protection";
   import { fetchBuild } from "$lib/source";
 
@@ -478,6 +479,13 @@
     A link that loses it cannot be repaired, by anyone. Check that what you paste
     ends in those {linkSecretText.length} characters.
   </p>
+
+  <!--
+    Taken from the protection record rather than from the field: the page
+    clears the password as soon as the upload is done, deliberately, so that it
+    is neither kept in memory nor silently reused by the next one.
+  -->
+  <LinkCode {link} hasPassword={protection?.password != null} />
 
   <p class="note" class:standout={retention.neverRemoved}>{retention.text}</p>
 

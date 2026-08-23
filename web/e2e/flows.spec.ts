@@ -1301,3 +1301,56 @@ test.describe("generating a password", () => {
     await expect(page.getByText("guarded.txt")).toBeVisible();
   });
 });
+
+test.describe("a code to scan", () => {
+  test("is drawn from the link, in the page", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.accept());
+    const link = await uploadThrough(page, "scanned.txt", Buffer.from("scanned"), "text/plain", {
+      limit: "1 download",
+    });
+
+    await page.getByText("Show a code to scan").click();
+    const code = page.locator("svg.qr");
+    await expect(code).toBeVisible();
+
+    // Drawn here, not fetched: sending the link to a service that renders
+    // codes would hand that service the key.
+    expect(await page.locator("svg.qr image, svg.qr use").count()).toBe(0);
+
+    // The module count follows from the link's length, so this is a check that
+    // it encoded something of the right size rather than drew a placeholder.
+    const box = await code.getAttribute("viewBox");
+    const modules = Number((box ?? "0 0 0 0").split(" ")[2]) - 8;
+    expect(modules).toBeGreaterThanOrEqual(21);
+    expect((modules - 17) % 4).toBe(0);
+    expect(link.length).toBeGreaterThan(40);
+  });
+
+  test("says the code carries the key, and that the password stays out of it", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "guarded.txt", Buffer.from("guarded"), "text/plain", {
+      password: "a password for this file",
+      limit: "1 download",
+    });
+
+    await page.getByText("Show a code to scan").click();
+
+    // The code is the link, so photographing it is enough to open the file.
+    await expect(page.getByText(/Anybody who photographs it/)).toBeVisible();
+
+    // And the point the feature could otherwise undo: a password is a second
+    // channel, and a code carrying both collapses the two into one.
+    await expect(page.getByText(/The password is not in the code/)).toBeVisible();
+    await expect(page.getByText(/whoever sees the picture has both/)).toBeVisible();
+  });
+
+  test("says nothing about a password when there is none", async ({ page }) => {
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "open.txt", Buffer.from("open"), "text/plain", {
+      limit: "1 download",
+    });
+
+    await page.getByText("Show a code to scan").click();
+    await expect(page.getByText(/The password is not in the code/)).toBeHidden();
+  });
+});
