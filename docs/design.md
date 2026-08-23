@@ -1199,7 +1199,34 @@ user interacting with an instance over a network to be offered the corresponding
 source, which the footer's source link answers. The notices file says so, so
 that neither is mistaken for the other.
 
-### 9.8 What it costs
+### 9.8 The code to scan
+
+The link contains the key, so it cannot be sent anywhere to be drawn. A code is
+encoded in the page: byte mode, level M, versions one to ten, which is far more
+than any link needs. The numeric and alphanumeric modes are absent because a
+link is mixed case with punctuation and could never use them.
+
+**The password stays out of it, and the interface says so.** A password protects
+a file because it travels separately from the link; a code carrying both
+collapses two channels into one, and unlike the warning on the page, the code
+outlives it - it is photographed, forwarded and printed. If the awkwardness of
+sharing two things is worth solving, the version worth building is two codes,
+presented separately.
+
+An encoder nobody checks against another implementation produces something
+plausible and unreadable, so this one is checked three ways: module for module
+against matrices from an independent implementation with the mask pinned; by
+counting the modules left for data against the standard's capacities, since
+reserving one too many shifts every bit after it; and by decoding the rendered
+result with a scanner.
+
+That last one is what found the bug. The error correction was computed with the
+generator polynomial's coefficients in ascending order while the division
+indexed them descending - and the second implementation written to check it
+shared the misunderstanding, so it agreed. Only bytes from a third party
+disagreed.
+
+### 9.9 What it costs
 
 No web font: the system stack, which transfers nothing, cannot flash, and adds
 nothing to the asset manifest that `sendan verify` checks. The whole stylesheet
