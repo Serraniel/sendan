@@ -228,6 +228,9 @@ Vulnerabilities must not be reported as pull requests; see
 - Include tests, as described above.
 - Ensure continuous integration passes in full.
 - Write commit messages that explain the reasoning, not only the change.
+- **Adding a dependency that ships to a browser means regenerating the notices**
+  with `node scripts/third-party-notices.mjs`. `scripts/verify.sh` fails if the
+  committed file no longer matches the dependency tree.
 - **Do not give the pull request itself a Conventional Commit title.** Describe
   it in plain words: "Encrypted export of the upload list", not
   "feat(web): encrypted export of the upload list".

@@ -98,7 +98,12 @@
       -->
       <a href="/uploads">your uploads</a>
       &middot;
-      {build.license}
+      <!--
+        Served from the instance rather than only kept in the repository: what
+        is distributed to a browser is the bundle, and the licences of the code
+        inside it require their notices to travel with the copy.
+      -->
+      <a href="/third-party-notices.txt">{build.license}, and notices</a>
     </p>
 
     {#if !sourceIsExact(build)}

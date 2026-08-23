@@ -965,6 +965,30 @@ test.describe("the footer", () => {
     await expect(source).toHaveAccessibleName(/^source/);
   });
 
+  test("serves the notices for the code it ships", async ({ page, request }) => {
+    // MIT requires its notice to travel with "all copies or substantial
+    // portions", and what is distributed to a browser is the bundle rather
+    // than the repository - so a link to the source does not discharge it.
+    await page.goto("/");
+    const notices = page.getByRole("link", { name: /notices/i });
+    await expect(notices).toHaveAttribute("href", "/third-party-notices.txt");
+
+    // Fetched rather than clicked: this is a text/plain document, and how a
+    // browser chooses to render one is not what is being tested.
+    const response = await request.get("/third-party-notices.txt");
+    expect(response.status()).toBe(200);
+
+    const text = await response.text();
+    for (const shipped of ["svelte", "@sveltejs/kit", "hash-wasm"]) {
+      expect(text, shipped).toContain(shipped);
+    }
+    expect(text).toContain("Permission is hereby granted");
+
+    // And it does not pretend to discharge the obligation Sendan has of its
+    // own, which the source link answers.
+    expect(text).toContain("AGPL-3.0-or-later");
+  });
+
   test("keeps the link to this browser's own list in place", async ({ page }) => {
     // Not every link should leave: this one stays on the instance, and opening
     // it in a new tab would be a different kind of surprise.

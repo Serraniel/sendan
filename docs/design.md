@@ -1173,7 +1173,33 @@ there is no key agreement to record and break later, and the secrets are sized
 so that halving them still leaves them out of reach (§2.4). No post-quantum
 algorithm is involved, which is exactly why the line has to explain itself.
 
-### 9.7 What it costs
+### 9.7 Third-party notices
+
+Every third-party package whose code reaches a browser here is MIT, and MIT
+requires its copyright and permission notice to travel with "all copies or
+substantial portions of the Software". What is distributed to a user is the
+bundle, not this repository, so the source link in the footer does not discharge
+it: the notice has to be reachable from the thing that was served. It is, at
+`/third-party-notices.txt`.
+
+Which packages count is a decision rather than a lookup. npm's dev/production
+split does not answer it: Svelte and SvelteKit are devDependencies whose runtime
+code is compiled into the bundle and does ship, while the linters and test
+runners beside them do not. The generator names the shipping frameworks
+explicitly and takes the rest from `dependencies`.
+
+The file is generated, and `scripts/verify.sh` regenerates it and fails if the
+committed copy differs. The risk was never that a hand-written list would be
+wrong when written - it is that it would stay as written while a dependency was
+upgraded underneath it, naming versions that were not shipped and omitting code
+that was.
+
+Sendan's own obligation is separate and larger: AGPL-3.0-or-later requires a
+user interacting with an instance over a network to be offered the corresponding
+source, which the footer's source link answers. The notices file says so, so
+that neither is mistaken for the other.
+
+### 9.8 What it costs
 
 No web font: the system stack, which transfers nothing, cannot flash, and adds
 nothing to the asset manifest that `sendan verify` checks. The whole stylesheet
