@@ -66,6 +66,21 @@ keep.
 The manifest is updated by release-please itself when a release pull request is
 merged. It is not a value to edit by hand afterwards.
 
+## The release commit signs itself off
+
+Every commit here carries a Developer Certificate of Origin sign-off, and
+[commit-check](commit-check.md) enforces it. A pull request opened by a bot is
+exempt from the sign-off *matching* its author - nobody holds the bot's key, so
+an exact match could never succeed - but it still has to carry one.
+
+release-please writes no trailers of its own, so its release commit failed that
+check and the release could not be merged. `signoff` in the configuration is the
+setting for it: release-please adds the line itself, under the identity it
+authors with.
+
+Worth knowing rather than rediscovering: this blocks the release pull request
+and nothing else, so it stays invisible until the moment a release is wanted.
+
 ## Why pull request titles are not Conventional Commits
 
 Squash merging is disabled, so every commit enters `main` as written and each
