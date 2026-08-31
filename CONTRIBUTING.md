@@ -116,6 +116,14 @@ cd web && npx playwright install && npm run test:e2e
 They are advisory rather than a merge gate; `docs/workflows/e2e-test.md` says
 why.
 
+> [!NOTE]
+> The scripts run Go through the toolchain `go.mod` names, not whatever is
+> installed. The `toolchain` directive alone does not do this — it is a minimum,
+> and a machine whose Go has moved ahead keeps using the newer one — so
+> `scripts/go-toolchain.sh` sets `GOTOOLCHAIN` to it exactly. Without that, the
+> linters run against a standard library they were not built for, and the crash
+> arrives looking like a finding about your change.
+
 > [!IMPORTANT]
 > **Read exit codes, not output.** `npm run lint | tail -1` prints
 > `Checked 40 files. No fixes applied.` and hides the `Found 1 error.` above it;

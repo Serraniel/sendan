@@ -13,6 +13,13 @@ module github.com/Serraniel/sendan
 // CONTRIBUTING.md for how to reproduce a CI run when that matters.
 go 1.25.8
 
+// The toolchain this project is built and checked with. It is a minimum rather
+// than a pin - a newer local Go is used in preference to it - so the scripts
+// read the version from here and set GOTOOLCHAIN to it exactly. Without that,
+// a machine whose Go has moved ahead runs the linters against a standard
+// library they cannot parse, and the failure looks like a finding.
+toolchain go1.25.13
+
 require (
 	github.com/cloudflare/circl v1.6.5
 	github.com/coder/websocket v1.8.15
