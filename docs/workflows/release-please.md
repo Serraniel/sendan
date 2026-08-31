@@ -34,10 +34,13 @@ trustworthiness, not about feature completeness.
 
 Two settings enforce that, because neither is the default:
 
-- `.release-please-manifest.json` records the last released version. It starts
-  at `0.0.0`, which is what makes the first release `0.1.0`. Without a manifest,
-  release-please has no prior version to reason from and calls a first release
-  `1.0.0`.
+- `initial-version` names the first release: `0.1.0`. This is the setting that
+  decides it, and nothing else does. A manifest of `0.0.0` is not enough on its
+  own — with no release to reason from, release-please proposes `1.0.0` — which
+  was observed rather than assumed: the manifest was in place and the standing
+  pull request still read `chore(main): release 1.0.0`.
+- `.release-please-manifest.json` records the last released version, and
+  release-please rewrites it when a release pull request is merged.
 - `bump-minor-pre-major` keeps a breaking change inside `0.x` rather than
   declaring 1.0.0 on its own. A project below 1.0.0 is saying its interfaces may
   still move; a breaking change is expected there and is not the moment to make
