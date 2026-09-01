@@ -20,8 +20,10 @@ pull request up to date with the next version number and the generated
 - `feat!:` or a `BREAKING CHANGE:` footer bumps the **minor** version while this
   project is below 1.0.0, and the major version afterwards
 
-Merging that pull request tags the release, which triggers
-[release](release.md).
+Merging that pull request tags the release, and this workflow then calls
+[release](release.md) directly. It does not rely on the tag to start it: a tag
+pushed with `GITHUB_TOKEN` starts no workflow, which is how the first release
+tagged and then did nothing.
 
 ## Versioning
 
