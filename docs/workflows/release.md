@@ -6,8 +6,22 @@ Produces the permanent, signed, versioned artefacts users install.
 
 ## Triggers
 
-Tags matching `v*` — created by merging the release pull request from
-[release-please](release-please.md).
+Called by [release-please](release-please.md) when it creates a release, and on
+demand with a tag, for a release that has to be rebuilt.
+
+It is deliberately **not** triggered by the tag. A tag pushed with
+`GITHUB_TOKEN` starts no workflow — GitHub refuses that so a workflow cannot
+start itself — and release-please pushes with exactly that token. Left as
+`on: push: tags`, this never ran for a real release: `v0.1.0` was tagged and
+produced no binaries, no image and no signatures, with nothing failing to say
+so.
+
+Chaining avoids a personal access token, which would be a long-lived credential
+held for one job and a second thing to rotate.
+
+Because it is called rather than triggered, the workflow's own ref is the
+caller's branch. Every checkout and every step that needs the version takes the
+tag from the input instead.
 
 ## What it does
 

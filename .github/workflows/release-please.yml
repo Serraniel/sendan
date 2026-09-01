@@ -15,6 +15,9 @@ jobs:
   release-please:
     name: Update release pull request
     runs-on: ubuntu-latest
+    outputs:
+      released: ${{ steps.release.outputs.release_created }}
+      tag: ${{ steps.release.outputs.tag_name }}
     permissions:
       contents: write
       pull-requests: write
@@ -29,3 +32,25 @@ jobs:
       # is pre-1.0. The manifest is also what stops a first release defaulting
       # to 1.0.0 — see docs/workflows/release-please.md.
       - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        id: release
+
+  # Called rather than left to the tag, because a tag pushed with GITHUB_TOKEN
+  # starts no workflow: GitHub refuses that so a workflow cannot start itself,
+  # and release-please pushes with exactly that token. Left as `on: push: tags`,
+  # release.yml never ran for a real release - v0.1.0 tagged, and produced no
+  # binaries, no image and no signatures, with nothing failing to say so.
+  #
+  # Chaining avoids a personal access token, which would be a long-lived
+  # credential kept for one job and a second thing to rotate.
+  release:
+    name: Publish the release
+    needs: release-please
+    if: needs.release-please.outputs.released == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release-please.outputs.tag }}
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    secrets: inherit

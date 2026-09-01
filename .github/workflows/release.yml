@@ -3,15 +3,38 @@
 # Publishes signed, versioned artefacts. See docs/workflows/release.md
 name: Release
 
+# Called by release-please rather than triggered by its tag. A tag pushed with
+# GITHUB_TOKEN does not start a workflow - GitHub refuses that deliberately, so
+# that a workflow cannot start itself - and release-please pushes the tag with
+# exactly that token. `on: push: tags` therefore never fires for a real release,
+# which is a release that tags and then does nothing: no binaries, no image, no
+# signatures, and nothing failing to say so.
+#
+# Chaining it is what avoids a personal access token, which would be a
+# long-lived credential held for one job and a second thing to rotate.
 on:
-  push:
-    tags: ["v*"]
+  workflow_call:
+    inputs:
+      tag:
+        description: The tag to build, as refs/tags/v1.2.3 or v1.2.3.
+        required: true
+        type: string
   workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag to build, for a release that has to be rebuilt by hand.
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 env:
+  # The tag being released. Called rather than triggered, so the workflow's own
+  # ref is the caller's branch: every step that needs the version, and every
+  # checkout, has to take it from here instead of from GITHUB_REF_NAME.
+  TAG: ${{ inputs.tag }}
+
   GO_VERSION: "1.25.13"
   NODE_VERSION: "22"
   REGISTRY: ghcr.io
@@ -26,6 +49,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -35,7 +60,7 @@ jobs:
       - name: Build twice and compare
         run: |
           set -euo pipefail
-          export SENDAN_VERSION="${GITHUB_REF_NAME:-dev}"
+          export SENDAN_VERSION="${TAG:-dev}"
           export SENDAN_COMMIT="${GITHUB_SHA:-unknown}"
 
           ./scripts/release-build.sh /tmp/dist-a >/dev/null
@@ -66,6 +91,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.tag }}
+        with:
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -76,7 +103,7 @@ jobs:
       - name: Build every target
         run: |
           set -euo pipefail
-          export SENDAN_VERSION="${GITHUB_REF_NAME:-dev}"
+          export SENDAN_VERSION="${TAG:-dev}"
           export SENDAN_COMMIT="${GITHUB_SHA:-unknown}"
           ./scripts/release-build.sh dist
 
@@ -89,7 +116,7 @@ jobs:
         run: |
           set -euo pipefail
           (cd web && npm ci && npm run build)
-          SENDAN_VERSION="${GITHUB_REF_NAME:-dev}" SENDAN_COMMIT="${GITHUB_SHA:-unknown}" \
+          SENDAN_VERSION="${TAG:-dev}" SENDAN_COMMIT="${GITHUB_SHA:-unknown}" \
             ./scripts/asset-manifest.sh dist/manifest.json
       # An unsigned manifest is only as trustworthy as the page it came from,
       # and that page is the obvious thing to replace if the goal is to make a
@@ -166,7 +193,7 @@ jobs:
           minisign -S \
             -s "$keydir/minisign.key" \
             -m dist/manifest.json \
-            -t "sendan ${GITHUB_REF_NAME} client asset manifest"
+            -t "sendan ${TAG} client asset manifest"
 
           go run ./tools/pq-sign sign "$keydir/release.pqkey" dist/manifest.json
 
@@ -180,8 +207,8 @@ jobs:
             echo "To reproduce:"
             echo
             echo '```sh'
-            echo "git checkout ${GITHUB_REF_NAME:-HEAD}"
-            echo "SENDAN_VERSION=${GITHUB_REF_NAME:-dev} SENDAN_COMMIT=${GITHUB_SHA:-unknown} \\"
+            echo "git checkout ${TAG:-HEAD}"
+            echo "SENDAN_VERSION=${TAG:-dev} SENDAN_COMMIT=${GITHUB_SHA:-unknown} \\"
             echo "  ./scripts/release-build.sh"
             echo "sha256sum -c dist/SHA256SUMS"
             echo '```'
@@ -190,7 +217,7 @@ jobs:
       - name: Attach to the release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${GITHUB_REF_NAME}" dist/* --clobber
+        run: gh release upload "${TAG}" dist/* --clobber
 
   container:
     name: Publish container image
@@ -209,6 +236,8 @@ jobs:
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -230,7 +259,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=semver,pattern={{major}},enable=${{ !startsWith(inputs.tag, 'v0.') }}
             type=sha,prefix=sha-,format=short
           labels: |
             org.opencontainers.image.title=Sendan
@@ -247,7 +276,7 @@ jobs:
           # `sendan verify` reads /api/source to decide which published manifest
           # to compare against.
           build-args: |
-            VERSION=${{ github.ref_name }}
+            VERSION=${{ inputs.tag }}
             COMMIT=${{ github.sha }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
