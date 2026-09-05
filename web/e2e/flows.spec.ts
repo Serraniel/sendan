@@ -868,6 +868,20 @@ test.describe("choosing a file", () => {
     // The action becomes available, which is the thing that proves the file was
     // taken rather than only displayed.
     await expect(page.getByRole("button", { name: "Encrypt and send" })).toBeEnabled();
+
+    // And the file input agrees, which is what this test is named for and had
+    // never checked. The input is `required`, so a drop that only sets the
+    // component's own state produces a zone showing the file and a form the
+    // browser refuses to submit - "Please select a file" at the last step.
+    const form = await page.evaluate(() => {
+      const element = document.getElementById("file") as HTMLInputElement;
+      return {
+        files: element.files?.length ?? 0,
+        message: element.validationMessage,
+        valid: element.form?.checkValidity() ?? false,
+      };
+    });
+    expect(form).toEqual({ files: 1, message: "", valid: true });
   });
 
   test("the file input still works on its own", async ({ page }) => {
