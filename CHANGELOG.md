@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.2.0](https://github.com/Serraniel/sendan/compare/v0.1.0...v0.2.0) (2026-09-05)
+
+
+### Features
+
+* **ci:** remove old edge builds from the registry ([7b8d3b1](https://github.com/Serraniel/sendan/commit/7b8d3b1925d279a064f3a23f8ff4eeec64d11a94))
+* compile in the release signing keys ([95861a0](https://github.com/Serraniel/sendan/commit/95861a0c4dc4c640dc7a8cee06bce7487a1947b5))
+* **web:** reach the changelog from the footer ([a2d5fbf](https://github.com/Serraniel/sendan/commit/a2d5fbfedd51696b0331afcc6bf69b4f37f813c5)), closes [#200](https://github.com/Serraniel/sendan/issues/200)
+* **web:** render the changelog as a page ([d90ee77](https://github.com/Serraniel/sendan/commit/d90ee77715ea95545f6c6fe1eb47ef2b518636f4))
+
+
+### Bug Fixes
+
+* **build:** copy the step that places the changelog, not only the changelog ([942abf3](https://github.com/Serraniel/sendan/commit/942abf38a866a34e0521864d1750d6fb75e17b96))
+* **ci:** call the release workflow instead of waiting for its tag ([1c55b08](https://github.com/Serraniel/sendan/commit/1c55b082e635b527ff927b0dec44ef55d276c0ea)), closes [#172](https://github.com/Serraniel/sendan/issues/172)
+* **ci:** check the third-party notices where it matters ([7334f4c](https://github.com/Serraniel/sendan/commit/7334f4ce7b0611a8c604445c94337bf23385121f))
+* **ci:** repair the release workflow, and check for what broke it ([7708d13](https://github.com/Serraniel/sendan/commit/7708d13bb908b5d8e685394b9f136c63addce193))
+* **release:** tag the image, and record the commit that was built ([694c56e](https://github.com/Serraniel/sendan/commit/694c56e38e1f2289888d72ea1e1cdae50a42e9c0))
+* **web:** accept a dropped file in Firefox ([71924d3](https://github.com/Serraniel/sendan/commit/71924d3d2d7a320caf805f139915638385e65ff7))
+* **web:** let a dropped file actually be sent ([72cae2b](https://github.com/Serraniel/sendan/commit/72cae2b561634b470a088daead4d22eccd3707a7))
+* **web:** override cookie to a version without the parsing flaw ([c7116aa](https://github.com/Serraniel/sendan/commit/c7116aaac3f0eb8d1c25dc8fabb9ecbf7a3a0f57))
+* **web:** pin TypeScript exactly again ([92b129c](https://github.com/Serraniel/sendan/commit/92b129c7bf4d161330799eae94d909e4b115274b))
+* **web:** serve a robots.txt instead of the application ([469e4d1](https://github.com/Serraniel/sendan/commit/469e4d124314f2e5b33b3284be2e68c8f327988a))
+* **web:** stop violating our own Content-Security-Policy ([8957de2](https://github.com/Serraniel/sendan/commit/8957de229baf35afbab84c16778c5bc062836fd7))
+
 ## 0.1.0 (2026-08-31)
 
 
