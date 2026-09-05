@@ -27,7 +27,7 @@ permissions:
 # The minimum the module requires is the go directive in go.mod, which is a
 # different question and a different value.
 env:
-  GO_VERSION: "1.27.0"
+  GO_VERSION: "1.27.1"
 
 jobs:
   fuzz:
