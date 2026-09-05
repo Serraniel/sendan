@@ -384,6 +384,29 @@ test.describe("what the client says about itself", () => {
     await expect(theirs).not.toContainText("management secret");
   });
 
+  test("does not report an upload with a deadline as having none", async ({ page }) => {
+    // Sent with the form untouched, which is what most people do. The lifetime
+    // control used to offer the instance's default as an entry of its own,
+    // beside the lifetime it resolves to; choosing it sent no lifetime at all,
+    // so the instance applied its default and this page - knowing only what was
+    // asked for - reported a file with a deadline as having none.
+    const link = await uploadThrough(page, "default.txt", filled(500), "text/plain", {});
+
+    // The plain-language list, which is where the claim lives - outside the
+    // fold, because it is the sentence that changes what somebody does next.
+    const claims = page.locator("ul.claims");
+    await expect(claims).toBeVisible({ timeout: 30_000 });
+    await expect(claims).not.toContainText("neither a deadline nor a download limit");
+    await expect(claims).toContainText("It goes when its deadline passes");
+
+    // And the deadline itself, stated rather than implied.
+    const card = page.locator("details.transparency");
+    await card.locator("summary").click();
+    await expect(card).toContainText(/Expires \d/);
+
+    expect(link).toContain("#");
+  });
+
   test("shows the version and the source it was built from", async ({ page }) => {
     await page.goto("/");
     const footer = page.locator("footer");
