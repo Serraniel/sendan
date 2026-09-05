@@ -25,10 +25,12 @@ RUN npm ci
 
 COPY web/ ./
 
-# The changelog the client serves. Copied into the stage that builds the client
-# rather than committed into it, because release-please rewrites it and a
-# committed copy would be stale inside its own release pull request.
+# The changelog the client serves, and the step that places it. Copied into the
+# stage that builds the client rather than committed into it, because
+# release-please rewrites the changelog and a committed copy would be stale
+# inside its own release pull request.
 COPY CHANGELOG.md /src/CHANGELOG.md
+COPY scripts/copy-changelog.mjs /src/scripts/copy-changelog.mjs
 # svelte.config.js writes to ../internal/webui/dist, which is where the Go build
 # below expects to find it - one definition of that path, in the app's config.
 RUN npm run build
