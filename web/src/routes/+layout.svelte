@@ -111,7 +111,7 @@
         it would guess at a layout most instances do not have. This way the
         changelog somebody reads belongs to the code answering them.
       -->
-      <a href="/changelog.md">what changed</a>
+      <a href="/changelog">what changed</a>
     </p>
 
     {#if !sourceIsExact(build)}

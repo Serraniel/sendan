@@ -833,6 +833,35 @@ test.describe("choosing a theme", () => {
   });
 });
 
+test.describe("the changelog", () => {
+  test("is rendered, not handed over as Markdown", async ({ page }) => {
+    await page.goto("/");
+    await page.getByRole("link", { name: "what changed" }).click();
+
+    await expect(page).toHaveURL(/\/changelog$/);
+    await expect(page.getByRole("heading", { name: "What changed", level: 1 })).toBeVisible();
+
+    // A release heading and its entries, which is the shape of the file. The
+    // count is not asserted: it grows with every release.
+    await expect(page.locator(".log h2").first()).toBeVisible();
+    await expect(page.locator(".log li").first()).toBeVisible();
+
+    // The failure this page exists to prevent: source syntax reaching the
+    // reader. A browser handed the raw file shows exactly this.
+    const text = await page.locator(".log").innerText();
+    expect(text).not.toMatch(/\[[^\]]*\]\([^)]*\)/);
+    expect(text).not.toContain("**");
+  });
+
+  test("still serves the file itself", async ({ request }) => {
+    // The page is a presentation of the file, not a replacement: anyone reading
+    // with curl should still get Markdown.
+    const response = await request.get("/changelog.md");
+    expect(response.status()).toBe(200);
+    expect(await response.text()).toContain("# Changelog");
+  });
+});
+
 test.describe("choosing a file", () => {
   test("a dropped file is chosen, as the file input would have", async ({ page }) => {
     await page.goto("/");
@@ -1011,9 +1040,13 @@ test.describe("the footer", () => {
     // Served by the instance rather than linked to a forge: SENDAN_SOURCE_URL
     // is the operator's to set and need not be a GitHub URL, so a link built
     // from it would guess at a layout most instances do not have.
+    //
+    // The link goes to the page that renders it; the file stays served for
+    // anyone reading without a browser. Both are asserted here because the two
+    // together are what "served by the instance" means.
     await page.goto("/");
     const changelog = page.getByRole("link", { name: /what changed/i });
-    await expect(changelog).toHaveAttribute("href", "/changelog.md");
+    await expect(changelog).toHaveAttribute("href", "/changelog");
 
     const response = await request.get("/changelog.md");
     expect(response.status()).toBe(200);
