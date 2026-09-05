@@ -29,7 +29,7 @@ import (
 //     worker-src, where it would be an injection vector rather than a feature.
 const contentSecurityPolicy = "default-src 'self'; " +
 	scriptSrcPlaceholder + "; " +
-	"style-src 'self'; " +
+	styleSrcPlaceholder + "; " +
 	"img-src 'self' blob:; " +
 	"media-src 'self' blob:; " +
 	"font-src 'self'; " +
@@ -47,6 +47,29 @@ const contentSecurityPolicy = "default-src 'self'; " +
 // be written here. It is added at construction from the shell that is actually
 // embedded, which is the only value that can be correct for a given binary.
 const scriptSrcPlaceholder = "script-src 'self' 'wasm-unsafe-eval'"
+
+// styleSrcPlaceholder is the style-src directive before the client's inline
+// style attributes are accounted for.
+//
+// SvelteKit's route announcer carries one, and the value belongs to the
+// framework rather than to this project, so it cannot be written here either.
+// See webui.InlineStyleAttrHashes.
+const styleSrcPlaceholder = "style-src 'self'"
+
+// withStyleAttrHashes returns the policy with additional style attributes
+// allowed.
+//
+// 'unsafe-hashes' is what lets a browser consider a hash for a style attribute
+// at all; without it the hashes below are ignored and the attribute is refused.
+// It does not weaken the policy to arbitrary inline styles: only a value
+// matching one of these hashes is applied.
+func withStyleAttrHashes(policy string, hashes []string) string {
+	if len(hashes) == 0 {
+		return policy
+	}
+	return strings.Replace(policy, styleSrcPlaceholder,
+		styleSrcPlaceholder+" 'unsafe-hashes' "+strings.Join(hashes, " "), 1)
+}
 
 // withScriptHashes returns the policy with additional script sources allowed.
 func withScriptHashes(policy string, hashes []string) string {

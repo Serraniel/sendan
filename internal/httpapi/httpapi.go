@@ -175,6 +175,16 @@ func New(opts Options) http.Handler {
 			}
 			policy = withScriptHashes(policy, hashes)
 
+			// The framework's route announcer is styled with a style
+			// attribute, which style-src 'self' refuses. Left unhashed it is a
+			// violation of our own policy on every page load - harmless in
+			// itself, and indistinguishable in a console from one that is not.
+			styles, err := webui.InlineStyleAttrHashes(assets)
+			if err != nil {
+				panic("httpapi: reading the client's inline styles: " + err.Error())
+			}
+			policy = withStyleAttrHashes(policy, styles)
+
 			mux.Handle("/", webui.Handler(assets))
 		} else {
 			opts.Log.Warn("the web client is enabled but not built into this binary; " +

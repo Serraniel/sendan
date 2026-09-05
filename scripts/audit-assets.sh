@@ -84,6 +84,23 @@ while IFS= read -r hit; do
 done < <(grep -rInoP '(?:setAttribute\(\s*["'"'"']style["'"'"']|\.style\.cssText\s*=)' \
   "$out" --include='*.js' || true)
 
+# And in the bundles' template text, which is where a framework keeps its own
+# markup. This is the gap that let SvelteKit's route announcer reach a browser:
+# the check above reads *.html, and the announcer is a string inside a *.js.
+#
+# These are not failures by themselves - the server hashes what it finds, so
+# the policy is correct whatever the framework emits. What matters is that the
+# set stays known: a new one is a question about whether it should exist,
+# answered by somebody rather than by the build.
+styles=$(grep -rhoP '(?<=style=")[^"]*' "$out" --include='*.js' | sort -u || true)
+count=$(printf '%s' "$styles" | grep -c . || true)
+if [ "$count" -gt 1 ]; then
+  echo "  the bundles carry $count distinct inline style attributes, expected 1:"
+  printf '%s\n' "$styles" | sed 's/^/    /'
+  echo "  each is hashed into the policy; review whether it belongs there."
+  found=1
+fi
+
 if [ "$found" -ne 0 ]; then
   echo
   if [ "$external" -ne 0 ]; then
@@ -95,4 +112,9 @@ if [ "$found" -ne 0 ]; then
   exit 1
 fi
 
-echo "audit: the built client loads nothing external and needs no inline style."
+if [ "$count" -eq 0 ]; then
+  echo "audit: the built client loads nothing external and needs no inline style."
+else
+  echo "audit: the built client loads nothing external; its $count inline style" \
+       "attribute is hashed into the policy."
+fi

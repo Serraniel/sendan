@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -243,5 +244,74 @@ func TestInlineScripts(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestInlineStyleAttrHashes(t *testing.T) {
+	// The framework styles its route announcer with a style attribute, which
+	// `style-src 'self'` refuses. The value lives in a bundle as template text
+	// rather than in the shell, which is why this reads the JavaScript too.
+	fsys := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<!doctype html><html><body></body></html>`)},
+		"app.js": &fstest.MapFile{Data: []byte(
+			`t=l('<div id="svelte-announcer" style="position: absolute; width: 1px"><!></div>')`)},
+	}
+
+	hashes, err := InlineStyleAttrHashes(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// sha256 of `position: absolute; width: 1px`, which is what a browser
+	// hashes: the attribute's value, not the element around it.
+	sum := sha256.Sum256([]byte("position: absolute; width: 1px"))
+	want := "'sha256-" + base64.StdEncoding.EncodeToString(sum[:]) + "'"
+	if len(hashes) != 1 || hashes[0] != want {
+		t.Fatalf("hashes = %v, want [%s]", hashes, want)
+	}
+}
+
+func TestInlineStyleAttrHashesAreDistinctAndStable(t *testing.T) {
+	// Two files carrying the same attribute produce one hash, and the order
+	// does not depend on which file was walked first: a policy that differs
+	// between two builds of the same client cannot be compared between
+	// instances.
+	fsys := fstest.MapFS{
+		"a.js":       &fstest.MapFile{Data: []byte(`<i style="width: 1px"><b style="top: 0">`)},
+		"b.js":       &fstest.MapFile{Data: []byte(`<i style="width: 1px">`)},
+		"index.html": &fstest.MapFile{Data: []byte(`<div style="top: 0">`)},
+	}
+
+	first, err := InlineStyleAttrHashes(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first) != 2 {
+		t.Fatalf("hashes = %v, want two distinct", first)
+	}
+
+	second, err := InlineStyleAttrHashes(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(first, second) {
+		t.Fatalf("hashes are not stable: %v then %v", first, second)
+	}
+}
+
+func TestNoInlineStyleAttrsMeansNoHashes(t *testing.T) {
+	// A client with none must not be handed 'unsafe-hashes' for nothing: the
+	// keyword is what makes a browser consider hashes for style attributes at
+	// all, and it has no business in a policy with none to consider.
+	fsys := fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<div class="drop">no style here</div>`)},
+	}
+
+	hashes, err := InlineStyleAttrHashes(fsys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hashes) != 0 {
+		t.Fatalf("hashes = %v, want none", hashes)
 	}
 }
