@@ -92,7 +92,24 @@
     if (!dropped) return;
     file = dropped;
     failure = null;
+
+    // The input gets it too. It is `required`, so a form whose input is empty
+    // is refused by the browser before any handler here runs - which is how a
+    // dropped file could be shown, named and sized, and still answer "Please
+    // select a file" at the last step.
+    //
+    // Rebuilt from the one file rather than passed through, because a drop may
+    // carry several and this interface takes the first.
+    if (input !== null) {
+      const transfer = new DataTransfer();
+      transfer.items.add(dropped);
+      input.files = transfer.files;
+    }
   }
+
+  // The file input, so a drop can hand it the file it would have received from
+  // the dialog. Null until the form is rendered.
+  let input = $state<HTMLInputElement | null>(null);
 
   // The limit the instance advertises, and what to say when a file exceeds it.
   // Read once on mount; null means the instance did not say, in which case the
@@ -349,7 +366,7 @@
       ondragleave={leaveZone}
       ondrop={dropFile}
     >
-      <input id="file" type="file" onchange={chooseFile} disabled={busy} required />
+      <input bind:this={input} id="file" type="file" onchange={chooseFile} disabled={busy} required />
       {#if file === null}
         <span class="drop-main">Choose a file, or drop one here</span>
         <span class="drop-sub muted small">
