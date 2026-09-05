@@ -1,0 +1,7 @@
+# An instance holds other people's files behind links that are meant to be
+# passed to one person, so nothing here belongs in an index. The markup says
+# the same with <meta name="robots">, but that only reaches a crawler which
+# fetches and parses a page; this reaches one that asks first, which is the
+# normal order.
+User-agent: *
+Disallow: /
