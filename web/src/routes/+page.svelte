@@ -68,6 +68,11 @@
   // click path are unchanged for anybody who cannot drag.
   let dragging = $state(false);
 
+  // Both dragenter and dragover, because the drag-and-drop model asks a drop
+  // target to cancel both before it will deliver a drop. Cancelling only
+  // dragover is enough in Chromium and is not reliably enough in Firefox,
+  // where dropping a file did nothing at all and the dialog was the only way
+  // in.
   function overZone(event: DragEvent) {
     if (busy) return;
     event.preventDefault();
@@ -339,6 +344,7 @@
       class:dragging
       class:chosen={file !== null}
       for="file"
+      ondragenter={overZone}
       ondragover={overZone}
       ondragleave={leaveZone}
       ondrop={dropFile}

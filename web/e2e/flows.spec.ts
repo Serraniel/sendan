@@ -839,12 +839,30 @@ test.describe("choosing a file", () => {
 
     // Built in the page: a DataTransfer cannot be constructed from the test
     // side and handed across.
+    //
+    // The whole sequence rather than the drop alone, and the two earlier
+    // events are asserted to have been cancelled. A synthetic drop reaches the
+    // handler whether or not the element is a valid drop target, so dispatching
+    // only that tests our code and skips the browser's own decision - which is
+    // the half that was broken. Firefox delivered no drop at all while this
+    // test passed in Firefox.
     const zone = page.locator("label.drop");
-    await zone.evaluate((element) => {
+    const cancelled = await zone.evaluate((element) => {
       const data = new DataTransfer();
       data.items.add(new File(["dropped contents"], "dropped.txt", { type: "text/plain" }));
-      element.dispatchEvent(new DragEvent("drop", { dataTransfer: data, bubbles: true }));
+
+      const fire = (type: string) => {
+        const event = new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true });
+        element.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+
+      return { enter: fire("dragenter"), over: fire("dragover"), drop: fire("drop") };
     });
+
+    // Cancelling both is what makes an element a drop target. Chromium is
+    // lenient about dragenter; Firefox is not.
+    expect(cancelled).toEqual({ enter: true, over: true, drop: true });
 
     await expect(zone).toContainText("dropped.txt");
     // The action becomes available, which is the thing that proves the file was
