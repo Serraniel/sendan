@@ -33,7 +33,7 @@ const upstream = "https://github.com/Serraniel/sendan"
 //
 // A fork signs its own releases and puts its own key here. Anyone can also pass
 // --key to check against a key they obtained some other way.
-const releaseKey = ""
+const releaseKey = "RWQt826yhqM+nKsvcrv1lu/eePUVXmE2haeCmGUBpgzwu7CWVZxyRUVk"
 
 // releasePQKey is the post-quantum half, in the same form.
 //
@@ -41,10 +41,10 @@ const releaseKey = ""
 // breaks, and SLH-DSA on a scheme with far less deployment behind it; requiring
 // both means a forgery has to defeat the one that is still standing.
 //
-// Empty while no key exists, which is why the check is skipped rather than
-// failed: a build that demanded a signature nobody can make would verify
-// nothing at all. Filling this in is what turns the requirement on.
-const releasePQKey = ""
+// Both are set, so both checks are required. They were empty while no keys
+// existed, and the check was skipped rather than failed then: a build that
+// demanded a signature nobody could make would verify nothing at all.
+const releasePQKey = "U/vAc3e81vHgYeqfxDWYGHjGAtTZm4bz5Tz4lM42TJs="
 
 // errNotPublished reports an instance serving something other than the client
 // it claims. Separate so the exit status can distinguish it from a failure to
