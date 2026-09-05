@@ -18,19 +18,19 @@ import (
 func aCompatUpload(t *testing.T, id string) (*store.Upload, *store.CompatUpload) {
 	t.Helper()
 	return &store.Upload{
-			ID:             id,
-			AuthTokenHash:  bytes.Repeat([]byte{1}, 32),
-			OwnerTokenHash: bytes.Repeat([]byte{2}, 32),
-			AtRestKey:      masterKey(t),
-			CreatedAt:      time.Now().UTC().Truncate(time.Second),
-			ExpiresAt:      time.Now().UTC().Add(time.Hour).Truncate(time.Second),
-			MaxDownloads:   1,
-		}, &store.CompatUpload{
-			ID:       id,
-			AuthKey:  bytes.Repeat([]byte{3}, 32),
-			Nonce:    bytes.Repeat([]byte{4}, 16),
-			Metadata: []byte("an envelope in the other protocol's format"),
-		}
+		ID:             id,
+		AuthTokenHash:  bytes.Repeat([]byte{1}, 32),
+		OwnerTokenHash: bytes.Repeat([]byte{2}, 32),
+		AtRestKey:      masterKey(t),
+		CreatedAt:      time.Now().UTC().Truncate(time.Second),
+		ExpiresAt:      time.Now().UTC().Add(time.Hour).Truncate(time.Second),
+		MaxDownloads:   1,
+	}, &store.CompatUpload{
+		ID:       id,
+		AuthKey:  bytes.Repeat([]byte{3}, 32),
+		Nonce:    bytes.Repeat([]byte{4}, 16),
+		Metadata: []byte("an envelope in the other protocol's format"),
+	}
 }
 
 func compatStore(t *testing.T) (store.Store, store.CompatStore) {

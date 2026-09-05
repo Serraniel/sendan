@@ -18,7 +18,7 @@ go 1.25.8
 // read the version from here and set GOTOOLCHAIN to it exactly. Without that,
 // a machine whose Go has moved ahead runs the linters against a standard
 // library they cannot parse, and the failure looks like a finding.
-toolchain go1.25.13
+toolchain go1.27.0
 
 require (
 	github.com/cloudflare/circl v1.6.5
