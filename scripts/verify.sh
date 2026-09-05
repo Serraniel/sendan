@@ -76,6 +76,7 @@ dir=web check "vite build"        npm run --silent build
 dir=. check "asset audit"         ./scripts/audit-assets.sh
 dir=. check "third-party notices" ./scripts/check-notices.sh
 dir=. check "go version"          ./scripts/check-go-version.sh
+dir=. check "workflows"           ./scripts/check-workflows.py
 
 echo
 if [ "$failed" -ne 0 ]; then
