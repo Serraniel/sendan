@@ -51,6 +51,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag }}
+      # The commit this release is built from, taken from the checkout rather
+      # than from GITHUB_SHA. This workflow starts by hand or by call, never on
+      # a tag push, so GITHUB_SHA is the head of the branch it was started from
+      # - which is not the code being released, and drifts from it the moment
+      # anything else merges. v0.1.0 shipped attesting to a commit it was not
+      # built from, in the signed manifest as well as the image.
+      - id: src
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "short=${commit:0:7}" >> "$GITHUB_OUTPUT"
+          echo "COMMIT=$commit" >> "$GITHUB_ENV"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -61,7 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           export SENDAN_VERSION="${TAG:-dev}"
-          export SENDAN_COMMIT="${GITHUB_SHA:-unknown}"
+          export SENDAN_COMMIT="${COMMIT}"
 
           ./scripts/release-build.sh /tmp/dist-a >/dev/null
           go clean -cache
@@ -93,6 +106,19 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
           fetch-depth: 0
+      # The commit this release is built from, taken from the checkout rather
+      # than from GITHUB_SHA. This workflow starts by hand or by call, never on
+      # a tag push, so GITHUB_SHA is the head of the branch it was started from
+      # - which is not the code being released, and drifts from it the moment
+      # anything else merges. v0.1.0 shipped attesting to a commit it was not
+      # built from, in the signed manifest as well as the image.
+      - id: src
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "short=${commit:0:7}" >> "$GITHUB_OUTPUT"
+          echo "COMMIT=$commit" >> "$GITHUB_ENV"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -103,7 +129,7 @@ jobs:
         run: |
           set -euo pipefail
           export SENDAN_VERSION="${TAG:-dev}"
-          export SENDAN_COMMIT="${GITHUB_SHA:-unknown}"
+          export SENDAN_COMMIT="${COMMIT}"
           ./scripts/release-build.sh dist
 
       # The statement `sendan verify` compares an instance against. Published
@@ -115,7 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           (cd web && npm ci && npm run build)
-          SENDAN_VERSION="${TAG:-dev}" SENDAN_COMMIT="${GITHUB_SHA:-unknown}" \
+          SENDAN_VERSION="${TAG:-dev}" SENDAN_COMMIT="${COMMIT}" \
             ./scripts/asset-manifest.sh dist/manifest.json
       # An unsigned manifest is only as trustworthy as the page it came from,
       # and that page is the obvious thing to replace if the goal is to make a
@@ -207,7 +233,7 @@ jobs:
             echo
             echo '```sh'
             echo "git checkout ${TAG:-HEAD}"
-            echo "SENDAN_VERSION=${TAG:-dev} SENDAN_COMMIT=${GITHUB_SHA:-unknown} \\"
+            echo "SENDAN_VERSION=${TAG:-dev} SENDAN_COMMIT=${COMMIT} \\"
             echo "  ./scripts/release-build.sh"
             echo "sha256sum -c dist/SHA256SUMS"
             echo '```'
@@ -237,6 +263,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.tag }}
+      # The commit this release is built from, taken from the checkout rather
+      # than from GITHUB_SHA. This workflow starts by hand or by call, never on
+      # a tag push, so GITHUB_SHA is the head of the branch it was started from
+      # - which is not the code being released, and drifts from it the moment
+      # anything else merges. v0.1.0 shipped attesting to a commit it was not
+      # built from, in the signed manifest as well as the image.
+      - id: src
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "short=${commit:0:7}" >> "$GITHUB_OUTPUT"
+          echo "COMMIT=$commit" >> "$GITHUB_ENV"
       - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -254,16 +293,34 @@ jobs:
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ env.IMAGE }}
-          flavor: latest=auto
+          # `value=` on every rule, and a literal `latest`: the semver rules and
+          # `latest=auto` both read the git ref, and this workflow does not run
+          # on a tag. Without it they match nothing and the image is reachable
+          # only by commit hash.
+          flavor: latest=false
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}},enable=${{ !startsWith(inputs.tag, 'v0.') }}
-            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}},value=${{ inputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag }}
+            type=semver,pattern={{major}},value=${{ inputs.tag }},enable=${{ !startsWith(inputs.tag, 'v0.') }}
+            type=raw,value=latest,enable=${{ !contains(inputs.tag, '-') }}
+            type=raw,value=sha-${{ steps.src.outputs.short }}
           labels: |
             org.opencontainers.image.title=Sendan
             org.opencontainers.image.description=Self-hosted, end-to-end encrypted file sharing
             org.opencontainers.image.licenses=AGPL-3.0-or-later
+
+      - name: Refuse to publish an image without its version tag
+        run: |
+          set -euo pipefail
+          # An image reachable only by commit hash is not a release anybody can
+          # pull, and nothing else here fails when the tag rules match nothing:
+          # v0.1.0 published exactly that, green.
+          if ! printf '%s\n' "$TAGS" | grep -qxF "${IMAGE}:${TAG#v}"; then
+            printf 'no %s:%s among the tags to push:\n%s\n' "$IMAGE" "${TAG#v}" "$TAGS" >&2
+            exit 1
+          fi
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
 
       - id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
@@ -276,7 +333,7 @@ jobs:
           # to compare against.
           build-args: |
             VERSION=${{ inputs.tag }}
-            COMMIT=${{ github.sha }}
+            COMMIT=${{ steps.src.outputs.commit }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
