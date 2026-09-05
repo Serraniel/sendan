@@ -67,3 +67,4 @@ web/playwright-report/
 # revision it does not describe.
 internal/webui/manifest.json
 dist/
+web/static/changelog.md

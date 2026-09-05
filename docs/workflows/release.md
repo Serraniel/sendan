@@ -137,3 +137,23 @@ They still differ in what else they resist, which is why there are three:
   which reading a Sigstore bundle would not be.
 - SLH-DSA is the only one an adversary with a quantum computer and an archived
   release cannot forge years from now.
+
+## The changelog the instance serves
+
+`CHANGELOG.md` is copied into the client at build time by
+`scripts/copy-changelog.mjs`, and the footer links to it.
+
+Copied rather than committed into `web/static`: release-please rewrites the
+changelog inside its own release pull request, so a committed copy would be
+stale exactly there — and a check that caught it would fail on a bot pull
+request that cannot run the script to fix itself.
+
+Served by the instance rather than linked to a forge, for the same reason the
+source link carries a neutral mark: `SENDAN_SOURCE_URL` is the operator's to
+set and need not be a GitHub URL, so a link built from it would guess at a
+layout most instances do not have. This way the changelog a visitor reads
+belongs to the code answering them.
+
+A tree with no changelog gets a short note instead, so the link resolves rather
+than 404s — a missing page reads as a broken instance rather than an unreleased
+one.

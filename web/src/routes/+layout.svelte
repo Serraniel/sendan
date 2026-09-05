@@ -104,6 +104,14 @@
         inside it require their notices to travel with the copy.
       -->
       <a href="/third-party-notices.txt">{build.license}, and notices</a>
+      &middot;
+      <!--
+        Served by this instance rather than linked to a forge: the source URL is
+        the operator's to set and need not be a GitHub one, so a link built from
+        it would guess at a layout most instances do not have. This way the
+        changelog somebody reads belongs to the code answering them.
+      -->
+      <a href="/changelog.md">what changed</a>
     </p>
 
     {#if !sourceIsExact(build)}
