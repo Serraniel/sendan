@@ -989,6 +989,19 @@ test.describe("the footer", () => {
     expect(text).toContain("AGPL-3.0-or-later");
   });
 
+  test("serves the changelog of the code that is running", async ({ page, request }) => {
+    // Served by the instance rather than linked to a forge: SENDAN_SOURCE_URL
+    // is the operator's to set and need not be a GitHub URL, so a link built
+    // from it would guess at a layout most instances do not have.
+    await page.goto("/");
+    const changelog = page.getByRole("link", { name: /what changed/i });
+    await expect(changelog).toHaveAttribute("href", "/changelog.md");
+
+    const response = await request.get("/changelog.md");
+    expect(response.status()).toBe(200);
+    expect(await response.text()).toContain("Changelog");
+  });
+
   test("keeps the link to this browser's own list in place", async ({ page }) => {
     // Not every link should leave: this one stays on the instance, and opening
     // it in a new tab would be a different kind of surprise.

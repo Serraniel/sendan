@@ -211,10 +211,10 @@ build, which make a bad release discoverable rather than impossible. Verifying
 against a manifest you built yourself, below, does not depend on any of it.
 
 > [!IMPORTANT]
-> **No release keys exist yet**, because no release has been cut. Until they are
-> published, `sendan verify` against a release URL stops and says so rather than
-> checking against nothing. Verify with `--manifest` pointing at a manifest you
-> produced yourself:
+> **No release keys exist yet.** `v0.1.0` is tagged but carries no artefacts and
+> nothing is signed with them, so `sendan verify` against a release URL stops and
+> says so rather than checking against nothing. Verify with `--manifest` pointing
+> at a manifest you produced yourself:
 >
 > ```sh
 > (cd web && npm ci && npm run build)

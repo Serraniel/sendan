@@ -32,9 +32,13 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > `sendan down`), with password, expiry and download-limit options. Releases
 > carry static binaries for Linux, macOS and Windows on both architectures, with
 > checksums and a reproduction procedure, and `sendan verify` checks that an
-> instance serves the published client. **No release has been cut yet**, so the
-> client is built from source today. The container image builds and runs; it is
-> published on the first tag.
+> instance serves the published client.
+>
+> **v0.1.0 is tagged and carries no artefacts.** The workflow that builds them
+> was never started: a tag pushed by the release tooling does not trigger one,
+> which is fixed but not yet applied to that tag. Until it is rebuilt, the
+> client and the container image are built from source, and the reproduction
+> procedure below is the only way to obtain either.
 >
 > **Not yet in place:** the two release signing keys. The pipeline signs with
 > them automatically once they exist; until then nothing is signed with them and
@@ -60,10 +64,10 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
   must be enabled explicitly.
 - **Single-container deployment.** One static binary serving an embedded web
   client, on an image with no distribution, no package manager and no shell.
-  *(Builds and runs; published on the first tag.)*
+  *(Builds and runs; not yet published — see the status above.)*
 - **Cross-platform command line client**, sharing one cryptographic
-  implementation with the server. *(Sends and receives; not yet released as a
-  binary.)*
+  implementation with the server. *(Sends and receives; no binary published
+  yet — see the status above.)*
 - **Light and dark themes**, following the system by default with a control to
   override it, on one layout that holds from a small phone to a desktop
   display. No web font is loaded and no request leaves the instance: the whole

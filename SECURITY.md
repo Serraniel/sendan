@@ -171,10 +171,11 @@ assume. Each release publishes a binary for every supported platform and a
 [`docs/cli.md`](docs/cli.md) has the per-platform download and install steps.
 
 > [!NOTE]
-> **No release has been cut yet.** The pipeline that produces and checks these
-> is in place, and this describes what it publishes. Until a tag exists, build
-> from source — which is the stronger check anyway, and is the second procedure
-> below.
+> **Nothing published carries these signatures yet.** `v0.1.0` is tagged, but
+> the workflow that builds and signs its artefacts was never started, and the
+> release keys do not exist. This describes what the pipeline publishes once
+> both are in place. Until then, build from source — which is the stronger
+> check anyway, and is the second procedure below.
 
 **Check what you downloaded:**
 
