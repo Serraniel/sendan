@@ -13,8 +13,9 @@ describing what it is for, when it runs, and what a failure means.
 | [fuzz](fuzz.md) | nightly, manual | No |
 | [codeql](codeql.md) | pull request, push to `main`, weekly | No |
 | [release-please](release-please.md) | push to `main` | n/a |
-| [release](release.md) | tag `v*` | n/a |
+| [release](release.md) | called by release-please, manual | n/a |
 | [edge](edge.md) | push to `main` | n/a |
+| [registry-prune](registry-prune.md) | weekly, manual | n/a |
 | [dependabot](dependabot.md) | schedule (config, not a workflow) | n/a |
 
 ## Conventions

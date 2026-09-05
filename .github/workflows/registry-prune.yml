@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Removes old edge builds from the container registry. See docs/workflows/registry-prune.md
+name: Registry prune
+
+on:
+  schedule:
+    # Weekly, after the Monday dependency runs rather than beside them: a
+    # deletion competing with a push is the one situation where an index and
+    # its children can be seen half-written.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      keep:
+        description: How many edge builds to keep
+        type: string
+        default: "10"
+      apply:
+        description: Delete, rather than only printing the plan
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: registry-prune
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.27.1"
+
+jobs:
+  prune:
+    name: Remove old edge builds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      # The scheduled run deletes; a dispatch prints the plan unless asked
+      # otherwise, so the selection can be read before it is trusted.
+      - name: Prune
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          KEEP: ${{ inputs.keep || '10' }}
+          APPLY: ${{ github.event_name == 'schedule' || inputs.apply }}
+        run: |
+          set -euo pipefail
+          args=(-owner "${GITHUB_REPOSITORY%%/*}" -package "${GITHUB_REPOSITORY##*/}" -keep "$KEEP")
+          [ "$APPLY" = "true" ] && args+=(-apply)
+          go run ./tools/registry-prune "${args[@]}"
