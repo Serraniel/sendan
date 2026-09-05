@@ -35,7 +35,7 @@ env:
   # checkout, has to take it from here instead of from GITHUB_REF_NAME.
   TAG: ${{ inputs.tag }}
 
-  GO_VERSION: "1.25.13"
+  GO_VERSION: "1.27.0"
   NODE_VERSION: "22"
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/${{ github.repository }}
