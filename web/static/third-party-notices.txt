@@ -9,7 +9,7 @@ Sendan itself is AGPL-3.0-or-later. Its own source is linked in the footer,
 which is a separate obligation and is not discharged by this file.
 
 ------------------------------------------------------------------------
-@sveltejs/kit 2.70.2
+@sveltejs/kit 2.70.3
 ------------------------------------------------------------------------
 
 Copyright (c) 2020 [these people](https://github.com/sveltejs/kit/graphs/contributors)
@@ -64,7 +64,7 @@ Special thank you to the authors of original C algorithms:
 - Yann Collet
 
 ------------------------------------------------------------------------
-svelte 5.56.8
+svelte 5.57.0
 ------------------------------------------------------------------------
 
 Copyright (c) 2016-2025 [Svelte Contributors](https://github.com/sveltejs/svelte/graphs/contributors)
