@@ -137,6 +137,16 @@ jobs:
       - name: Assert the client runs under its own Content-Security-Policy
         run: ./scripts/audit-assets.sh
 
+      # A licence obligation rather than a style rule: MIT asks that the notice
+      # travel with "all copies or substantial portions", and the bundle is the
+      # distribution, so a link to the source does not discharge it.
+      #
+      # This ran only in scripts/verify.sh until now, which meant it held only
+      # for whoever remembered to run it. #223 bumped Kit and Svelte and the
+      # notices kept naming the versions before it, merged green.
+      - name: Assert the third-party notices name what is shipped
+        run: ./scripts/check-notices.sh
+
   test-vectors:
     name: Cross-language crypto vectors
     runs-on: ubuntu-latest
