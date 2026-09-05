@@ -210,11 +210,19 @@ project's repository**. What that leaves is set out in
 build, which make a bad release discoverable rather than impossible. Verifying
 against a manifest you built yourself, below, does not depend on any of it.
 
+The keys these releases are signed with, compiled into the client and repeated
+here so that a copy obtained elsewhere can be compared against them:
+
+```
+Ed25519  RWQt826yhqM+nKsvcrv1lu/eePUVXmE2haeCmGUBpgzwu7CWVZxyRUVk
+SLH-DSA  U/vAc3e81vHgYeqfxDWYGHjGAtTZm4bz5Tz4lM42TJs=
+```
+
 > [!IMPORTANT]
-> **No release keys exist yet.** `v0.1.0` is tagged but carries no artefacts and
-> nothing is signed with them, so `sendan verify` against a release URL stops and
-> says so rather than checking against nothing. Verify with `--manifest` pointing
-> at a manifest you produced yourself:
+> **Nothing is signed with them yet.** `v0.1.0` is tagged but carries no
+> artefacts, so `sendan verify` against that release finds nothing to check.
+> Until it is rebuilt, verify with `--manifest` pointing at a manifest you
+> produced yourself:
 >
 > ```sh
 > (cd web && npm ci && npm run build)
@@ -226,7 +234,8 @@ against a manifest you built yourself, below, does not depend on any of it.
 > you built, rather than against a statement somebody else signed.
 
 The first signature is in [minisign](https://jedisct1.github.io/minisign/)
-format, so `minisign -Vm manifest.json -P <key>` checks it without this program.
+format, so `minisign -Vm manifest.json -P RWQt826yhqM+nKsvcrv1lu/eePUVXmE2haeCmGUBpgzwu7CWVZxyRUVk`
+checks it without this program.
 The second is checked with `tools/pq-sign verify`.
 [`SECURITY.md`](../SECURITY.md) gives the full procedure for both.
 

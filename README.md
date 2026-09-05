@@ -40,9 +40,9 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > client and the container image are built from source, and the reproduction
 > procedure below is the only way to obtain either.
 >
-> **Not yet in place:** the two release signing keys. The pipeline signs with
-> them automatically once they exist; until then nothing is signed with them and
-> `sendan verify` says so rather than checking against nothing.
+> **The two release signing keys now exist**, and `sendan verify` requires both
+> signatures. Nothing carries them yet, because no release has been built since
+> they were made.
 
 ## Features
 
