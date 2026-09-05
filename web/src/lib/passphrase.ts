@@ -35,10 +35,15 @@ export function entropyBits(wordCount: number): number {
   return wordCount * Math.log2(WORDS.length);
 }
 
-/** Random bytes, narrowed so a test can supply its own. */
-export type RandomSource = (bytes: Uint8Array) => void;
+/**
+ * Random bytes, narrowed so a test can supply its own.
+ *
+ * The buffer is spelled out because `crypto.getRandomValues` will not take a
+ * view that might sit on a `SharedArrayBuffer`, and a bare `Uint8Array` might.
+ */
+export type RandomSource = (bytes: Uint8Array<ArrayBuffer>) => void;
 
-function browserRandom(bytes: Uint8Array): void {
+function browserRandom(bytes: Uint8Array<ArrayBuffer>): void {
   crypto.getRandomValues(bytes);
 }
 

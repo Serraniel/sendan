@@ -64,6 +64,15 @@ updates:
           - "hash-wasm"
         update-types: ["minor", "patch"]
 
+    ignore:
+      # svelte-check refuses TypeScript 7 unless TypeScript 6 is installed
+      # alongside it under an npm alias and it is run behind an experimental
+      # flag. Type checking is a gate here, so it does not get to depend on an
+      # experimental path. Drop this once svelte-check accepts ^7 on its own -
+      # its peer range currently reads ^5.0.0 || ^6.0.0. See #93.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+
   - package-ecosystem: docker
     directory: "/"
     schedule:
