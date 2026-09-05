@@ -19,24 +19,25 @@ function render(matrix: Matrix): string[] {
 }
 
 describe("against an independent implementation", () => {
-  it.each(
-    vectors.map((v) => [`${v.size}x${v.size} at mask ${v.mask}`, v]),
-  )("matches %s", (_label, vector) => {
-    // The mask is pinned in the vector and applied here, so a mismatch means
-    // the encoding is wrong rather than that two implementations scored the
-    // masks differently. Which mask this encoder picks on its own is a
-    // separate question, below.
-    const matrix = encodeWithMask(vector.text, vector.mask);
+  it.each(vectors.map((v) => [`${v.size}x${v.size} at mask ${v.mask}`, v]))(
+    "matches %s",
+    (_label, vector) => {
+      // The mask is pinned in the vector and applied here, so a mismatch means
+      // the encoding is wrong rather than that two implementations scored the
+      // masks differently. Which mask this encoder picks on its own is a
+      // separate question, below.
+      const matrix = encodeWithMask(vector.text, vector.mask);
 
-    expect(matrix.length).toBe(vector.size);
-    // Compared row by row rather than as one blob: a failure then names the
-    // row it went wrong in, which is the difference between a bug that can be
-    // found and one that can only be rewritten.
-    const produced = render(matrix);
-    for (let row = 0; row < vector.size; row++) {
-      expect(produced[row], `row ${row}`).toBe(vector.modules[row]);
-    }
-  });
+      expect(matrix.length).toBe(vector.size);
+      // Compared row by row rather than as one blob: a failure then names the
+      // row it went wrong in, which is the difference between a bug that can be
+      // found and one that can only be rewritten.
+      const produced = render(matrix);
+      for (let row = 0; row < vector.size; row++) {
+        expect(produced[row], `row ${row}`).toBe(vector.modules[row]);
+      }
+    },
+  );
 });
 
 describe("the space left for data", () => {
