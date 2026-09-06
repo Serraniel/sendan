@@ -52,7 +52,7 @@ test("an upload survives the proxy, and its link opens", async ({ page }) => {
 
   expect(insecure, `requests to plaintext URLs: ${insecure.join(", ")}`).toEqual([]);
 
-  const link = await page.locator("#link").inputValue();
+  const link = await page.locator("#link").innerText();
   expect(link.startsWith("https://"), `the link is ${link}`).toBe(true);
 
   await page.addInitScript(() => {
