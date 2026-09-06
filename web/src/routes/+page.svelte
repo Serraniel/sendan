@@ -508,23 +508,22 @@
   <h2>Ready to share</h2>
 
   <p class="result">
-    <label for="link">Link</label>
+    <span class="label">Link</span>
     <!--
-      Readonly rather than a paragraph of text: a field can be selected whole in
-      one gesture, and cannot be partially selected by a stray drag. The link is
-      also shown split below, so the fragment is visible rather than scrolled
-      out of sight.
+      One presentation, not two. This was a single-line readonly field with the
+      link repeated below it, because a field long enough to scroll settles at
+      the end - so the first thing under the word "Link" read like a broken
+      link, and the copy below existed to compensate.
+      Wrapping shows the whole link, `user-select: all` keeps the one gesture
+      the field was there for, and the fragment can be marked, which a field
+      cannot do.
     -->
-    <input id="link" type="text" value={link} readonly />
+    <span id="link" class="link"><span>{linkPath}</span><strong>{linkSecretText}</strong></span>
   </p>
 
   <p class="actions">
     <button type="button" class="primary" onclick={copy}>Copy link</button>
     {#if copied}<span class="copied" aria-live="polite">Copied.</span>{/if}
-  </p>
-
-  <p class="split">
-    <span>{linkPath}</span><strong>{linkSecretText}</strong>
   </p>
 
   <p class="note">
@@ -639,7 +638,7 @@
   }
 
   fieldset label,
-  .result label {
+  .result .label {
     display: block;
     margin-bottom: var(--space-1);
     font-weight: 600;
@@ -680,20 +679,24 @@
   /* The fragment, shown apart from the rest so it is visible rather than
      scrolled out of sight. The emphasis is the point of the paragraph beneath
      it, so it is not decoration. */
-  .split {
+  .link {
+    display: block;
     /* The link is one unbroken token; without this it is the widest thing on
        the page at every width. */
     overflow-wrap: anywhere;
     font-family: var(--font-mono);
     font-size: var(--text-sm);
-    overflow-wrap: anywhere;
     padding: var(--space-3);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface-sunken);
+    /* One click takes the whole link, which is what the field it replaced was
+       for. Partial selection by a stray drag is not possible either. */
+    user-select: all;
+    -webkit-user-select: all;
   }
 
-  .split strong {
+  .link strong {
     color: var(--accent);
   }
 

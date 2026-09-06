@@ -62,7 +62,7 @@ async function uploadThrough(
   await page.click('button[type="submit"]');
   await expect(page.locator("#link")).toBeVisible({ timeout: 60_000 });
 
-  const link = await page.locator("#link").inputValue();
+  const link = await page.locator("#link").innerText();
   expect(link, "the link is missing its fragment").toContain("#");
   return link;
 }
@@ -1461,7 +1461,7 @@ test.describe("generating a password", () => {
     page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "Encrypt and send" }).click();
 
-    const link = await page.locator("#link").inputValue();
+    const link = await page.locator("#link").innerText();
     expect(link).not.toContain(password);
 
     await page.goto(link);

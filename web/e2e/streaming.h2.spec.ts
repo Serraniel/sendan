@@ -64,7 +64,7 @@ test("a file sent as one streamed request arrives intact", async ({ page }) => {
 
   // And the file is the file. Read back through the download flow, which knows
   // nothing about how it was sent.
-  const link = await page.locator("#link").inputValue();
+  const link = await page.locator("#link").innerText();
   await page.addInitScript(() => {
     delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
   });
@@ -88,7 +88,7 @@ test("a password-protected file streams too", async ({ page }) => {
   await page.click('button[type="submit"]');
   await expect(page.locator("#link")).toBeVisible({ timeout: 60_000 });
 
-  const link = await page.locator("#link").inputValue();
+  const link = await page.locator("#link").innerText();
   await page.addInitScript(() => {
     delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
   });

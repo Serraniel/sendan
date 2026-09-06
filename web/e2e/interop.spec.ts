@@ -77,7 +77,7 @@ test("a file the browser sent opens in the command line client", async ({ page }
   });
   await page.click('button[type="submit"]');
   await expect(page.locator("#link")).toBeVisible({ timeout: 60_000 });
-  const link = await page.locator("#link").inputValue();
+  const link = await page.locator("#link").innerText();
 
   const out = join(work, "from-browser.bin");
   execFileSync(cli, ["down", link, "-o", out], { stdio: "pipe" });
@@ -103,7 +103,7 @@ test("a password-protected file crosses both ways", async ({ page }) => {
   await page.fill("#password", "correct horse");
   await page.click('button[type="submit"]');
   await expect(page.locator("#link")).toBeVisible({ timeout: 90_000 });
-  const link = await page.locator("#link").inputValue();
+  const link = await page.locator("#link").innerText();
 
   const out = join(work, "secret.bin");
   execFileSync(cli, ["down", link, "-o", out], {
