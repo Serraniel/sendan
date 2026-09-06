@@ -407,6 +407,32 @@ test.describe("what the client says about itself", () => {
     expect(link).toContain("#");
   });
 
+  test("does not answer No to a question it could not ask", async ({ page }) => {
+    // The instance rate limiting its own operator, which is how this was
+    // found. Every failure of this fetch answers "nothing known", and the
+    // lifetime control then has no default to preselect - so the upload names
+    // no lifetime, the instance applies its own, and this page knows only that
+    // it asked for nothing.
+    await page.route("**/api/instance", (route) => route.fulfill({ status: 429, body: "" }));
+
+    await uploadThrough(page, "unasked.txt", filled(500), "text/plain", {});
+
+    const claims = page.locator("ul.claims");
+    await expect(claims).toBeVisible({ timeout: 30_000 });
+    // Reporting "no deadline" here states the opposite of what is usually
+    // true: the instance almost certainly set one.
+    await expect(claims).not.toContainText("nothing removes it until somebody does");
+    await expect(claims).toContainText("could not read what that rule is");
+
+    // The mark, not only the wording. A ✕ beside an honest sentence is still a
+    // "no" to somebody reading the list rather than the paragraph, and the mark
+    // is what most people read.
+    const row = claims.locator("li", { hasText: "Removed on its own" });
+    await expect(row).toHaveClass(/unknown/);
+    await expect(row).not.toHaveClass(/holds/);
+    await expect(row.locator(".mark")).toHaveText("?");
+  });
+
   test("shows the version and the source it was built from", async ({ page }) => {
     await page.goto("/");
     const footer = page.locator("footer");
@@ -903,18 +929,38 @@ test.describe("choosing a file", () => {
       const data = new DataTransfer();
       data.items.add(new File(["dropped contents"], "dropped.txt", { type: "text/plain" }));
 
+      // What the page writes, rather than what the transfer reads back.
+      // Outside a genuine drag, Firefox records a written dropEffect and
+      // Chromium discards it, so reading the property would assert which
+      // browser is running the test. What matters is that the page names an
+      // effect at all.
+      let written: string | null = null;
+      Object.defineProperty(data, "dropEffect", {
+        configurable: true,
+        get: () => "none",
+        set: (value: string) => {
+          written = value;
+        },
+      });
+
       const fire = (type: string) => {
         const event = new DragEvent(type, { dataTransfer: data, bubbles: true, cancelable: true });
+        written = null;
         element.dispatchEvent(event);
-        return event.defaultPrevented;
+        return { prevented: event.defaultPrevented, effect: written };
       };
 
       return { enter: fire("dragenter"), over: fire("dragover"), drop: fire("drop") };
     });
 
-    // Cancelling both is what makes an element a drop target. Chromium is
-    // lenient about dragenter; Firefox is not.
-    expect(cancelled).toEqual({ enter: true, over: true, drop: true });
+    // Cancelling both is what makes an element a drop target; naming the effect
+    // is what keeps it one. A target that leaves dropEffect at "none" stops
+    // being tracked and the drop is never delivered: the zone lights up,
+    // because dragover was cancelled, and the release goes nowhere. That is
+    // what Firefox did, and what a real drag there is the only proof of.
+    expect(cancelled.enter).toEqual({ prevented: true, effect: "copy" });
+    expect(cancelled.over).toEqual({ prevented: true, effect: "copy" });
+    expect(cancelled.drop.prevented).toBe(true);
 
     await expect(zone).toContainText("dropped.txt");
     // The action becomes available, which is the thing that proves the file was
@@ -934,6 +980,28 @@ test.describe("choosing a file", () => {
       };
     });
     expect(form).toEqual({ files: 1, message: "", valid: true });
+  });
+
+  test("ignores a drag that carries no file", async ({ page }) => {
+    // Selected text dragged over the zone. Lighting up for it promises
+    // something the release cannot deliver, which is the same dead end as a
+    // file drop that never arrives.
+    await page.goto("/");
+    const zone = page.locator("label.drop");
+
+    const lit = await zone.evaluate((element) => {
+      const data = new DataTransfer();
+      data.setData("text/plain", "not a file");
+      const event = new DragEvent("dragover", {
+        dataTransfer: data,
+        bubbles: true,
+        cancelable: true,
+      });
+      element.dispatchEvent(event);
+      return { prevented: event.defaultPrevented, dragging: element.classList.contains("dragging") };
+    });
+
+    expect(lit).toEqual({ prevented: false, dragging: false });
   });
 
   test("the file input still works on its own", async ({ page }) => {

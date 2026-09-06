@@ -47,8 +47,15 @@ export interface StoredUpload {
   name: string;
   size: number;
   createdAt: number;
-  /** Milliseconds since the epoch, or null when the upload never expires. */
+  /** Milliseconds since the epoch, or null when no deadline is known here. */
   expiresAt: number | null;
+  /**
+   * Whether the deadline is the instance's own, and unknown here.
+   *
+   * Absent on records written before this existed, which read as false - the
+   * same answer they were shown when they were made.
+   */
+  deadlineIsTheInstances?: boolean;
 }
 
 /** Whether this browser can keep a list at all. */

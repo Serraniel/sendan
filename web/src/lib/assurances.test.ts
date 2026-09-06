@@ -29,6 +29,7 @@ const strong: Protection = {
   metadataEncrypted: true,
   lifetime: {
     expiresAt: new Date("2026-01-01T00:00:00Z"),
+    deadlineIsTheInstances: false,
     downloadsRemaining: 3,
     revocable: false,
   },
@@ -97,10 +98,62 @@ describe("an upload with nothing set", () => {
       ...strong,
       password: null,
       metadataEncrypted: false,
-      lifetime: { expiresAt: null, downloadsRemaining: null, revocable: false },
+      lifetime: {
+        expiresAt: null,
+        deadlineIsTheInstances: false,
+        downloadsRemaining: null,
+        revocable: false,
+      },
     },
     true,
   );
+
+  it("does not turn a question it could not ask into a No", () => {
+    // The upload named no lifetime, which happens when the instance could not
+    // be read - it was rate limiting, or did not answer. The instance then
+    // applies its own rule, which may set a deadline and may not. Answering
+    // "no" would state the opposite of what is usually true, about the one
+    // thing this list exists to be exact about.
+    const unread = assurances(
+      {
+        ...strong,
+        password: null,
+        lifetime: {
+          expiresAt: null,
+          deadlineIsTheInstances: true,
+          downloadsRemaining: null,
+          revocable: true,
+        },
+      },
+      true,
+    );
+
+    const removed = claim(unread, "Removed on its own");
+    expect(removed.holds).toBe("unknown");
+    expect(removed.because).toContain("could not read what that rule is");
+    expect(removed.because).not.toContain("nothing removes it");
+  });
+
+  it("still says No when the sender asked for no deadline at all", () => {
+    // Not the same situation: here the answer is known, and it is no.
+    const forever = assurances(
+      {
+        ...strong,
+        password: null,
+        lifetime: {
+          expiresAt: null,
+          deadlineIsTheInstances: false,
+          downloadsRemaining: null,
+          revocable: true,
+        },
+      },
+      true,
+    );
+
+    const removed = claim(forever, "Removed on its own");
+    expect(removed.holds).toBe(false);
+    expect(removed.because).toContain("nothing removes it");
+  });
 
   it("says plainly that anyone with the link can open it", () => {
     const password = claim(bare, "Protected with a password");
