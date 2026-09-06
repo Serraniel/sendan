@@ -27,14 +27,18 @@
 -->
 <ul class="claims">
   {#each claims as claim (claim.claim)}
-    <li class:holds={claim.holds}>
+    <li class:holds={claim.holds === true} class:unknown={claim.holds === "unknown"}>
       <!--
         A mark as well as a colour. Colour alone says nothing to somebody who
         cannot tell these two apart, and this list is only worth showing if its
         answers are legible.
       -->
-      <span class="mark" aria-hidden="true">{claim.holds ? "✓" : "✕"}</span>
-      <span class="visually-hidden">{claim.holds ? "Yes:" : "No:"}</span>
+      <span class="mark" aria-hidden="true"
+        >{claim.holds === true ? "✓" : claim.holds === "unknown" ? "?" : "✕"}</span
+      >
+      <span class="visually-hidden"
+        >{claim.holds === true ? "Yes:" : claim.holds === "unknown" ? "Not known:" : "No:"}</span
+      >
       <span class="claim">
         <span class="what">{claim.claim}</span>
         <span class="why">{claim.because}</span>
@@ -105,6 +109,13 @@
 
   .claims li.holds .mark {
     color: var(--positive);
+  }
+
+  /* Neither yes nor no. Muted rather than alarming: an unanswered question is
+     not a failing, and colouring it like one would push somebody towards the
+     wrong conclusion just as reporting it as "no" did. */
+  .claims li.unknown .mark {
+    color: var(--text-muted);
   }
 
   .claim {

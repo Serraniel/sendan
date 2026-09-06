@@ -16,6 +16,7 @@
     describeRetention,
     downloadChoices as downloadChoices2,
     expiryChoices,
+    USE_DEFAULT,
   } from "$lib/retention";
   import InstanceRules from "$lib/InstanceRules.svelte";
   import { acknowledge, isSupported, mustWarn, remember } from "$lib/vault";
@@ -71,13 +72,29 @@
   let dragging = $state(false);
 
   // Both dragenter and dragover, because the drag-and-drop model asks a drop
-  // target to cancel both before it will deliver a drop. Cancelling only
-  // dragover is enough in Chromium and is not reliably enough in Firefox,
-  // where dropping a file did nothing at all and the dialog was the only way
-  // in.
+  // target to cancel both before it will deliver a drop.
   function overZone(event: DragEvent) {
     if (busy) return;
+    const transfer = event.dataTransfer;
+
+    // Only a file drag. Dragging selected text or a link over the zone would
+    // otherwise light it up and then do nothing on release - the same dead end
+    // this function exists to avoid.
+    if (transfer !== null && !transfer.types.includes("Files")) return;
+
     event.preventDefault();
+
+    // Say what dropping would do. Cancelling the event makes this a drop
+    // target; leaving dropEffect at "none" un-makes it, and the browser then
+    // stops tracking the target and never fires drop. The zone lights up,
+    // because dragover was cancelled, and the release goes nowhere.
+    //
+    // Chromium infers "copy" for a file dragged in from outside the browser.
+    // Firefox does not, which is why this failed there and only there.
+    if (transfer !== null) {
+      transfer.dropEffect = "copy";
+    }
+
     dragging = true;
   }
 
@@ -161,6 +178,10 @@
           applied.ttlSeconds > 0
             ? new Date(applied.startedAt + applied.ttlSeconds * 1000)
             : null,
+        // Zero is "you decide", which only happens when the instance could not
+        // be read. The deadline is then the instance's and unknown here, which
+        // is a different thing from there being none.
+        deadlineIsTheInstances: applied.ttlSeconds === USE_DEFAULT,
         maxDownloads: applied.maxDownloads,
       });
 
@@ -217,6 +238,7 @@
         createdAt: applied.startedAt,
         expiresAt:
           applied.ttlSeconds > 0 ? applied.startedAt + applied.ttlSeconds * 1000 : null,
+        deadlineIsTheInstances: applied.ttlSeconds === USE_DEFAULT,
       });
     } catch {
       // The upload succeeded; only the note about it did not, and there is

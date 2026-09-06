@@ -48,8 +48,18 @@ export interface PasswordProtection {
 }
 
 export interface LifetimeProtection {
-  /** Absent means the upload does not expire on a deadline. */
+  /** Absent means no deadline is known here; see {@link deadlineIsTheInstances}. */
   expiresAt: Date | null;
+  /**
+   * Whether the deadline is the instance's own, and unknown to this page.
+   *
+   * True when the upload asked the instance to decide rather than naming a
+   * lifetime. The instance then applies its own rule, which may set a deadline
+   * or may not, and this side has no way to tell which - so "no deadline here"
+   * and "a deadline this page cannot see" are different facts and must not
+   * collapse into one another.
+   */
+  deadlineIsTheInstances: boolean;
   /** Absent means no limit. */
   downloadsRemaining: number | null;
   /** Whether the sender can remove it early. */
@@ -113,6 +123,13 @@ export interface UploadProtectionInput {
   expiresAt?: Date | null | undefined;
   maxDownloads?: number | null | undefined;
   endpoints?: "native" | "compatibility";
+  /**
+   * Whether the deadline was left to the instance.
+   *
+   * Set when the upload named no lifetime, which happens when this page could
+   * not read what the instance's default is. See {@link LifetimeProtection}.
+   */
+  deadlineIsTheInstances?: boolean;
 }
 
 /** What protected a file this client has just sent. */
@@ -125,6 +142,7 @@ export function describeUpload(input: UploadProtectionInput): Protection {
     metadataEncrypted: true,
     lifetime: {
       expiresAt: input.expiresAt ?? null,
+      deadlineIsTheInstances: input.deadlineIsTheInstances ?? false,
       // Zero means no limit, and must not be shown as "0 downloads remaining".
       downloadsRemaining:
         input.maxDownloads === undefined || input.maxDownloads === null || input.maxDownloads === 0
@@ -156,6 +174,9 @@ export function describeDownload(
     metadataEncrypted: true,
     lifetime: {
       expiresAt: metadata.expiresAt,
+      // A recipient reads the deadline the instance actually applied, so there
+      // is nothing here for it to be uncertain about.
+      deadlineIsTheInstances: false,
       downloadsRemaining: metadata.downloadsRemaining,
       // The sender holds the owner token; a recipient does not.
       revocable: false,
@@ -264,15 +285,54 @@ export function protectionLines(protection: Protection): ProtectionLine[] {
   return lines;
 }
 
+/**
+ * Whether a claim holds, does not hold, or cannot be answered from here.
+ *
+ * Three states rather than two, because the third one exists: this page can be
+ * unable to reach the instance, and an unanswerable question rounded to "no" is
+ * a false statement rather than a cautious one.
+ */
+export type Holds = boolean | "unknown";
+
 /** Whether a plain-language claim holds, and why. */
 export interface Assurance {
   /** What is being claimed, in words somebody can act on. */
   claim: string;
   /** Whether it holds. */
-  holds: boolean;
+  holds: Holds;
   /** Why it holds, or why it does not. Never omitted: a mark without a reason
    *  is a claim, and this list exists to replace claims with facts. */
   because: string;
+}
+
+/**
+ * Whether anything removes the upload without somebody doing it.
+ *
+ * "Unknown" is a real answer here. An upload that named no lifetime leaves the
+ * decision to the instance, and where this page could not read what the
+ * instance does - it was not reachable, or it said nothing - there is no way to
+ * tell whether a deadline was set. Answering "no" would state, as a fact, the
+ * opposite of what is usually true.
+ */
+function removedOnItsOwn(lifetime: LifetimeProtection): Holds {
+  if (lifetime.expiresAt !== null || lifetime.downloadsRemaining !== null) return true;
+  return lifetime.deadlineIsTheInstances ? "unknown" : false;
+}
+
+function whyRemovedOnItsOwn(lifetime: LifetimeProtection): string {
+  if (lifetime.expiresAt !== null || lifetime.downloadsRemaining !== null) {
+    return "It goes when its deadline passes or its downloads run out, whichever comes first.";
+  }
+  if (lifetime.deadlineIsTheInstances) {
+    return (
+      "No lifetime was asked for, so the instance applied its own rule. This page " +
+      "could not read what that rule is, so it cannot say whether a deadline was set."
+    );
+  }
+  return (
+    "This upload has neither a deadline nor a download limit, so nothing removes " +
+    "it until somebody does."
+  );
 }
 
 /**
@@ -343,14 +403,8 @@ export function assurances(protection: Protection, secureTransport: boolean): As
     },
     {
       claim: "Removed on its own",
-      holds:
-        protection.lifetime.expiresAt !== null || protection.lifetime.downloadsRemaining !== null,
-      because:
-        protection.lifetime.expiresAt === null && protection.lifetime.downloadsRemaining === null
-          ? "This upload has neither a deadline nor a download limit, so nothing " +
-            "removes it until somebody does."
-          : "It goes when its deadline passes or its downloads run out, whichever " +
-            "comes first.",
+      holds: removedOnItsOwn(protection.lifetime),
+      because: whyRemovedOnItsOwn(protection.lifetime),
     },
     {
       claim: "Delivered over an encrypted connection",

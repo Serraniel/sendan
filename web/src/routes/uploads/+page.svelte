@@ -161,9 +161,12 @@
     uploads = [];
   }
 
-  function when(at: number | null): string {
-    if (at === null) return "never";
-    return new Date(at).toLocaleString();
+  function when(upload: StoredUpload): string {
+    if (upload.expiresAt !== null) return new Date(upload.expiresAt).toLocaleString();
+    // Not the same as never. An upload that named no lifetime left the deadline
+    // to the instance, and this browser has no way to know what it decided -
+    // writing "never" there states the opposite of what is usually true.
+    return upload.deadlineIsTheInstances === true ? "when the instance decides" : "never";
   }
 
   function size(bytes: number): string {
@@ -241,7 +244,7 @@
     {#each uploads as upload (upload.id)}
       <li>
         <p class="name">{upload.name}</p>
-        <p class="detail">{size(upload.size)} · expires {when(upload.expiresAt)}</p>
+        <p class="detail">{size(upload.size)} · expires {when(upload)}</p>
         <p><input type="text" value={upload.link} readonly aria-label="Link for {upload.name}" /></p>
         <!--
           Removing the record is not removing the upload, and saying which is
