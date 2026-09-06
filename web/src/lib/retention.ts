@@ -40,18 +40,37 @@ export interface Choice<T> {
  * takes it back.
  */
 export function expiryChoices(policy: InstancePolicy): Array<Choice<number>> {
-  const defaultLabel =
-    policy.defaultTtlSeconds === null
-      ? "This instance's default"
-      : `${formatDuration(policy.defaultTtlSeconds)} (this instance's default)`;
-
   const offered: Array<Choice<number>> = [
-    { value: USE_DEFAULT, label: defaultLabel },
     { value: 3600, label: "1 hour" },
     { value: 86400, label: "1 day" },
     { value: 7 * 86400, label: "7 days" },
     { value: 30 * 86400, label: "30 days" },
   ];
+
+  const preferred = policy.defaultTtlSeconds;
+  if (preferred === null) {
+    // The instance did not say, so there is no real lifetime to preselect and
+    // asking it to decide is the only way to get its default.
+    offered.unshift({ value: USE_DEFAULT, label: "This instance's default" });
+  } else {
+    // Marked rather than added. An entry meaning "whatever the instance does"
+    // sits beside the lifetime it resolves to, so the list offers the same
+    // thing twice - and the two are not interchangeable: the request that asks
+    // the instance to decide carries no lifetime, so this side cannot say what
+    // the file got and reports no deadline for a file that has one.
+    const match = offered.find((c) => c.value === preferred);
+    if (match === undefined) {
+      // A default this list does not offer - twelve hours, say. Inserted in
+      // place as a real lifetime, so choosing it still sends a number.
+      offered.push({ value: preferred, label: formatDuration(preferred) });
+      offered.sort((a, b) => a.value - b.value);
+    }
+    for (const choice of offered) {
+      if (choice.value === preferred) {
+        choice.label = `${choice.label} (this instance's default)`;
+      }
+    }
+  }
 
   const max = policy.maxTtlSeconds;
   const within = max === null ? offered : offered.filter((c) => c.value <= max);
@@ -64,18 +83,60 @@ export function expiryChoices(policy: InstancePolicy): Array<Choice<number>> {
   return within;
 }
 
+/**
+ * The lifetime to start on.
+ *
+ * The instance's own default where it published one, so the form shows what
+ * would happen anyway and the request carries the number rather than asking the
+ * instance to fill it in. Where it published none, the request has to ask.
+ */
+export function defaultExpiry(policy: InstancePolicy): number {
+  const choices = expiryChoices(policy);
+  const preferred = policy.defaultTtlSeconds;
+  if (preferred !== null && choices.some((c) => c.value === preferred)) {
+    return preferred;
+  }
+  // Either nothing was published, or the default is longer than this instance
+  // now accepts. Asking it to decide is the honest answer to both.
+  return USE_DEFAULT;
+}
+
 /** The download limits to offer, with the instance's own default named. */
 export function downloadChoices(policy: InstancePolicy): Array<Choice<number>> {
+  const counts = [1, 5, 20, 100];
+  // A default this list does not otherwise carry - seven, say - belongs in it
+  // as a real number, in place. Without this the list marks nothing and the
+  // form starts somewhere the instance did not choose.
+  const preferred = policy.defaultMaxDownloads;
+  if (preferred !== null && preferred > 0 && !counts.includes(preferred)) {
+    counts.push(preferred);
+    counts.sort((a, b) => a - b);
+  }
+
   const mark = (count: number, label: string) =>
-    count === policy.defaultMaxDownloads ? `${label} (this instance's default)` : label;
+    count === preferred ? `${label} (this instance's default)` : label;
 
   return [
     { value: 0, label: mark(0, "No limit") },
-    ...[1, 5, 20, 100].map((count) => ({
+    ...counts.map((count) => ({
       value: count,
       label: mark(count, `${count} download${count === 1 ? "" : "s"}`),
     })),
   ];
+}
+
+/**
+ * The download limit to start on.
+ *
+ * The instance's own default, so the form shows what would happen anyway. This
+ * is not the same failure the lifetime had - a limit of zero means no limit on
+ * both sides, so nothing was ever misdescribed - but a list that marks one
+ * entry as the default and starts on another is its own small lie.
+ */
+export function defaultDownloads(policy: InstancePolicy): number {
+  // No limit where the instance published none: zero means the same thing on
+  // both sides, so nothing is misdescribed by starting there.
+  return policy.defaultMaxDownloads ?? 0;
 }
 
 /** What was applied, and whether nothing will remove it. */

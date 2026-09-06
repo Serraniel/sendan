@@ -4,6 +4,8 @@
 import { describe, expect, it } from "vitest";
 import { nothingKnown } from "./instance.js";
 import {
+  defaultDownloads,
+  defaultExpiry,
   describeRetention,
   downloadChoices,
   expiryChoices,
@@ -20,14 +22,32 @@ const policy = {
 };
 
 describe("the lifetimes offered", () => {
-  it("names the instance's default rather than alluding to it", () => {
-    const [first] = expiryChoices(policy);
-    expect(first?.value).toBe(USE_DEFAULT);
-    expect(first?.label).toBe("1 day (this instance's default)");
+  it("marks the instance's default rather than offering it twice", () => {
+    // An entry meaning "whatever the instance does" sits beside the lifetime it
+    // resolves to, so the list offered the same thing twice - and the two were
+    // not interchangeable. The request that asks the instance to decide carries
+    // no lifetime, so this side could not say what the file got and reported no
+    // deadline for a file that had one.
+    const choices = expiryChoices(policy);
+    expect(choices.filter((c) => c.value === USE_DEFAULT)).toEqual([]);
+    expect(choices.filter((c) => c.label.includes("this instance's default"))).toEqual([
+      { value: 86400, label: "1 day (this instance's default)" },
+    ]);
   });
 
-  it("falls back to the vague wording when the instance did not say", () => {
+  it("offers a default this list does not otherwise carry, in place", () => {
+    // Twelve hours is a lifetime an operator may set and this list does not
+    // name. It belongs between the two it sits between, as a real number.
+    const choices = expiryChoices({ ...policy, defaultTtlSeconds: 12 * 3600 });
+    expect(choices.map((c) => c.value)).toEqual([3600, 12 * 3600, 86400, 7 * 86400]);
+    expect(choices[1]?.label).toBe("12 hours (this instance's default)");
+  });
+
+  it("falls back to asking the instance when it did not say", () => {
+    // With nothing published there is no real lifetime to preselect, so the
+    // request has to ask - which is the one case the vague entry is for.
     const [first] = expiryChoices(nothingKnown);
+    expect(first?.value).toBe(USE_DEFAULT);
     expect(first?.label).toBe("This instance's default");
   });
 
@@ -56,7 +76,41 @@ describe("the lifetimes offered", () => {
   });
 });
 
+describe("where the form starts", () => {
+  it("starts on the instance's own default", () => {
+    // A number rather than USE_DEFAULT, so the upload carries the lifetime and
+    // this side knows the deadline it will get.
+    expect(defaultExpiry(policy)).toBe(86400);
+  });
+
+  it("asks the instance when it published nothing", () => {
+    expect(defaultExpiry(nothingKnown)).toBe(USE_DEFAULT);
+  });
+
+  it("asks the instance when its default is longer than it now accepts", () => {
+    // An operator can lower the maximum below the default, and the option is
+    // then filtered out. Preselecting a value that is not in the list would
+    // leave the control showing nothing.
+    const narrowed = { ...policy, defaultTtlSeconds: 30 * 86400, maxTtlSeconds: 86400 };
+    expect(defaultExpiry(narrowed)).toBe(USE_DEFAULT);
+    expect(expiryChoices(narrowed).map((c) => c.value)).not.toContain(30 * 86400);
+  });
+});
+
 describe("the download limits offered", () => {
+  it("starts on the instance's own default", () => {
+    // Not the failure the lifetime had - zero means no limit on both sides, so
+    // nothing was ever misdescribed - but a list that marks one entry as the
+    // default and starts on another is its own small lie.
+    expect(defaultDownloads({ ...policy, defaultMaxDownloads: 5 })).toBe(5);
+    expect(defaultDownloads({ ...policy, defaultMaxDownloads: null })).toBe(0);
+  });
+
+  it("offers a default this list does not otherwise carry, in place", () => {
+    const values = downloadChoices({ ...policy, defaultMaxDownloads: 7 }).map((c) => c.value);
+    expect(values).toEqual([0, 1, 5, 7, 20, 100]);
+  });
+
   it("marks whichever one the instance applies by default", () => {
     const none = downloadChoices({ ...policy, defaultMaxDownloads: 0 });
     expect(none[0]?.label).toBe("No limit (this instance's default)");

@@ -11,6 +11,8 @@
   import { fetchInstancePolicy, type InstancePolicy, nothingKnown } from "$lib/instance";
   import { DEFAULT_WORDS, describeStrength, generate } from "$lib/passphrase";
   import {
+    defaultDownloads,
+    defaultExpiry,
     describeRetention,
     downloadChoices as downloadChoices2,
     expiryChoices,
@@ -150,10 +152,11 @@
 
       protection = describeUpload({
         password: result.passwordParams,
-        // The instance decides the deadline from the requested lifetime, so
-        // this is what was asked for rather than what was granted. Where
-        // nothing was asked for, the instance's default applies and this side
-        // does not know it.
+        // What was asked for rather than what was granted: the instance
+        // decides the deadline from the requested lifetime. The form now
+        // starts on the instance's published default, so this is a number
+        // whenever the instance published one - which is what stopped an
+        // upload with a deadline from being described as having none.
         expiresAt:
           applied.ttlSeconds > 0
             ? new Date(applied.startedAt + applied.ttlSeconds * 1000)
@@ -310,8 +313,8 @@
     progress = null;
     failure = null;
     copied = false;
-    ttlSeconds = 0;
-    maxDownloads = 0;
+    ttlSeconds = defaultExpiry(policy);
+    maxDownloads = defaultDownloads(policy);
   }
 
   // Read from the protocol, not from isSecureContext. A browser grants
@@ -327,6 +330,11 @@
     source = (await fetchBuild())?.source ?? null;
     maxUploadSize = await fetchMaxUploadSize();
     policy = await fetchInstancePolicy();
+    // Start on what the instance would do anyway, now that it says so. Set
+    // here rather than derived, because this is a starting point and not a
+    // rule: once somebody picks a lifetime, it is theirs.
+    ttlSeconds = defaultExpiry(policy);
+    maxDownloads = defaultDownloads(policy);
   });
 
   const percent = $derived(
