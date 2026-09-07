@@ -46,14 +46,26 @@ func main() {
 		log.Fatalf("e2e-tlsproxy: certificate: %v", err)
 	}
 
-	proxy := httputil.NewSingleHostReverseProxy(target)
 	// The instance decides whether to send HSTS from its own configuration, and
 	// a proxy that rewrote the request would change what is being tested. The
 	// only thing added is the header a real deployment would add.
-	director := proxy.Director
-	proxy.Director = func(r *http.Request) {
-		director(r)
-		r.Header.Set("X-Forwarded-Proto", "https")
+	//
+	// Rewrite rather than Director, which Go 1.26 deprecated. It is also the
+	// safer of the two: Director hands over the outbound request alone, so a
+	// header the client sent arrives indistinguishable from one this proxy
+	// added, and X-Forwarded-Proto is exactly the kind a client must not be
+	// able to forge. Rewrite sees both requests and starts the outbound one
+	// with the hop-by-hop headers already stripped.
+	proxy := &httputil.ReverseProxy{
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.SetURL(target)
+			// Keeps the client's Host, which NewSingleHostReverseProxy also
+			// did: an instance that builds absolute links from it would
+			// otherwise answer with the upstream's name rather than the one
+			// the browser asked for.
+			r.Out.Host = r.In.Host
+			r.Out.Header.Set("X-Forwarded-Proto", "https")
+		},
 	}
 
 	server := &http.Server{
