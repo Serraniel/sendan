@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/Serraniel/sendan/compare/v0.2.0...v0.2.1) (2026-09-08)
+
+
+### Bug Fixes
+
+* **web:** name the client build after the commit, not the clock ([2e038e1](https://github.com/Serraniel/sendan/commit/2e038e111d93b6cb75dc229b592b1039f6cb1b1f))
+* **web:** offer the lifetime an instance actually allows ([b356b16](https://github.com/Serraniel/sendan/commit/b356b16209b272edfb40846bca9c4431ced7a652))
+
 ## [0.2.0](https://github.com/Serraniel/sendan/compare/v0.1.0...v0.2.0) (2026-09-07)
 
 
