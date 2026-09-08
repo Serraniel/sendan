@@ -19,6 +19,7 @@
     USE_DEFAULT,
   } from "$lib/retention";
   import InstanceRules from "$lib/InstanceRules.svelte";
+  import LinkBlock from "$lib/LinkBlock.svelte";
   import { acknowledge, isSupported, mustWarn, remember } from "$lib/vault";
   import { TusError } from "$lib/tus";
   import { type UploadProgress, type UploadResult, uploadFile } from "$lib/upload";
@@ -48,9 +49,8 @@
   const link = $derived(
     result === null ? "" : downloadLink(page.url.origin, result.fileID, result.linkSecret),
   );
-  // Split for display only. The fragment is shown apart from the rest so it is
-  // visibly part of the link rather than something trailing off the end.
-  const linkPath = $derived(link === "" ? "" : link.slice(0, link.indexOf("#") + 1));
+  // Only for the sentence that names its length; the block itself splits the
+  // link for display.
   const linkSecretText = $derived(link === "" ? "" : link.slice(link.indexOf("#") + 1));
 
   // What the instance permits, so somebody can see the rules rather than
@@ -211,7 +211,7 @@
   async function keep(
     name: string,
     size: number,
-    applied: { ttlSeconds: number; startedAt: number },
+    applied: { ttlSeconds: number; startedAt: number; password: string },
   ) {
     if (result === null || !isSupported()) return;
 
@@ -239,6 +239,9 @@
         expiresAt:
           applied.ttlSeconds > 0 ? applied.startedAt + applied.ttlSeconds * 1000 : null,
         deadlineIsTheInstances: applied.ttlSeconds === USE_DEFAULT,
+        // Whether, not what: the password itself is never written down. The list
+        // needs this to say truthfully whether a code to scan leaves it out.
+        hasPassword: applied.password !== "",
       });
     } catch {
       // The upload succeeded; only the note about it did not, and there is
@@ -518,7 +521,7 @@
       the field was there for, and the fragment can be marked, which a field
       cannot do.
     -->
-    <span id="link" class="link"><span>{linkPath}</span><strong>{linkSecretText}</strong></span>
+    <LinkBlock {link} id="link" />
   </p>
 
   <p class="actions">
@@ -679,26 +682,6 @@
   /* The fragment, shown apart from the rest so it is visible rather than
      scrolled out of sight. The emphasis is the point of the paragraph beneath
      it, so it is not decoration. */
-  .link {
-    display: block;
-    /* The link is one unbroken token; without this it is the widest thing on
-       the page at every width. */
-    overflow-wrap: anywhere;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
-    padding: var(--space-3);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface-sunken);
-    /* One click takes the whole link, which is what the field it replaced was
-       for. Partial selection by a stray drag is not possible either. */
-    user-select: all;
-    -webkit-user-select: all;
-  }
-
-  .link strong {
-    color: var(--accent);
-  }
 
   details {
     margin: var(--space-4) 0;

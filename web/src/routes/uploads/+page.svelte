@@ -2,6 +2,8 @@
   import { onMount } from "svelte";
   import { BackupError, exportUploads, explainBackup, importUploads } from "$lib/backup";
   import { explainRevoke, RevokeError, revokeUpload } from "$lib/revoke";
+  import LinkBlock from "$lib/LinkBlock.svelte";
+  import LinkCode from "$lib/LinkCode.svelte";
   import {
     forget,
     forgetAll,
@@ -12,6 +14,9 @@
   } from "$lib/vault";
 
   let uploads = $state<StoredUpload[]>([]);
+  // Which entry was last copied, so the confirmation belongs to one row
+  // rather than to the page.
+  let copied = $state<string | null>(null);
   let loaded = $state(false);
   let supported = $state(true);
   let failure = $state<string | null>(null);
@@ -116,6 +121,18 @@
    * the same path it takes when an upload expires, so the row, the blob and the
    * at-rest key are gone rather than marked.
    */
+  async function copy(upload: StoredUpload) {
+    try {
+      await navigator.clipboard.writeText(upload.link);
+      copied = upload.id;
+    } catch {
+      // Refused, or no permission. The block above is selectable, so say
+      // that rather than claim a copy that did not happen.
+      copied = null;
+      failure = "Could not reach the clipboard. Select the link and copy it.";
+    }
+  }
+
   async function remove(upload: StoredUpload) {
     if (
       !confirm(
@@ -245,7 +262,18 @@
       <li>
         <p class="name">{upload.name}</p>
         <p class="detail">{size(upload.size)} · expires {when(upload)}</p>
-        <p><input type="text" value={upload.link} readonly aria-label="Link for {upload.name}" /></p>
+        <LinkBlock link={upload.link} />
+        <p class="share">
+          <button type="button" onclick={() => copy(upload)} disabled={working !== null}>
+            {copied === upload.id ? "Copied." : "Copy link"}
+          </button>
+        </p>
+        <!--
+          The same code the page that made this link offers. It is for a second
+          device rather than a second copy for the same eye, and this list is
+          where somebody comes back to send a link they already have.
+        -->
+        <LinkCode link={upload.link} hasPassword={upload.hasPassword ?? null} />
         <!--
           Removing the record is not removing the upload, and saying which is
           which matters: somebody clearing this list to tidy up should not
@@ -317,10 +345,10 @@
     color: var(--text-muted);
   }
 
-  .uploads input {
-    width: 100%;
-    font-family: var(--font-mono);
-    font-size: var(--text-sm);
+  /* The copy control sits under the link rather than beside it: at 320px a
+     button next to a link that wraps has nowhere to go. */
+  .share {
+    margin: var(--space-2) 0;
   }
 
   .note {
