@@ -40,47 +40,53 @@ export interface Choice<T> {
  * takes it back.
  */
 export function expiryChoices(policy: InstancePolicy): Array<Choice<number>> {
-  const offered: Array<Choice<number>> = [
-    { value: 3600, label: "1 hour" },
-    { value: 86400, label: "1 day" },
-    { value: 7 * 86400, label: "7 days" },
-    { value: 30 * 86400, label: "30 days" },
-  ];
-
+  // A ladder of round lifetimes, plus whatever the instance itself named. Both
+  // of the instance's values belong in the list as real numbers rather than as
+  // an entry meaning "you decide": that entry carries no lifetime, so this side
+  // cannot say what the file got, and it reported no deadline for a file that
+  // had one (#251).
+  const ladder = [3600, 86400, 7 * 86400, 30 * 86400];
+  const max = policy.maxTtlSeconds;
   const preferred = policy.defaultTtlSeconds;
-  if (preferred === null) {
-    // The instance did not say, so there is no real lifetime to preselect and
-    // asking it to decide is the only way to get its default.
-    offered.unshift({ value: USE_DEFAULT, label: "This instance's default" });
-  } else {
-    // Marked rather than added. An entry meaning "whatever the instance does"
-    // sits beside the lifetime it resolves to, so the list offers the same
-    // thing twice - and the two are not interchangeable: the request that asks
-    // the instance to decide carries no lifetime, so this side cannot say what
-    // the file got and reports no deadline for a file that has one.
-    const match = offered.find((c) => c.value === preferred);
-    if (match === undefined) {
-      // A default this list does not offer - twelve hours, say. Inserted in
-      // place as a real lifetime, so choosing it still sends a number.
-      offered.push({ value: preferred, label: formatDuration(preferred) });
-      offered.sort((a, b) => a.value - b.value);
-    }
-    for (const choice of offered) {
-      if (choice.value === preferred) {
-        choice.label = `${choice.label} (this instance's default)`;
-      }
+
+  const values = new Set(max === null ? ladder : ladder.filter((v) => v <= max));
+
+  // The longest the instance permits. Without this a maximum that misses the
+  // ladder cannot be chosen at all - 72h sits between two rungs, so both higher
+  // ones are filtered away and nothing takes their place. Raising the ceiling
+  // to three days then *lowered* the visible maximum from seven days to one.
+  if (max !== null) values.add(max);
+
+  if (preferred !== null && (max === null || preferred <= max)) values.add(preferred);
+
+  const offered: Array<Choice<number>> = [...values]
+    .sort((a, b) => a - b)
+    .map((value) => ({ value, label: formatDuration(value) }));
+
+  for (const choice of offered) {
+    const isDefault = choice.value === preferred;
+    const isMax = choice.value === max;
+    if (isDefault && isMax) {
+      choice.label = `${choice.label} (this instance's default, and the longest it allows)`;
+    } else if (isDefault) {
+      choice.label = `${choice.label} (this instance's default)`;
+    } else if (isMax) {
+      choice.label = `${choice.label} (the longest this instance allows)`;
     }
   }
 
-  const max = policy.maxTtlSeconds;
-  const within = max === null ? offered : offered.filter((c) => c.value <= max);
+  if (preferred === null) {
+    // The instance did not say what it applies, so there is no real lifetime to
+    // preselect and asking it to decide is the only way to get its default.
+    offered.unshift({ value: USE_DEFAULT, label: "This instance's default" });
+  }
 
   // Last, and only where permitted: it is the option with the most
   // consequences, and on most instances it is not available at all.
   if (policy.allowInfiniteTtl === true) {
-    within.push({ value: NEVER, label: "Never" });
+    offered.push({ value: NEVER, label: "Never" });
   }
-  return within;
+  return offered;
 }
 
 /**
