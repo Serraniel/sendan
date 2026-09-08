@@ -76,6 +76,45 @@ describe("the lifetimes offered", () => {
   });
 });
 
+describe("the instance's own maximum", () => {
+  it("is offered even when it misses the ladder", () => {
+    // SENDAN_MAX_TTL=72h sits between two rungs. Filtering alone removed both
+    // higher ones and put nothing in their place, so raising the ceiling to
+    // three days lowered the visible maximum from seven days to one.
+    const choices = expiryChoices({ ...policy, maxTtlSeconds: 3 * 86400 });
+    expect(choices.map((c) => c.value)).toEqual([3600, 86400, 3 * 86400]);
+    expect(choices[2]?.label).toBe("3 days (the longest this instance allows)");
+  });
+
+  it("says both when the maximum is also the default", () => {
+    const choices = expiryChoices({
+      ...policy,
+      defaultTtlSeconds: 3 * 86400,
+      maxTtlSeconds: 3 * 86400,
+    });
+    expect(choices.at(-1)?.label).toBe(
+      "3 days (this instance's default, and the longest it allows)",
+    );
+  });
+
+  it("offers only the maximum when it is shorter than every rung", () => {
+    // An instance that keeps nothing for more than ten minutes still has to be
+    // usable, and the ladder has nothing to offer it.
+    const choices = expiryChoices({
+      ...policy,
+      defaultTtlSeconds: 600,
+      maxTtlSeconds: 600,
+    });
+    expect(choices.map((c) => c.value)).toEqual([600]);
+  });
+
+  it("adds nothing when the maximum is already a rung", () => {
+    const choices = expiryChoices({ ...policy, maxTtlSeconds: 7 * 86400 });
+    expect(choices.map((c) => c.value)).toEqual([3600, 86400, 7 * 86400]);
+    expect(choices.at(-1)?.label).toBe("7 days (the longest this instance allows)");
+  });
+});
+
 describe("where the form starts", () => {
   it("starts on the instance's own default", () => {
     // A number rather than USE_DEFAULT, so the upload carries the lifetime and
