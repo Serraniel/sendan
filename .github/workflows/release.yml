@@ -70,6 +70,36 @@ jobs:
       # Every target, through the same script a user runs to reproduce a
       # release. Checking one target would leave five unverified, and checking
       # them with different commands would verify something nobody can repeat.
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # The client, twice, for the same reason as the binaries - and it is the
+      # half that was not checked. SvelteKit names a build after the clock
+      # unless told otherwise, so this compared byte-identical CLIs while the
+      # bundle beside them differed on every build. v0.2.0 published a manifest
+      # describing a client its own image did not contain. See #260.
+      - name: Build the client twice and compare
+        run: |
+          set -euo pipefail
+          export SENDAN_VERSION="${TAG:-dev}"
+          export SENDAN_COMMIT="${COMMIT}"
+
+          (cd web && npm ci >/dev/null && npm run build >/dev/null)
+          find internal/webui/dist -type f | sort | xargs sha256sum > /tmp/client-a
+          (cd web && npm run build >/dev/null)
+          find internal/webui/dist -type f | sort | xargs sha256sum > /tmp/client-b
+
+          if ! diff -u /tmp/client-a /tmp/client-b; then
+            echo
+            echo "The client is not reproducible: two builds of this source do not"
+            echo "agree. The manifest published with a release and the client inside"
+            echo "the image are separate builds, so anything that differs between"
+            echo "them makes an honest instance fail sendan verify."
+            exit 1
+          fi
+          echo "the client builds byte-identically."
+
       - name: Build twice and compare
         run: |
           set -euo pipefail
@@ -140,7 +170,7 @@ jobs:
       - name: State what this release's client hashes to
         run: |
           set -euo pipefail
-          (cd web && npm ci && npm run build)
+          (cd web && npm ci && SENDAN_VERSION="${TAG:-dev}" SENDAN_COMMIT="${COMMIT}" npm run build)
           SENDAN_VERSION="${TAG:-dev}" SENDAN_COMMIT="${COMMIT}" \
             ./scripts/asset-manifest.sh dist/manifest.json
       # An unsigned manifest is only as trustworthy as the page it came from,

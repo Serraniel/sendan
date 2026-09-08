@@ -15,7 +15,7 @@
 # and change nothing about the output.
 
 # ---- the web client -------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:2d984a15c9b54fd0aeb608b8e0d0d83529eb34d2966db27a1fb4f1edc3d298a3 AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS web
 
 WORKDIR /src/web
 
@@ -33,7 +33,14 @@ COPY CHANGELOG.md /src/CHANGELOG.md
 COPY scripts/copy-changelog.mjs /src/scripts/copy-changelog.mjs
 # svelte.config.js writes to ../internal/webui/dist, which is where the Go build
 # below expects to find it - one definition of that path, in the app's config.
-RUN npm run build
+# The same identity the binary is stamped with, because the client's build is
+# named after it: without this the bundle carries a timestamp and two builds of
+# one source produce different filenames. The manifest published beside a
+# release is built separately, so the two must agree or `sendan verify` reports
+# an honest instance as compromised. See #260.
+ARG VERSION=dev
+ARG COMMIT=unknown
+RUN SENDAN_VERSION="$VERSION" SENDAN_COMMIT="$COMMIT" npm run build
 
 # ---- the binary -----------------------------------------------------------
 FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine@sha256:cf6fca6641884b8433441b2b0652976f975e1d0fdd26d177eaaf8596087f3125 AS build

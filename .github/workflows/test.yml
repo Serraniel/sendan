@@ -202,10 +202,19 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: ${{ env.NODE_VERSION }}
+      # Before anything is built, because what this asserts is that the two
+      # halves built here come from the same toolchains as the image. It ran
+      # only in scripts/verify.sh until now - so it held for whoever remembered
+      # to run it, and a dependency bump that moved the Dockerfile alone reached
+      # a release. v0.2.0 shipped an image that failed its own published
+      # manifest. See #260.
+      - name: Assert one toolchain builds the manifest and the image
+        run: ./scripts/check-toolchains.sh
+
       - name: Build web client, then the binary with assets embedded
         run: |
           set -euo pipefail
-          (cd web && npm ci && npm run build)
+          (cd web && npm ci && SENDAN_COMMIT="$GITHUB_SHA" npm run build)
 
           # Untagged first: this is what a contributor gets, and it must compile
           # without a JavaScript toolchain having run.
