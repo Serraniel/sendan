@@ -433,6 +433,28 @@ test.describe("what the client says about itself", () => {
     await expect(row.locator(".mark")).toHaveText("?");
   });
 
+  test("puts the source link on the same line as the others", async ({ page }) => {
+    // It was inline-flex, which takes its baseline from the first flex item -
+    // an SVG with no text baseline - so the browser fell back to the box's
+    // bottom edge and lifted the link 3px above its neighbours. Measured
+    // rather than looked at, because 3px is exactly the size of thing that
+    // creeps back.
+    await page.goto("/");
+    const footer = page.locator("footer");
+    await expect(footer).toContainText("Sendan", { timeout: 30_000 });
+
+    const tops = await page.evaluate(() => {
+      const links = [...document.querySelectorAll("footer p a")];
+      const wanted = ["source", "your uploads"];
+      return links
+        .filter((a) => wanted.some((w) => (a.textContent ?? "").trim().startsWith(w)))
+        .map((a) => Math.round(a.getBoundingClientRect().top));
+    });
+
+    expect(tops.length).toBe(2);
+    expect(tops[0]).toBe(tops[1]);
+  });
+
   test("shows the version and the source it was built from", async ({ page }) => {
     await page.goto("/");
     const footer = page.locator("footer");

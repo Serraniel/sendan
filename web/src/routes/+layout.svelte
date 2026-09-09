@@ -244,11 +244,14 @@
   }
 
   .source {
-    /* The mark sits on the text baseline rather than above it, and the pair
-       never breaks across a line. */
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3em;
+    /* Inline, so the link sits on the same baseline as the ones beside it. It
+       was inline-flex, which takes its baseline from the first flex item - and
+       that item is the mark, an SVG with no text baseline, so the browser fell
+       back to the box's bottom edge and lifted the whole link 3px above its
+       neighbours.
+
+       The pair still never breaks across a line: white-space does that on an
+       inline element too. */
     white-space: nowrap;
   }
 
@@ -256,6 +259,10 @@
     /* Takes the link's colour, including on hover, because it is part of the
        link rather than an image beside one. */
     flex: none;
+    /* Against the text rather than on the baseline, which would hang the whole
+       mark above it. */
+    vertical-align: -0.15em;
+    margin-right: 0.3em;
   }
 
   .caveat {
