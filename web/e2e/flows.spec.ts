@@ -1422,6 +1422,44 @@ test.describe("generating a password", () => {
     await expect(page.getByText(/not\s+stored anywhere/)).toBeVisible();
   });
 
+  test("offers characters as well, at the same strength", async ({ page }) => {
+    // Two generators, neither of them the strong one. The point of offering the
+    // second is to remove the argument, so the two must agree about what they
+    // are worth - otherwise the choice reads as a choice about security.
+    await page.goto("/");
+    await page.selectOption("#style", "characters");
+    await page.getByRole("button", { name: "Generate" }).click();
+
+    const value = await page.locator("#password").inputValue();
+    expect(value).toMatch(/^[a-zA-Z0-9_-]{10}$/);
+    await expect(page.locator(".generated")).toContainText("60 bits of randomness");
+
+    await page.selectOption("#style", "words");
+    await page.getByRole("button", { name: "Generate" }).click();
+    await expect(page.locator("#password")).toHaveValue(/^[a-z]+(-[a-z]+){5}$/);
+    await expect(page.locator(".generated")).toContainText("60 bits of randomness");
+  });
+
+  test("explains what that strength means, without being in the way", async ({ page }) => {
+    // The number alone did not stop somebody who knows this project asking
+    // whether a word list is weak. Folded, so it answers the question where it
+    // arises rather than lecturing everybody who sends a file.
+    await page.goto("/");
+    await page.getByRole("button", { name: "Generate" }).click();
+
+    const explanation = page.locator("details.strength");
+    await expect(explanation).toBeVisible();
+    // Folded: the text is in the document, which is why this asks whether it is
+    // shown rather than whether it exists.
+    await expect(explanation.locator("p").first()).not.toBeVisible();
+
+    await explanation.locator("summary").click();
+    await expect(explanation.locator("p").first()).toBeVisible();
+    await expect(explanation).toContainText("Length is not the measure");
+    await expect(explanation).toContainText("after the link has leaked");
+    await expect(explanation).toContainText("targets a chosen password");
+  });
+
   test("says to send it by another route", async ({ page }) => {
     // The point the generator must not obscure: this password is the second
     // half of the protection, and it is only a second half while it travels
