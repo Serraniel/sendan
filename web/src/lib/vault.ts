@@ -56,6 +56,15 @@ export interface StoredUpload {
    * same answer they were shown when they were made.
    */
   deadlineIsTheInstances?: boolean;
+  /**
+   * Whether a password was set.
+   *
+   * Absent on records written before this existed, and that is a third state
+   * rather than a false: a code to scan says the password is not in it, and
+   * saying that about an upload which never had one is as wrong as omitting it
+   * from one that did.
+   */
+  hasPassword?: boolean;
 }
 
 /** Whether this browser can keep a list at all. */

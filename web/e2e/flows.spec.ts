@@ -647,10 +647,15 @@ test.describe("your uploads", () => {
 
     await page.goto("/uploads");
     await expect(page.getByText("kept.txt")).toBeVisible();
-    // Read the value rather than matching an attribute selector: the value is
-    // set as a property, so the attribute does not carry it.
-    const shown = page.getByLabel(`Link for kept.txt`);
-    await expect(shown).toHaveValue(link);
+    // The link is shown whole rather than in a field that scrolls, so this
+    // reads the text of the row rather than a value (#265).
+    const row = page.locator("ul.uploads li", { hasText: "kept.txt" });
+    await expect(row.locator(".link")).toHaveText(link);
+
+    // The controls the page that made this link offers, which this list did
+    // not have: something to copy with, and a code for a second device.
+    await expect(row.getByRole("button", { name: /copy link/i })).toBeVisible();
+    await expect(row.getByText(/show a code to scan/i)).toBeVisible();
 
     // Forgetting the record must not touch the upload, and the page says so.
     await page.getByRole("button", { name: /forget this link/i }).click();
@@ -739,7 +744,9 @@ test.describe("your uploads", () => {
     await expect(receiver.locator("ul.uploads").getByText("exported.txt")).toBeVisible();
 
     // And what was restored still works: the link opens the file.
-    await expect(receiver.getByLabel("Link for exported.txt")).toHaveValue(link);
+    await expect(
+      receiver.locator("ul.uploads li", { hasText: "exported.txt" }).locator(".link"),
+    ).toHaveText(link);
     await second.close();
     await rm(file, { force: true });
   });

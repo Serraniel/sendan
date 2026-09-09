@@ -1,7 +1,10 @@
 <script lang="ts">
   import { encode, toPath, TooMuchData } from "$lib/qr";
 
-  let { link, hasPassword }: { link: string; hasPassword: boolean } = $props();
+  // Null is a third state, not a false. A record kept before this browser
+  // started noting it cannot say whether a password was set, and claiming
+  // either way would be a sentence about somebody's file that nobody checked.
+  let { link, hasPassword }: { link: string; hasPassword: boolean | null } = $props();
 
   // Never throws outward: a link too long for a code is a page without a code,
   // not a page with an error on it.
@@ -44,7 +47,13 @@
       can open the file.
     </p>
 
-    {#if hasPassword}
+    {#if hasPassword === null}
+      <p class="note">
+        A password is never in the code, whether or not this upload has one —
+        it protects a file because it travels separately. This browser did not
+        record which, so it cannot say.
+      </p>
+    {:else if hasPassword}
       <!--
         The point the feature could otherwise undo. A password is a second
         channel; a code that also carried it would collapse the two into one,
