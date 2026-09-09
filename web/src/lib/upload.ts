@@ -122,8 +122,54 @@ export interface UploadRequest {
   stream?: boolean;
 }
 
-/** Four mebibytes: a few seconds on a slow connection, which is the useful unit of progress. */
+/**
+ * The largest chunk sent when the caller names no size. Also the size a fast
+ * connection settles on.
+ */
 export const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;
+
+/**
+ * How the chunk size finds itself when the caller names none.
+ *
+ * Progress is reported per chunk, because a chunk is one request and `fetch`
+ * has nothing to say until it finishes. A fixed four mebibytes is a second on a
+ * fast link and fifteen on a slow one - which is what was reported: a bar that
+ * stood still and then jumped to 37%.
+ *
+ * So the size aims at a duration instead of a number of bytes. It starts small
+ * enough that the first wait is short even on a bad link, and grows to
+ * {@link DEFAULT_CHUNK_SIZE} where the connection can carry it, which is where
+ * it was all along.
+ *
+ * This makes the bar move often. It does not make it continuous: that needs
+ * upload progress events, which only XMLHttpRequest has, and this transport is
+ * a `fetch` the caller can substitute.
+ */
+export const CHUNK_TARGET_MS = 2000;
+/** Small enough that a first chunk on a bad link is a short wait, not a stall. */
+export const FIRST_CHUNK_SIZE = 512 * 1024;
+/** Below this the request overhead starts to cost more than the finer bar buys. */
+export const MIN_CHUNK_SIZE = 256 * 1024;
+
+/** The clock the adaptation reads. A monotonic one, so a system clock stepping
+ *  backwards cannot make a chunk look instantaneous. */
+const now = (): number =>
+  typeof performance !== "undefined" && typeof performance.now === "function"
+    ? performance.now()
+    : Date.now();
+
+/**
+ * The size to send next, from how long the last one took.
+ *
+ * Bounded to a halving or a doubling per step, so one slow request does not
+ * collapse the size and one fast one does not undo the collapse. A send too
+ * quick to measure is treated as room to grow rather than as infinite speed.
+ */
+export function nextChunkSize(sent: number, elapsedMs: number): number {
+  const scaled = elapsedMs <= 0 ? sent * 2 : sent * (CHUNK_TARGET_MS / elapsedMs);
+  const bounded = Math.min(Math.max(scaled, sent / 2), sent * 2);
+  return Math.min(Math.max(Math.round(bounded), MIN_CHUNK_SIZE), DEFAULT_CHUNK_SIZE);
+}
 
 /**
  * Encrypts a file and sends it, resolving to the secrets needed to share it.
@@ -134,6 +180,10 @@ export const DEFAULT_CHUNK_SIZE = 4 * 1024 * 1024;
  */
 export async function uploadFile(req: UploadRequest): Promise<UploadResult> {
   const { file, options = {}, transport = {}, onProgress } = req;
+  // A caller who named a size gets it, unchanged, every time. Only the default
+  // adapts, because only the default is a guess about a connection nobody has
+  // measured yet.
+  const adapt = req.chunkSize === undefined;
   const chunkSize = req.chunkSize ?? DEFAULT_CHUNK_SIZE;
   if (!Number.isSafeInteger(chunkSize) || chunkSize <= 0) {
     throw new TypeError(`upload: chunk size ${chunkSize} is not a byte count`);
@@ -201,6 +251,7 @@ export async function uploadFile(req: UploadRequest): Promise<UploadResult> {
     fileKey,
     location,
     chunkSize,
+    adapt,
     transport,
     (n) => report("sending", n),
     req.stream ?? canStreamRequests(),
@@ -229,6 +280,7 @@ async function sendEncrypted(
   fileKey: Uint8Array,
   location: string,
   chunkSize: number,
+  adapt: boolean,
   transport: Transport,
   onSent: (sent: number) => void,
   tryStreaming: boolean,
@@ -240,7 +292,7 @@ async function sendEncrypted(
     // which is an ordinary deployment rather than a fault. Nothing was written,
     // so the chunked path starts from the beginning as usual.
   }
-  return sendInChunks(file, fileKey, location, chunkSize, transport, onSent);
+  return sendInChunks(file, fileKey, location, chunkSize, adapt, transport, onSent);
 }
 
 /**
@@ -294,6 +346,7 @@ async function sendInChunks(
   fileKey: Uint8Array,
   location: string,
   chunkSize: number,
+  adapt: boolean,
   transport: Transport,
   onSent: (sent: number) => void,
 ): Promise<number> {
@@ -302,13 +355,20 @@ async function sendInChunks(
     .pipeThrough(encryptStream(fileKey), transport.signal ? { signal: transport.signal } : {});
   const reader = encrypted.getReader();
 
-  const buffer = new Uint8Array(chunkSize);
+  // The buffer is the largest a chunk may become; `target` is how much of it is
+  // filled before sending, and moves with what the connection turns out to do.
+  // A caller who named a size gets exactly that, every time: a test that fixes
+  // the size is testing chunking, not the network it is not on.
+  const buffer = new Uint8Array(adapt ? DEFAULT_CHUNK_SIZE : chunkSize);
+  let target = adapt ? Math.min(FIRST_CHUNK_SIZE, buffer.length) : chunkSize;
   let held = 0;
   let offset = 0;
 
   const send = async (chunk: Uint8Array) => {
+    const started = now();
     offset = await patchChunk(location, offset, chunk, transport);
     onSent(offset);
+    if (adapt) target = Math.min(nextChunkSize(chunk.length, now() - started), buffer.length);
   };
 
   try {
@@ -318,12 +378,12 @@ async function sendInChunks(
 
       let taken = 0;
       while (taken < value.length) {
-        const take = Math.min(chunkSize - held, value.length - taken);
+        const take = Math.min(target - held, value.length - taken);
         buffer.set(value.subarray(taken, taken + take), held);
         held += take;
         taken += take;
-        if (held === chunkSize) {
-          await send(buffer);
+        if (held === target) {
+          await send(buffer.subarray(0, held));
           held = 0;
         }
       }

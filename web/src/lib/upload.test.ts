@@ -18,7 +18,14 @@ import {
 } from "../crypto/index.js";
 import { expectBytes } from "../testing/bytes.js";
 import { TusError } from "./tus.js";
-import { DEFAULT_CHUNK_SIZE, type UploadProgress, uploadFile } from "./upload.js";
+import {
+  DEFAULT_CHUNK_SIZE,
+  FIRST_CHUNK_SIZE,
+  MIN_CHUNK_SIZE,
+  nextChunkSize,
+  type UploadProgress,
+  uploadFile,
+} from "./upload.js";
 
 /**
  * A server that behaves as `docs/api.md` says one does.
@@ -837,4 +844,76 @@ it("uses the sizes the specification fixes", () => {
   expect(FILE_ID_SIZE).toBe(16);
   expect(LINK_SECRET_SIZE).toBe(32);
   expect(OWNER_TOKEN_SIZE).toBe(32);
+});
+
+describe("a slow connection", () => {
+  it("still moves the bar more than once", async () => {
+    // What was reported: fifteen seconds of nothing, then a jump to 37%. With a
+    // fixed four mebibytes and progress reported per chunk, a file of this size
+    // on a slow link is one report - which is a bar that never moves until it
+    // is over.
+    const server = new FakeServer();
+    const seen: number[] = [];
+
+    // Every request costs time, so the adaptation has something to measure. No
+    // real waiting: the clock the code reads is the one this advances.
+    let clock = 0;
+    const original = performance.now.bind(performance);
+    performance.now = () => clock;
+    const slow: typeof server.fetch = async (...args) => {
+      clock += 900;
+      return server.fetch(...args);
+    };
+
+    try {
+      await uploadFile({
+        file: fileOf(filled(3 * 1024 * 1024)),
+        stream: false,
+        transport: { fetch: slow },
+        onProgress: (p) => {
+          if (p.stage === "sending") seen.push(p.sent);
+        },
+      });
+    } finally {
+      performance.now = original;
+    }
+
+    // Distinct positions, not merely calls: a bar that is told the same number
+    // twice has not moved.
+    const positions = [...new Set(seen)].filter((n) => n > 0);
+    expect(positions.length).toBeGreaterThan(1);
+    // And they arrive in order, so the bar advances rather than jumping about.
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+});
+
+describe("how large the next chunk should be", () => {
+  // Progress is reported per chunk, so the chunk is the resolution of the bar.
+  // A fixed four mebibytes is a second on a fast link and fifteen on a slow one,
+  // which is a bar that stands still and then jumps.
+  it("grows when a chunk went faster than the target", () => {
+    expect(nextChunkSize(1024 * 1024, 500)).toBe(2 * 1024 * 1024);
+  });
+
+  it("shrinks when a chunk took too long", () => {
+    expect(nextChunkSize(4 * 1024 * 1024, 8000)).toBe(2 * 1024 * 1024);
+  });
+
+  it("moves by at most a doubling or a halving in one step", () => {
+    // One slow request must not collapse the size, and one fast one must not
+    // undo the collapse: a size that chases every measurement oscillates.
+    expect(nextChunkSize(1024 * 1024, 1)).toBe(2 * 1024 * 1024);
+    expect(nextChunkSize(1024 * 1024, 60_000)).toBe(512 * 1024);
+  });
+
+  it("never goes below the floor or above the default", () => {
+    expect(nextChunkSize(MIN_CHUNK_SIZE, 60_000)).toBe(MIN_CHUNK_SIZE);
+    expect(nextChunkSize(DEFAULT_CHUNK_SIZE, 1)).toBe(DEFAULT_CHUNK_SIZE);
+  });
+
+  it("treats a send too quick to measure as room to grow", () => {
+    // Not as infinite speed: a zero reading is the clock's resolution, not a
+    // measurement, and dividing by it would jump straight to the ceiling.
+    expect(nextChunkSize(FIRST_CHUNK_SIZE, 0)).toBe(2 * FIRST_CHUNK_SIZE);
+  });
 });
