@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/Serraniel/sendan/compare/v0.2.1...v0.3.0) (2026-09-10)
+
+
+### Features
+
+* **web:** offer a random-character password, and say what the strength means ([e3b7a42](https://github.com/Serraniel/sendan/commit/e3b7a4208091cf03028ec12c824697fa3a7dd3dc))
+* **web:** offer the system share sheet beside Copy link ([1e7849c](https://github.com/Serraniel/sendan/commit/1e7849cd43a21c65eef30b0ce18eb6001992c420))
+
+
+### Bug Fixes
+
+* **web:** let the progress bar move on a slow connection ([48ca0dc](https://github.com/Serraniel/sendan/commit/48ca0dc5bda8052d3d241221eaa21a86358f20cc))
+* **web:** put the source link back on the footer's baseline ([0b19171](https://github.com/Serraniel/sendan/commit/0b191717aa6a3800402a128b6e8e0668afde449c))
+
 ## [0.2.1](https://github.com/Serraniel/sendan/compare/v0.2.0...v0.2.1) (2026-09-08)
 
 
