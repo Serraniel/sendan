@@ -52,9 +52,18 @@ async function uploadThrough(
   if (options.password !== undefined) {
     await page.fill("#password", options.password);
   }
-  if (options.expiry !== undefined) {
-    await page.selectOption("#ttl", { label: options.expiry });
-  }
+  // A lifetime that outlives the run, unless a test asks for another.
+  //
+  // The instance under test expires uploads after fifteen seconds, which is a
+  // fixture for the one test that watches an upload expire. Since the form
+  // began preselecting the instance's own default (#262) that fixture applied
+  // to every upload here - so a record written and read back a moment later
+  // could be gone before the reading, and the list was empty for a file that
+  // had been sent. It failed on a slow runner and never on a laptop, which is
+  // what made it look like flakiness in Firefox (#276).
+  //
+  // Chosen rather than defaulted, so a test that needs a deadline says so.
+  await page.selectOption("#ttl", { label: options.expiry ?? "7 days" });
   if (options.limit !== undefined) {
     await page.selectOption("#downloads", { label: options.limit });
   }
@@ -256,10 +265,13 @@ test.describe("expiry", () => {
   });
 
   test("an upload stops being available after its deadline", async ({ page }) => {
-    // The instance's default lifetime is fifteen seconds, so this watches an
-    // upload expire rather than waiting a day. A longer lifetime is refused
-    // rather than clamped, so the form's own choices are all far beyond this.
-    const link = await uploadThrough(page, "brief.bin", filled(5000));
+    // Fifteen seconds, chosen here rather than inherited: the instance's default
+    // is that short so this test can watch an upload expire rather than waiting
+    // a day, and every other upload in this file asks for a lifetime that
+    // outlives the run.
+    const link = await uploadThrough(page, "brief.bin", filled(5000), undefined, {
+      expiry: "15 seconds (this instance's default)",
+    });
 
     await page.goto(link);
     await expect(page.locator("text=Download and decrypt")).toBeVisible({ timeout: 30_000 });
@@ -415,7 +427,13 @@ test.describe("what the client says about itself", () => {
     // it asked for nothing.
     await page.route("**/api/instance", (route) => route.fulfill({ status: 429, body: "" }));
 
-    await uploadThrough(page, "unasked.txt", filled(500), "text/plain", {});
+    // Asking the instance to decide, which is the whole premise: with the policy
+    // unreadable there is no real lifetime to preselect, and the request that
+    // carries none is the one this page cannot describe. Chosen explicitly
+    // because the helper otherwise asks for a lifetime that outlives the run.
+    await uploadThrough(page, "unasked.txt", filled(500), "text/plain", {
+      expiry: "This instance's default",
+    });
 
     const claims = page.locator("ul.claims");
     await expect(claims).toBeVisible({ timeout: 30_000 });
@@ -653,6 +671,47 @@ test.describe("an instance without HTTPS", () => {
 // IndexedDB is the whole feature: a unit test of the decision around it proves
 // the sorting, not that anything was ever stored.
 test.describe("your uploads", () => {
+  test("a record written here outlives the run", async ({ page }) => {
+    // The instance expires uploads after fifteen seconds, and list() drops a
+    // record whose deadline has passed. So a test that writes a record and
+    // reads it back a moment later was racing the fixture: it passed on a fast
+    // machine and failed on a slow one, which is what #276 looked like.
+    //
+    // Asserted as a property of the helper rather than by waiting: a test that
+    // sleeps past the deadline would take twenty seconds to say the same thing.
+    page.once("dialog", (dialog) => void dialog.accept());
+    await uploadThrough(page, "outlives.txt", filled(300), "text/plain", {});
+
+    await page.goto("/uploads");
+    await expect(page.getByText("outlives.txt")).toBeVisible();
+
+    const deadline = await page.evaluate(
+      () =>
+        new Promise<number | null>((resolve, reject) => {
+          const request = indexedDB.open("sendan");
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const db = request.result;
+            const all = db.transaction("uploads", "readonly").objectStore("uploads").getAll();
+            all.onsuccess = () => {
+              const found = (all.result as { name: string; expiresAt: number | null }[]).find(
+                (u) => u.name === "outlives.txt",
+              );
+              db.close();
+              resolve(found?.expiresAt ?? null);
+            };
+            all.onerror = () => reject(all.error);
+          };
+        }),
+    );
+
+    expect(deadline, "the record has no deadline at all").not.toBeNull();
+    // An hour is far more than any run takes, and far less than the seven days
+    // the helper asks for - so this fails on the fifteen-second fixture without
+    // asserting the exact choice.
+    expect((deadline as number) - Date.now()).toBeGreaterThan(60 * 60 * 1000);
+  });
+
   test("an upload appears in the list, and forgetting it does not remove the file", async ({
     page,
   }) => {
