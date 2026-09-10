@@ -1114,6 +1114,47 @@ test.describe("the size the instance accepts", () => {
   });
 });
 
+test.describe("sharing a link", () => {
+  test("offers a share sheet only where the platform has one", async ({ page }) => {
+    // Feature detection rather than a browser list, because that set moves. A
+    // control that does nothing is worse than none: Copy link is already the
+    // answer where sharing is unavailable.
+    await page.addInitScript(() => {
+      // What Firefox on a desktop looks like today.
+      Object.defineProperty(navigator, "share", { value: undefined, configurable: true });
+    });
+    const link = await uploadThrough(page, "unshared.txt", filled(400), "text/plain", {});
+    expect(link).toContain("#");
+    await expect(page.getByRole("button", { name: /share/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /copy link/i })).toBeVisible();
+  });
+
+  test("hands the share sheet the link and nothing else", async ({ page }) => {
+    // The fragment is the key, so sharing hands it over - the same as copying.
+    // What must not happen is a warning of ours riding along in `text` into
+    // whatever message somebody is about to send.
+    await page.addInitScript(() => {
+      (window as unknown as { shared: ShareData[] }).shared = [];
+      Object.defineProperty(navigator, "share", {
+        configurable: true,
+        value: (data: ShareData) => {
+          (window as unknown as { shared: ShareData[] }).shared.push(data);
+          return Promise.resolve();
+        },
+      });
+      Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
+    });
+
+    const link = await uploadThrough(page, "shared.txt", filled(400), "text/plain", {});
+    await page.getByRole("button", { name: /share/i }).click();
+
+    const shared = await page.evaluate(() => (window as unknown as { shared: ShareData[] }).shared);
+    expect(shared).toHaveLength(1);
+    expect(shared[0]?.url).toBe(link);
+    expect(shared[0]?.text).toBeUndefined();
+  });
+});
+
 test.describe("the footer", () => {
   test("opens the source elsewhere, and keeps the page it is on", async ({ page }) => {
     await page.goto("/");

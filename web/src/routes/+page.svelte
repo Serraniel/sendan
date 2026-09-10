@@ -25,6 +25,7 @@
   import { type UploadProgress, type UploadResult, uploadFile } from "$lib/upload";
   import TransparencyCard from "$lib/TransparencyCard.svelte";
   import LinkCode from "$lib/LinkCode.svelte";
+  import { canShare, share } from "$lib/share";
   import { describeUpload, type Protection } from "$lib/protection";
   import { fetchBuild } from "$lib/source";
 
@@ -326,6 +327,19 @@
   }
   let passwordCopied = $state(false);
 
+  // Only where the platform can, asked with the payload rather than in the
+  // abstract. A control that does nothing is worse than none: Copy link is
+  // already the answer where sharing is unavailable.
+  const shareable = $derived(link !== "" && canShare({ url: link }));
+
+  async function shareLink() {
+    const outcome = await share({ url: link, title: "A file, encrypted" });
+    // Closing the sheet is not a failure and must not be reported as one.
+    if (outcome === "unavailable") {
+      failure = "This browser would not open its share sheet. The link is above.";
+    }
+  }
+
   async function copy() {
     try {
       await navigator.clipboard.writeText(link);
@@ -575,6 +589,15 @@
 
   <p class="actions">
     <button type="button" class="primary" onclick={copy}>Copy link</button>
+    {#if shareable}
+      <!--
+        Beside Copy rather than instead of it. What leaves here is the link,
+        key included - the same thing copying hands over, and the note below
+        says so. Nothing is appended to the message: a warning in `text` would
+        ride into somebody's conversation.
+      -->
+      <button type="button" onclick={shareLink}>Share…</button>
+    {/if}
     {#if copied}<span class="copied" aria-live="polite">Copied.</span>{/if}
   </p>
 

@@ -4,6 +4,7 @@
   import { explainRevoke, RevokeError, revokeUpload } from "$lib/revoke";
   import LinkBlock from "$lib/LinkBlock.svelte";
   import LinkCode from "$lib/LinkCode.svelte";
+  import { canShare, share } from "$lib/share";
   import {
     forget,
     forgetAll,
@@ -121,6 +122,14 @@
    * the same path it takes when an upload expires, so the row, the blob and the
    * at-rest key are gone rather than marked.
    */
+  async function shareLink(upload: StoredUpload) {
+    const outcome = await share({ url: upload.link, title: upload.name });
+    // Closing the sheet is not a failure and must not be reported as one.
+    if (outcome === "unavailable") {
+      failure = "This browser would not open its share sheet. The link is above.";
+    }
+  }
+
   async function copy(upload: StoredUpload) {
     try {
       await navigator.clipboard.writeText(upload.link);
@@ -267,6 +276,16 @@
           <button type="button" onclick={() => copy(upload)} disabled={working !== null}>
             {copied === upload.id ? "Copied." : "Copy link"}
           </button>
+          {#if canShare({ url: upload.link })}
+            <!--
+              Beside Copy rather than instead of it, and only where the platform
+              can. What leaves is the link, key included - the same thing copying
+              hands over.
+            -->
+            <button type="button" onclick={() => shareLink(upload)} disabled={working !== null}>
+              Share…
+            </button>
+          {/if}
         </p>
         <!--
           The same code the page that made this link offers. It is for a second
