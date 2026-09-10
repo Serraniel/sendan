@@ -3,10 +3,15 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  bitsOf,
+  DEFAULT_CHARACTERS,
   DEFAULT_WORDS,
   describeStrength,
+  describeStyle,
   entropyBits,
   generate,
+  generateCharacters,
+  generateStyle,
   type RandomSource,
 } from "./passphrase.js";
 import { WORDS } from "./words.js";
@@ -107,5 +112,64 @@ describe("what it is worth", () => {
     expect(said).toContain(`${DEFAULT_WORDS} words`);
     expect(said).toContain("1024");
     expect(said).toContain("60 bits");
+  });
+});
+
+describe("the character style", () => {
+  it("is the same strength as the default passphrase", () => {
+    // Equal on purpose. A choice between two generators must not read as a
+    // choice about security, and the only way to make that true is to make it
+    // true.
+    expect(bitsOf("characters", DEFAULT_CHARACTERS)).toBe(bitsOf("words", 6));
+    expect(bitsOf("characters", DEFAULT_CHARACTERS)).toBe(60);
+  });
+
+  it("draws every character from the alphabet, and only from it", () => {
+    const password = generateCharacters(200);
+    expect(password).toMatch(/^[a-zA-Z0-9_-]{200}$/);
+  });
+
+  it("uses the whole alphabet", () => {
+    // A generator that quietly used a slice of its alphabet would still look
+    // random and would be worth fewer bits than it claims.
+    const seen = new Set(generateCharacters(20_000).split(""));
+    expect(seen.size).toBe(64);
+  });
+
+  it("is uniform over the alphabet", () => {
+    // 256 is four times 64, so every byte maps to exactly one character and
+    // none is more likely than another. A modulo over a set that did not divide
+    // would favour the first few, invisibly.
+    const counts = new Map<string, number>();
+    for (const c of generateCharacters(64_000)) counts.set(c, (counts.get(c) ?? 0) + 1);
+    const expected = 64_000 / 64;
+    for (const [character, count] of counts) {
+      expect(Math.abs(count - expected) / expected, character).toBeLessThan(0.25);
+    }
+  });
+
+  it("refuses a length that is not one", () => {
+    expect(() => generateCharacters(0)).toThrow(RangeError);
+    expect(() => generateCharacters(1.5)).toThrow(RangeError);
+  });
+});
+
+describe("describing either style", () => {
+  it("says the same kind of thing about both", () => {
+    // Two descriptions that read differently invite the reader to conclude that
+    // one is better.
+    expect(describeStyle("words")).toBe(
+      "6 words from a list of 1024, which is 60 bits of randomness.",
+    );
+    expect(describeStyle("characters")).toBe(
+      "10 characters from an alphabet of 64, which is 60 bits of randomness.",
+    );
+  });
+});
+
+describe("generating in a chosen style", () => {
+  it("produces words or characters as asked", () => {
+    expect(generateStyle("words")).toMatch(/^[a-z]+(-[a-z]+){5}$/);
+    expect(generateStyle("characters")).toMatch(/^[a-zA-Z0-9_-]{10}$/);
   });
 });

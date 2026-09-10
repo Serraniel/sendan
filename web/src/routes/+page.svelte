@@ -9,7 +9,7 @@
     tooLargeMessage,
   } from "$lib/limits";
   import { fetchInstancePolicy, type InstancePolicy, nothingKnown } from "$lib/instance";
-  import { DEFAULT_WORDS, describeStrength, generate } from "$lib/passphrase";
+  import { describeStyle, generateStyle, type Style } from "$lib/passphrase";
   import {
     defaultDownloads,
     defaultExpiry,
@@ -303,8 +303,14 @@
   let passwordVisible = $state(false);
   let generated = $state(false);
 
+  // Which generator. Words by default because this password has to reach
+  // somebody by a second route - read out, written down, retyped - and that is
+  // not a comfort here, it is what makes it arrive intact. Characters are for
+  // anybody who only ever pastes.
+  let style = $state<Style>("words");
+
   function generatePassword() {
-    password = generate(DEFAULT_WORDS);
+    password = generateStyle(style);
     passwordVisible = true;
     generated = true;
   }
@@ -428,6 +434,16 @@
             aria-describedby="password-note"
           />
           <button type="button" onclick={generatePassword}>Generate</button>
+          <!--
+            Two generators, neither of them the strong one: at these defaults they
+            are the same sixty bits. The choice is about how the password travels,
+            which is why it sits beside the button rather than in a settings panel.
+          -->
+          <label class="visually-hidden" for="style">How to generate it</label>
+          <select id="style" bind:value={style}>
+            <option value="words">words</option>
+            <option value="characters">characters</option>
+          </select>
         </span>
       </p>
 
@@ -438,7 +454,7 @@
           by some route other than the link.
         -->
         <p class="note generated" role="status">
-          <strong>Copy this now.</strong> It is {describeStrength(DEFAULT_WORDS)} It is not
+          <strong>Copy this now.</strong> It is {describeStyle(style)} It is not
           stored anywhere and will not be shown again after this upload.
           <button type="button" onclick={copyPassword}>Copy password</button>
           {#if passwordCopied}<span class="copied">Copied.</span>{/if}
@@ -449,6 +465,39 @@
           both.
         </p>
       {/if}
+        <!--
+          Folded away, because somebody sending a file should not have to step
+          over it. It is here because the number beside a generated passphrase -
+          "60 bits of randomness" - is true and does not correct the impression
+          its length creates. Somebody who knows this project read one and asked
+          whether a word list is weak, which is the right question.
+        -->
+        <details class="strength">
+          <summary>What that strength means</summary>
+          <p class="note">
+            <strong>Length is not the measure.</strong> A generated passphrase is
+            about 35 characters and worth 60 bits. Thirty-five
+            <em>random</em> characters would be worth 229. The strength is in the
+            choosing, not the characters: an attacker tries word combinations, not
+            letters. At equal strength, 60 bits is about nine random characters —
+            which is why both generators here offer the same sixty.
+          </p>
+          <p class="note">
+            <strong>Sixty bits is what remains after the link has leaked.</strong>
+            The key comes from the link secret and the password together, so
+            without the link there are 256 bits in the way. Guessing the password
+            means running Argon2id at 64 MiB and 3 passes for every attempt: on
+            the order of 91 000 years for a hundred-GPU cluster. The memory is
+            what carries that — the same search against plain SHA-256 on dedicated
+            hardware is hours.
+          </p>
+          <p class="note">
+            <strong>A dictionary attack targets a chosen password.</strong>
+            "Sommer2024!" is guessable because a person picked it. These words are
+            drawn by the browser's random number generator, and that the list is
+            public is already counted in the sixty bits.
+          </p>
+        </details>
       <p id="password-note" class="note">
         The password becomes part of the key. Nobody can open the file without
         it, including whoever runs this instance — and nobody can reset it.
