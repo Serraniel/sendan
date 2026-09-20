@@ -70,16 +70,47 @@ jobs:
 
       # MinIO is started here rather than as a service container: services
       # cannot pass a command, and the image needs "server /data".
+      # MinIO archived its community server and client. dl.min.io now answers
+      # 410 with a notice instead of a binary, and `curl -sSL` wrote that page
+      # to the file, chmod made it executable, and the shell tried to run it:
+      #
+      #   /home/runner/work/_temp/mc: line 3: syntax error near unexpected token `('
+      #
+      # Every pull request failed on it, including ones that touched no Go code.
+      # So there is no client here any more: MinIO serves each top-level
+      # directory under its data path as a bucket, which this creates before the
+      # server starts - no download, and no race against it coming up.
+      #
+      # Pinned by digest for the reason the Dockerfile pins its bases and these
+      # workflows pin their actions: a tag is a name somebody else can repoint,
+      # and this one now names an archived project.
       - name: Start the object store
         run: |
-          docker run -d --name minio -p 9000:9000             -e MINIO_ROOT_USER=sendan             -e MINIO_ROOT_PASSWORD=sendansecret             quay.io/minio/minio:latest server /data
-          curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc -o "$RUNNER_TEMP/mc"
-          chmod +x "$RUNNER_TEMP/mc"
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/minio/sendan"
+          docker run -d --name minio -p 9000:9000 \
+            -v "$RUNNER_TEMP/minio:/data" \
+            -e MINIO_ROOT_USER=sendan \
+            -e MINIO_ROOT_PASSWORD=sendansecret \
+            quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e \
+            server /data
+
+          # Said out loud when it does not come up. The old loop gave up
+          # silently after sixty seconds and left the tests to fail with
+          # something less obvious.
+          ready=0
           for _ in $(seq 1 30); do
-            "$RUNNER_TEMP/mc" alias set ci http://127.0.0.1:9000 sendan sendansecret >/dev/null 2>&1 && break
+            if curl -fsS -o /dev/null http://127.0.0.1:9000/minio/health/live; then
+              ready=1
+              break
+            fi
             sleep 2
           done
-          "$RUNNER_TEMP/mc" mb --ignore-existing ci/sendan
+          if [ "$ready" -ne 1 ]; then
+            echo "the object store did not become ready:"
+            docker logs minio
+            exit 1
+          fi
 
       - name: go vet
         run: go vet ./...

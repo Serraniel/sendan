@@ -99,9 +99,11 @@ To have them:
 
 ```sh
 docker run -d --name sendan-pg -p 15432:5432   -e POSTGRES_USER=sendan -e POSTGRES_PASSWORD=sendan -e POSTGRES_DB=sendan   postgres:17-alpine
-docker run -d --name sendan-minio -p 9000:9000   -e MINIO_ROOT_USER=sendan -e MINIO_ROOT_PASSWORD=sendanminio   minio/minio server /data
-docker exec sendan-minio mc alias set local http://127.0.0.1:9000 sendan sendanminio
-docker exec sendan-minio mc mb local/sendan
+# The bucket is a directory: MinIO serves each top-level directory under its
+# data path as one, so creating it first needs no client. MinIO archived its
+# community client, and dl.min.io no longer serves it.
+mkdir -p /tmp/sendan-minio/sendan
+docker run -d --name sendan-minio -p 9000:9000 -v /tmp/sendan-minio:/data   -e MINIO_ROOT_USER=sendan -e MINIO_ROOT_PASSWORD=sendanminio   quay.io/minio/minio server /data
 
 export SENDAN_TEST_POSTGRES="postgres://sendan:sendan@127.0.0.1:15432/sendan?sslmode=disable"
 export SENDAN_TEST_S3="s3://sendan:sendanminio@127.0.0.1:9000/sendan?ssl=false"

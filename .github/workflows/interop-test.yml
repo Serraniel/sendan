@@ -63,7 +63,10 @@ jobs:
             echo "::warning::No suitable ffsend release asset found - upstream may have changed its naming"
             exit 1
           fi
-          curl -sSL "$url" -o /usr/local/bin/ffsend
+          # --fail, so an error page is a failed download rather than an
+          # executable: that is how the archived MinIO client's 410 notice
+          # became a shell script in test.yml.
+          curl --fail -sSL "$url" -o /usr/local/bin/ffsend
           chmod +x /usr/local/bin/ffsend
           ffsend --version
         env:
