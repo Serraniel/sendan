@@ -39,10 +39,17 @@ otherwise.
 
 ## Supported versions
 
-> [!WARNING]
-> **Sendan is pre-alpha and nothing here has been implemented or audited yet.**
-> No version is currently supported, and Sendan should not be used to protect
-> anything real.
+> [!IMPORTANT]
+> **Sendan is beta. What this document describes is implemented; none of it has
+> been independently audited.**
+>
+> The supported version is the latest release. Fixes go into the next release
+> from the current line; there are no backports to earlier 0.x versions, and an
+> instance is expected to move forward rather than be maintained where it is.
+>
+> No independent review of the cryptographic design or of this implementation
+> has taken place. That is the limit on what Sendan is ready for, and it is a
+> statement about review rather than about how much is built.
 
 ## Threat model
 

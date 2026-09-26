@@ -10,10 +10,18 @@ number of downloads, or on demand.
 
 The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 
-> [!WARNING]
-> **Status: pre-alpha, and nothing has been audited.** A file can be sent and
-> received in a browser today; a hostile operator is not yet something this can
-> defend against. Do not use Sendan to protect anything that matters.
+> [!IMPORTANT]
+> **Status: beta. The planned feature set is complete; nothing has been
+> independently audited.** All ten milestones are closed, and releases carry
+> signed static binaries for Linux, macOS and Windows on both architectures.
+>
+> **What "not audited" means.** No independent review of the cryptographic
+> design or of this implementation has taken place. The scheme is conventional
+> and the Go and TypeScript implementations are held to each other by shared
+> test vectors — which catches the two disagreeing, and says nothing about
+> whether the construction is right. An unaudited implementation is not what to
+> trust with something whose exposure would be serious, and that is a statement
+> about review rather than about how finished this is.
 >
 > **Built and tested:** the cryptographic scheme in Go and TypeScript, verified
 > against each other by shared test vectors; metadata storage on SQLite and
@@ -28,21 +36,46 @@ The name is 船団 *sendan*, a convoy of ships carrying cargo across together.
 > an operator-held master key, so a database backup carries nothing that opens
 > a blob.
 >
-> **Partly built:** the command line client sends and receives (`sendan up`,
-> `sendan down`), with password, expiry and download-limit options. Releases
-> carry static binaries for Linux, macOS and Windows on both architectures, with
-> checksums and a reproduction procedure, and `sendan verify` checks that an
-> instance serves the published client.
+> **The command line client is complete:** `sendan up` and `sendan down` send
+> and receive with password, expiry and download-limit options, `sendan delete`
+> removes an upload early, and `sendan verify` checks an instance against a
+> published release.
 >
-> **v0.1.0 is tagged and carries no artefacts.** The workflow that builds them
-> was never started: a tag pushed by the release tooling does not trigger one,
-> which is fixed but not yet applied to that tag. Until it is rebuilt, the
-> client and the container image are built from source, and the reproduction
-> procedure below is the only way to obtain either.
->
-> **The two release signing keys now exist**, and `sendan verify` requires both
-> signatures. Nothing carries them yet, because no release has been built since
-> they were made.
+> **Releases carry what they promise.** The current release ships those
+> binaries, a signed asset manifest and checksums. The manifest is signed three
+> ways — keyless, classical and post-quantum — and `sendan verify` refuses a
+> signature it cannot authenticate.
+
+## Try it
+
+A public instance runs at **<https://demo.sendan.app>**. It is there to be used
+rather than looked at: send a file, open the link in another browser, watch it
+expire.
+
+It is configured as a demo, and says so through the API the client reads:
+uploads up to 50 MB, a deadline of one day by default and three at most, and a
+download limit is required rather than optional. Nothing on it is backed up, and
+an instance that exists to be tried on is not a place to keep anything.
+
+**It is also an instance you do not control**, which is the one case this
+project cannot answer with cryptography — see the note under *Cryptographic
+design*. What it can do is let you check that the code being served is the code
+that was published:
+
+```console
+$ sendan verify https://demo.sendan.app
+  instance   https://demo.sendan.app
+  claims     v0.3.0, commit 7d7904e, unmodified
+  manifest   v0.3.0
+             signed by this build's release keys, classical and post-quantum
+
+  ✓ 31 of 31 assets match the published client
+```
+
+That compares what the instance serves against a manifest taken from the
+release rather than from the instance, so the answer does not depend on the
+instance being honest. Run it against any instance somebody sends you a link
+from, including this one.
 
 ## Features
 
@@ -117,9 +150,8 @@ specifically for quantum resistance, is in [`docs/design.md`](docs/design.md).
 >   client, against a manifest from the release rather than from the instance.
 >
 > The manifest is **signed** — three ways, and `sendan verify` refuses one it
-> cannot authenticate. What is still missing is any published release at all: no
-> tag has been cut, so the client is built from source today, and the two keys
-> the pipeline signs with have yet to be generated.
+> cannot authenticate. Both checks work against a released instance today; the
+> demo above is one, and the command that proves it is in that section.
 > [SECURITY.md](SECURITY.md) sets out what each check does and does not
 > establish — including that none of the signatures survives a compromise of
 > this repository.
@@ -178,9 +210,15 @@ fail. The first two are bounded by the disk.
 
 ## Roadmap
 
-Work is tracked in [milestones](https://github.com/Serraniel/sendan/milestones),
-sequenced so that the cryptographic core and its cross-language test vectors are
-completed and verified before anything is built on top of them.
+All ten [milestones](https://github.com/Serraniel/sendan/milestones) are
+complete. They were sequenced so that the cryptographic core and its
+cross-language test vectors were finished and verified before anything was built
+on top of them, and that order is why the scheme was never adjusted to suit
+something built above it.
+
+What remains is not a feature list. An independent audit is the one thing that
+would change what this is ready for, and it has not happened. Beyond that, work
+is whatever is open in [issues](https://github.com/Serraniel/sendan/issues).
 
 ## License
 
