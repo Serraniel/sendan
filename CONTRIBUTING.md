@@ -1,8 +1,10 @@
 # Contributing to Sendan
 
 > [!NOTE]
-> Sendan is pre-alpha and its architecture is still settling. Please open an
-> issue to agree an approach before starting substantial work.
+> Sendan is beta: the planned feature set is complete and the architecture has
+> settled. Please open an issue to agree an approach before starting substantial
+> work — a change that moves the wire format or the key schedule affects two
+> implementations and the published test vectors at once.
 
 ## Developer Certificate of Origin
 
