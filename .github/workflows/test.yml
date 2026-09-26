@@ -60,7 +60,7 @@ jobs:
 
     env:
       SENDAN_TEST_POSTGRES: postgres://postgres:sendan@127.0.0.1:5432/sendan?sslmode=disable
-      SENDAN_TEST_S3: s3://sendan:sendansecret@127.0.0.1:9000/sendan?ssl=false
+      SENDAN_TEST_S3: s3://sendan:sendansecret@127.0.0.1:8333/sendan?ssl=false
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -82,35 +82,54 @@ jobs:
       # server starts - no download, and no race against it coming up.
       #
       # Pinned by digest for the reason the Dockerfile pins its bases and these
-      # workflows pin their actions: a tag is a name somebody else can repoint,
-      # and this one now names an archived project.
+      # The object store the S3 backend is tested against.
+      #
+      # Deliberately not the one this ran before, and the reason is the point.
+      # That fixture broke twice without a commit touching it: first its
+      # vendor's command-line client began answering with a notice page, which
+      # a `curl` without --fail wrote onto PATH for the next line to execute,
+      # and then the server image itself stopped being anonymously pullable -
+      # Docker Hub and quay both answer 401 for it now, by tag and by digest.
+      # Each time a dependency bump was reported as breaking this project when
+      # nothing of this project had changed.
+      #
+      # This one is pinned by digest, verified pullable anonymously, and
+      # prepared by code in this repository rather than by a downloaded tool.
+      # The whole conformance suite, multipart included, passes against it.
+      #
+      # Signed requests need an identity to verify against, so the credentials
+      # the tests already use are written out for the server. Without them
+      # every S3 case fails on the signature instead of on what it tests.
       - name: Start the object store
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/minio/sendan"
-          docker run -d --name minio -p 9000:9000 \
-            -v "$RUNNER_TEMP/minio:/data" \
-            -e MINIO_ROOT_USER=sendan \
-            -e MINIO_ROOT_PASSWORD=sendansecret \
-            quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e \
-            server /data
+          mkdir -p "$RUNNER_TEMP/s3"
+          cat > "$RUNNER_TEMP/s3/config.json" <<'JSON'
+          {
+            "identities": [
+              {
+                "name": "sendan",
+                "credentials": [{ "accessKey": "sendan", "secretKey": "sendansecret" }],
+                "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+              }
+            ]
+          }
+          JSON
+          docker run -d --name s3 -p 8333:8333 \
+            -v "$RUNNER_TEMP/s3:/conf" \
+            docker.io/chrislusf/seaweedfs@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882 \
+            server -s3 -s3.config=/conf/config.json -dir=/data
 
-          # Said out loud when it does not come up. The old loop gave up
-          # silently after sixty seconds and left the tests to fail with
-          # something less obvious.
-          ready=0
-          for _ in $(seq 1 30); do
-            if curl -fsS -o /dev/null http://127.0.0.1:9000/minio/health/live; then
-              ready=1
-              break
-            fi
-            sleep 2
-          done
-          if [ "$ready" -ne 1 ]; then
-            echo "the object store did not become ready:"
-            docker logs minio
-            exit 1
-          fi
+      # Creates the bucket and waits for the store to be able to serve it, both
+      # over the S3 library the application itself uses, and both reading the
+      # same variable the tests read. It replaces a health-check loop and a
+      # downloaded client; see the note at the top of tools/s3-bucket.
+      #
+      # It says so when the store never arrives, which the old loop did only
+      # after giving up silently and leaving the tests to fail with something
+      # less obvious.
+      - name: Prepare the bucket
+        run: go run ./tools/s3-bucket
 
       - name: go vet
         run: go vet ./...
