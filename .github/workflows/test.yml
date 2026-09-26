@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The primary merge gate. See docs/workflows/test.md
+#
+# Every job carries timeout-minutes. The whole workflow takes four to five
+# minutes, so twenty never cancels honest work - it is there because the
+# default is six hours, and the way a fixture fails is not always by failing.
+# An object store that accepts connections and never completes an upload holds
+# a runner for an afternoon and reports nothing anyone can read.
 name: Test
 
 on:
@@ -23,6 +29,7 @@ jobs:
   lint-go:
     name: Lint (Go)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -40,6 +47,7 @@ jobs:
   test-go:
     name: Unit and integration tests (Go)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     # The store conformance suite runs against every backend, so PostgreSQL has
     # to be real. Without this the PostgreSQL cases would skip, and a backend
@@ -153,6 +161,7 @@ jobs:
   test-web:
     name: Unit tests (TypeScript)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -200,6 +209,7 @@ jobs:
   test-vectors:
     name: Cross-language crypto vectors
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -243,6 +253,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [test-go, test-web]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -316,6 +327,7 @@ jobs:
   container:
     name: Container image
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [test-go, test-web]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
