@@ -1,6 +1,12 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # The primary merge gate. See docs/workflows/test.md
+#
+# Every job carries timeout-minutes. The whole workflow takes four to five
+# minutes, so twenty never cancels honest work - it is there because the
+# default is six hours, and the way a fixture fails is not always by failing.
+# An object store that accepts connections and never completes an upload holds
+# a runner for an afternoon and reports nothing anyone can read.
 name: Test
 
 on:
@@ -23,6 +29,7 @@ jobs:
   lint-go:
     name: Lint (Go)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -40,6 +47,7 @@ jobs:
   test-go:
     name: Unit and integration tests (Go)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     # The store conformance suite runs against every backend, so PostgreSQL has
     # to be real. Without this the PostgreSQL cases would skip, and a backend
@@ -60,7 +68,7 @@ jobs:
 
     env:
       SENDAN_TEST_POSTGRES: postgres://postgres:sendan@127.0.0.1:5432/sendan?sslmode=disable
-      SENDAN_TEST_S3: s3://sendan:sendansecret@127.0.0.1:9000/sendan?ssl=false
+      SENDAN_TEST_S3: s3://sendan:sendansecret@127.0.0.1:8333/sendan?ssl=false
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,16 +78,66 @@ jobs:
 
       # MinIO is started here rather than as a service container: services
       # cannot pass a command, and the image needs "server /data".
+      # MinIO archived its community server and client. dl.min.io now answers
+      # 410 with a notice instead of a binary, and `curl -sSL` wrote that page
+      # to the file, chmod made it executable, and the shell tried to run it:
+      #
+      #   /home/runner/work/_temp/mc: line 3: syntax error near unexpected token `('
+      #
+      # Every pull request failed on it, including ones that touched no Go code.
+      # So there is no client here any more: MinIO serves each top-level
+      # directory under its data path as a bucket, which this creates before the
+      # server starts - no download, and no race against it coming up.
+      #
+      # Pinned by digest for the reason the Dockerfile pins its bases and these
+      # The object store the S3 backend is tested against.
+      #
+      # Deliberately not the one this ran before, and the reason is the point.
+      # That fixture broke twice without a commit touching it: first its
+      # vendor's command-line client began answering with a notice page, which
+      # a `curl` without --fail wrote onto PATH for the next line to execute,
+      # and then the server image itself stopped being anonymously pullable -
+      # Docker Hub and quay both answer 401 for it now, by tag and by digest.
+      # Each time a dependency bump was reported as breaking this project when
+      # nothing of this project had changed.
+      #
+      # This one is pinned by digest, verified pullable anonymously, and
+      # prepared by code in this repository rather than by a downloaded tool.
+      # The whole conformance suite, multipart included, passes against it.
+      #
+      # Signed requests need an identity to verify against, so the credentials
+      # the tests already use are written out for the server. Without them
+      # every S3 case fails on the signature instead of on what it tests.
       - name: Start the object store
         run: |
-          docker run -d --name minio -p 9000:9000             -e MINIO_ROOT_USER=sendan             -e MINIO_ROOT_PASSWORD=sendansecret             quay.io/minio/minio:latest server /data
-          curl -sSL https://dl.min.io/client/mc/release/linux-amd64/mc -o "$RUNNER_TEMP/mc"
-          chmod +x "$RUNNER_TEMP/mc"
-          for _ in $(seq 1 30); do
-            "$RUNNER_TEMP/mc" alias set ci http://127.0.0.1:9000 sendan sendansecret >/dev/null 2>&1 && break
-            sleep 2
-          done
-          "$RUNNER_TEMP/mc" mb --ignore-existing ci/sendan
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/s3"
+          cat > "$RUNNER_TEMP/s3/config.json" <<'JSON'
+          {
+            "identities": [
+              {
+                "name": "sendan",
+                "credentials": [{ "accessKey": "sendan", "secretKey": "sendansecret" }],
+                "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+              }
+            ]
+          }
+          JSON
+          docker run -d --name s3 -p 8333:8333 \
+            -v "$RUNNER_TEMP/s3:/conf" \
+            docker.io/chrislusf/seaweedfs@sha256:ce9e796f1fe6f06968f4c04bdaf8f678dad9c8acdfef3d244133d71bfa6bf882 \
+            server -s3 -s3.config=/conf/config.json -dir=/data
+
+      # Creates the bucket and waits for the store to be able to serve it, both
+      # over the S3 library the application itself uses, and both reading the
+      # same variable the tests read. It replaces a health-check loop and a
+      # downloaded client; see the note at the top of tools/s3-bucket.
+      #
+      # It says so when the store never arrives, which the old loop did only
+      # after giving up silently and leaving the tests to fail with something
+      # less obvious.
+      - name: Prepare the bucket
+        run: go run ./tools/s3-bucket
 
       - name: go vet
         run: go vet ./...
@@ -103,6 +161,7 @@ jobs:
   test-web:
     name: Unit tests (TypeScript)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -150,6 +209,7 @@ jobs:
   test-vectors:
     name: Cross-language crypto vectors
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -193,6 +253,7 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [test-go, test-web]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -266,6 +327,7 @@ jobs:
   container:
     name: Container image
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs: [test-go, test-web]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

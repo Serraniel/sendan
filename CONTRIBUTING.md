@@ -99,12 +99,33 @@ To have them:
 
 ```sh
 docker run -d --name sendan-pg -p 15432:5432   -e POSTGRES_USER=sendan -e POSTGRES_PASSWORD=sendan -e POSTGRES_DB=sendan   postgres:17-alpine
-docker run -d --name sendan-minio -p 9000:9000   -e MINIO_ROOT_USER=sendan -e MINIO_ROOT_PASSWORD=sendanminio   minio/minio server /data
-docker exec sendan-minio mc alias set local http://127.0.0.1:9000 sendan sendanminio
-docker exec sendan-minio mc mb local/sendan
+# Any S3 server the suite passes against will do. This is the one CI runs, so
+# it is the one a failure here is comparable to. The credentials it accepts
+# have to be declared, or every S3 case fails on the request signature.
+mkdir -p /tmp/sendan-s3
+cat > /tmp/sendan-s3/config.json <<'JSON'
+{
+  "identities": [
+    {
+      "name": "sendan",
+      "credentials": [{ "accessKey": "sendan", "secretKey": "sendansecret" }],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}
+JSON
+# --tmpfs, so the fixture holds its data in memory: it is a few tens of
+# megabytes, it leaves nothing behind, and it does not care how full the disk
+# is. A store on a disk with under a percent free stops accepting objects.
+docker run -d --name sendan-s3 -p 8333:8333 -v /tmp/sendan-s3:/conf --tmpfs /data:rw,size=1g   chrislusf/seaweedfs server -s3 -s3.config=/conf/config.json -dir=/data
 
 export SENDAN_TEST_POSTGRES="postgres://sendan:sendan@127.0.0.1:15432/sendan?sslmode=disable"
-export SENDAN_TEST_S3="s3://sendan:sendanminio@127.0.0.1:9000/sendan?ssl=false"
+export SENDAN_TEST_S3="s3://sendan:sendansecret@127.0.0.1:8333/sendan?ssl=false"
+
+# Creates the bucket, and waits for the store, over the same variable. On a
+# machine whose disk is nearly full this is where it stops: the store refuses
+# to allocate below a percent free, and says so here instead of hanging a test.
+go run ./tools/s3-bucket
 ```
 
 The browser flows are separate, because they need browsers installed:
