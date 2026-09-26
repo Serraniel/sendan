@@ -36,7 +36,7 @@ env:
   TAG: ${{ inputs.tag }}
 
   GO_VERSION: "1.27.1"
-  NODE_VERSION: "22"
+  NODE_VERSION: "24"
   REGISTRY: ghcr.io
   IMAGE: ghcr.io/${{ github.repository }}
 
