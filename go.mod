@@ -23,13 +23,13 @@ toolchain go1.27.1
 require (
 	github.com/cloudflare/circl v1.6.5
 	github.com/coder/websocket v1.8.15
-	github.com/jackc/pgx/v5 v5.10.0
+	github.com/jackc/pgx/v5 v5.11.0
 	github.com/minio/minio-go/v7 v7.3.0
-	github.com/tus/tusd/v2 v2.10.0
+	github.com/tus/tusd/v2 v2.10.1
 	golang.org/x/crypto v0.57.0
 	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743
 	golang.org/x/term v0.46.0
-	modernc.org/sqlite v1.58.0
+	modernc.org/sqlite v1.59.0
 )
 
 require (
@@ -57,7 +57,7 @@ require (
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
-	modernc.org/libc v1.75.6 // indirect
+	modernc.org/libc v1.75.7 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 )
