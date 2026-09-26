@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.3.1](https://github.com/Serraniel/sendan/compare/v0.3.0...v0.3.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **ci:** put a ceiling on how long a job may run ([d30de4f](https://github.com/Serraniel/sendan/commit/d30de4f92bbf55de59c6b73a49d73e5c65d384fd))
+* **ci:** run the S3 tests against a store that can be pulled ([86d8334](https://github.com/Serraniel/sendan/commit/86d833474ad3836fc4c41cefbb4590d0ddf26103))
+* **ci:** stop the object store fixture downloading an archived client ([ac7abf1](https://github.com/Serraniel/sendan/commit/ac7abf157eebe3fa3eac63aec62c28a1de0be81e))
+* **web:** stop the instance's defaults overwriting a choice ([1ba79b9](https://github.com/Serraniel/sendan/commit/1ba79b961b3629997046c0bd212158b5b8fd929d))
+
 ## [0.3.0](https://github.com/Serraniel/sendan/compare/v0.2.1...v0.3.0) (2026-09-10)
 
 
