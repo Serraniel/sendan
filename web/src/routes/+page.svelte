@@ -31,8 +31,16 @@
 
   let file = $state<File | null>(null);
   let password = $state("");
-  let ttlSeconds = $state(0);
-  let maxDownloads = $state(0);
+  // Null means nobody has chosen yet, and the effective value is then whatever
+  // the instance says - which may still be on its way.
+  //
+  // This used to be assigned once the policy arrived, which overwrote a choice
+  // made before it landed: three round trips happen first, and on a slow
+  // connection a person can pick a lifetime inside that window and watch it be
+  // replaced by the instance's default without being told. Deriving it instead
+  // makes that impossible rather than unlikely.
+  let ttlChoice = $state<number | null>(null);
+  let downloadChoice = $state<number | null>(null);
 
   let progress = $state<UploadProgress | null>(null);
   let result = $state<UploadResult | null>(null);
@@ -57,6 +65,11 @@
   // What the instance permits, so somebody can see the rules rather than
   // discover them by being refused.
   let policy = $state<InstancePolicy>(nothingKnown);
+
+  // What the two controls are actually set to: a choice where one was made,
+  // and otherwise whatever the instance says - see ttlChoice above.
+  const ttlSeconds = $derived(ttlChoice ?? defaultExpiry(policy));
+  const maxDownloads = $derived(downloadChoice ?? defaultDownloads(policy));
 
   const ttlChoices = $derived(expiryChoices(policy));
   const downloadChoices = $derived(downloadChoices2(policy));
@@ -358,8 +371,10 @@
     progress = null;
     failure = null;
     copied = false;
-    ttlSeconds = defaultExpiry(policy);
-    maxDownloads = defaultDownloads(policy);
+    // Back to following the instance, rather than to the value the last upload
+    // happened to use.
+    ttlChoice = null;
+    downloadChoice = null;
   }
 
   // Read from the protocol, not from isSecureContext. A browser grants
@@ -378,8 +393,6 @@
     // Start on what the instance would do anyway, now that it says so. Set
     // here rather than derived, because this is a starting point and not a
     // rule: once somebody picks a lifetime, it is theirs.
-    ttlSeconds = defaultExpiry(policy);
-    maxDownloads = defaultDownloads(policy);
   });
 
   const percent = $derived(
@@ -519,7 +532,13 @@
 
       <p>
         <label for="ttl">Expires after</label><br />
-        <select id="ttl" bind:value={ttlSeconds}>
+        <select
+          id="ttl"
+          value={ttlSeconds}
+          onchange={(event) => {
+            ttlChoice = Number(event.currentTarget.value);
+          }}
+        >
           {#each ttlChoices as choice (choice.value)}
             <option value={choice.value}>{choice.label}</option>
           {/each}
@@ -528,7 +547,13 @@
 
       <p>
         <label for="downloads">Download limit</label><br />
-        <select id="downloads" bind:value={maxDownloads}>
+        <select
+          id="downloads"
+          value={maxDownloads}
+          onchange={(event) => {
+            downloadChoice = Number(event.currentTarget.value);
+          }}
+        >
           {#each downloadChoices as choice (choice.value)}
             <option value={choice.value}>{choice.label}</option>
           {/each}

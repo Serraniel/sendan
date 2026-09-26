@@ -1296,6 +1296,37 @@ test.describe("the footer", () => {
   });
 });
 
+test.describe("choosing before the instance has answered", () => {
+  test("keeps the choice when the policy arrives late", async ({ page }) => {
+    // Three round trips happen on mount, and the form is usable throughout. The
+    // instance's defaults used to be assigned once the last of them landed,
+    // which replaced a choice made inside that window without saying so - and
+    // on this instance the default is fifteen seconds, so a record could be
+    // gone before the page that wrote it was read back. It failed on a slow
+    // runner and never on a laptop (#276).
+    await page.route("**/api/instance", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      await route.continue();
+    });
+
+    await page.goto("/");
+    await page.waitForSelector("#ttl", { state: "attached" });
+    await page.selectOption("#ttl", { label: "7 days" });
+    await expect(page.locator("#ttl")).toHaveValue("604800");
+
+    // Long enough for the policy to land and overwrite it, if it still would.
+    await page.waitForTimeout(4000);
+    await expect(page.locator("#ttl")).toHaveValue("604800");
+  });
+
+  test("still follows the instance when nobody chose", async ({ page }) => {
+    // The other half: deriving the value must not stop the instance's default
+    // applying, which is what #252 was for.
+    await page.goto("/");
+    await expect(page.locator("#ttl")).toHaveValue("15", { timeout: 30_000 });
+  });
+});
+
 test.describe("what the instance allows", () => {
   test("can be read before uploading anything", async ({ page }) => {
     await page.goto("/");
