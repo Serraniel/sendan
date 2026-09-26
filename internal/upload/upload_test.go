@@ -579,9 +579,19 @@ func TestReaperLoopDrainsABacklogLargerThanOneBatch(t *testing.T) {
 		t.Fatal("the reaper never swept")
 	}
 
-	// Well inside the tick, so anything still here means the loop is waiting
-	// for the next one instead of draining.
-	h.waitForBlobsWithin(t, 0, tick/4)
+	// Still inside the tick, so anything left means the loop is waiting for the
+	// next one instead of draining: a reaper that swept once per tick would have
+	// cleared one batch of two and could not touch the other three until the
+	// tick elapsed, which is later than this.
+	//
+	// Three quarters rather than a quarter. What the test proves is a boundary
+	// at one tick, and a quarter of one put the deadline 1.5s inside that
+	// boundary for no reason - which on a loaded runner with the race detector
+	// is close enough to lose. It failed exactly that way, with three files
+	// left, on a pull request that changed only Markdown. The property is
+	// unchanged and the margin before a second tick could rescue a broken
+	// reaper is still 500ms.
+	h.waitForBlobsWithin(t, 0, 3*tick/4)
 	cancel()
 	select {
 	case <-done:
