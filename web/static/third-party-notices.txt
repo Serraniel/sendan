@@ -64,7 +64,7 @@ Special thank you to the authors of original C algorithms:
 - Yann Collet
 
 ------------------------------------------------------------------------
-svelte 5.57.0
+svelte 5.57.1
 ------------------------------------------------------------------------
 
 Copyright (c) 2016-2025 [Svelte Contributors](https://github.com/sveltejs/svelte/graphs/contributors)
