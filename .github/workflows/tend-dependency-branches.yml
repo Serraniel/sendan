@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Keeps the generated notices current on open dependency branches.
+# See docs/workflows/tend-dependency-branches.md
+#
+# # Why this is scheduled rather than triggered by the branch
+#
+# The obvious shape - run when Dependabot pushes - cannot work. GitHub gives a
+# workflow run whose actor is Dependabot a read-only token, and this one has to
+# push. Running on a schedule makes the actor the scheduler, which is not
+# subject to that restriction, and workflow_dispatch covers impatience.
+#
+# The cost is that a branch waits up to six hours for its notices. That is
+# cheaper than the alternative and much cheaper than the status quo, which was
+# a person checking out the branch to regenerate one line.
+name: Tend the dependency branches
+
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      pull-request:
+        description: "A single pull request number, or empty for every open one"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tend-dependency-branches
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  notices:
+    name: Regenerate the third-party notices
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # To push the regenerated file to the branch, and to find the branches.
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Every branch, since the script moves between them.
+          fetch-depth: 0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Regenerate and push where it differs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/tend-dependency-branches.sh "${{ inputs.pull-request }}"
