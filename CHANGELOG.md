@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.2](https://github.com/Serraniel/sendan/compare/v0.3.1...v0.3.2) (2026-10-17)
+
+
+### Bug Fixes
+
+* **security:** move to Go 1.27.2 for the ten standard library advisories ([d6fb091](https://github.com/Serraniel/sendan/commit/d6fb091288c4aa42cf05893e5db708f3d2bb6490))
+* **web:** write the browser's note before showing the link ([182e141](https://github.com/Serraniel/sendan/commit/182e1414c6a48d27873b7c73130e5a04ac5be75e))
+
 ## [0.3.1](https://github.com/Serraniel/sendan/compare/v0.3.0...v0.3.1) (2026-09-26)
 
 
