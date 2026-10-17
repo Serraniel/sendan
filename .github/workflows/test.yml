@@ -272,6 +272,11 @@ jobs:
       - name: Assert one toolchain builds the manifest and the image
         run: ./scripts/check-toolchains.sh
 
+      # The security scan decides pull requests with this comparison, so a
+      # change to it is a change to what can reach main.
+      - name: Test the security scan's comparison
+        run: ./scripts/security-delta.test.py
+
       - name: Build web client, then the binary with assets embedded
         run: |
           set -euo pipefail
