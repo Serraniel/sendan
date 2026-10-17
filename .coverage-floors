@@ -25,8 +25,18 @@ internal/upload      82.0
 # internal/httpapi cannot reach 100: debug.ReadBuildInfo reporting failure and a
 # marshal error on a struct of strings and a bool are both unreachable from a
 # test.
-internal/httpapi     96.0
-internal/webui       92.0
+#
+# Lowered from 96.0 with Go 1.27.2, which counts statements per block
+# differently from 1.27.1. Nothing became less tested: measured on
+# internal/webui, the uncovered set is the same eight statements under both,
+# while twelve blocks that are covered under either toolchain are counted as
+# fewer statements under the newer one. The denominator shrank, so the fraction
+# did. This package moved the same way.
+internal/httpapi     95.0
+# Lowered from 92.0 for the Go 1.27.2 counting change described above; this is
+# the package it was measured on. 101 of 109 statements covered under 1.27.1,
+# 84 of 92 under 1.27.2 - eight uncovered either way.
+internal/webui       91.0
 internal/config      93.0
 internal/logging     98.0
 internal/ratelimit   96.0
