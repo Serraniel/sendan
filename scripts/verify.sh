@@ -77,6 +77,11 @@ dir=. check "asset audit"         ./scripts/audit-assets.sh
 dir=. check "third-party notices" ./scripts/check-notices.sh
 dir=. check "toolchains"          ./scripts/check-toolchains.sh
 dir=. check "workflows"           ./scripts/check-workflows.py
+# The comparison the security scan decides a pull request with. Its two
+# directions are the whole of it: a change that fixes something must pass and
+# a change that adds something must fail, and only one of those is exercised
+# by the branch it was written on.
+dir=. check "security delta"     ./scripts/security-delta.test.py
 
 echo
 if [ "$failed" -ne 0 ]; then

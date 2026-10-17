@@ -1,6 +1,25 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 #
 # Known-vulnerability scanning. See docs/workflows/security-scan.md
+#
+# This workflow asks two different questions depending on why it ran, because
+# they have two different answers.
+#
+# On a pull request: does this change add a vulnerability the branch it targets
+# does not already have? Only that is the change's doing, and only that is
+# something its author can act on.
+#
+# On a schedule or on main: is there a vulnerability here at all? That one
+# fails on everything and opens an issue, which is what keeps the pull request
+# side honest - "already on the base branch" has to mean "already being
+# chased", not "ignored".
+#
+# The split exists because the single question cost two days. On 15 October the
+# scheduled scan went red for ten reachable advisories in net/http, nobody saw
+# it, and every open dependency bump inherited the failure. Four of them were
+# read as broken when none had changed anything. A check that is red for
+# reasons its reader cannot address teaches people to scroll past red, which is
+# a worse outcome than the advisory.
 name: Security scan
 
 on:
@@ -24,6 +43,7 @@ permissions:
 # different question and a different value.
 env:
   GO_VERSION: "1.27.1"
+  NODE_VERSION: "24"
 
 concurrency:
   group: security-scan-${{ github.ref }}
@@ -33,26 +53,123 @@ jobs:
   govulncheck:
     name: govulncheck (Go)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: head
+      # The branch this change targets, so the two can be compared. Only
+      # fetched for a pull request; elsewhere there is nothing to compare to.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version: ${{ env.GO_VERSION }}
-      # govulncheck reports only vulnerabilities actually reachable from this
-      # code, so its findings are high signal and worth failing on.
-      - name: Run govulncheck
+          cache-dependency-path: head/go.sum
+
+      # Built from source rather than downloaded, because a scanner carries a
+      # type checker, and one older than the toolchain cannot read its export
+      # data - it gives up with "Loading packages failed, possibly due to a
+      # mismatch between the Go version used to build govulncheck and the Go
+      # version on PATH" and reports nothing at all. A scanner that finds
+      # nothing because it could not look is worse than no scanner.
+      - name: Build govulncheck with this toolchain
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Scan
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          set -euo pipefail
+          (cd head && govulncheck -format json ./... > "$RUNNER_TEMP/head.json")
+          if [ -d base ]; then
+            (cd base && govulncheck -format json ./... > "$RUNNER_TEMP/base.json")
+          fi
+
+      # On a pull request: only what the change adds. Everywhere else: an empty
+      # baseline, so every reachable finding counts and the job fails on it,
+      # which is the behaviour this always had.
+      - name: Compare against the base branch
+        run: |
+          set -euo pipefail
+          base="$RUNNER_TEMP/base.json"
+          [ -f "$base" ] || { echo '' > "$RUNNER_TEMP/empty.json"; base="$RUNNER_TEMP/empty.json"; }
+          python3 head/scripts/security-delta.py \
+            --format govulncheck --label govulncheck \
+            --base "$base" --head "$RUNNER_TEMP/head.json"
 
   npm-audit:
     name: npm audit (TypeScript)
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: head
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
-      - name: Run npm audit
-        working-directory: web
-        run: npm audit --audit-level=high
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Scan
+        run: |
+          set -euo pipefail
+          # npm audit exits non-zero when it finds something, which is the
+          # whole point here but not yet: the comparison decides.
+          (cd head/web && npm audit --json > "$RUNNER_TEMP/head.json") || true
+          if [ -d base ]; then
+            (cd base/web && npm audit --json > "$RUNNER_TEMP/base.json") || true
+          fi
+
+      - name: Compare against the base branch
+        run: |
+          set -euo pipefail
+          base="$RUNNER_TEMP/base.json"
+          [ -f "$base" ] || { echo '{}' > "$RUNNER_TEMP/empty.json"; base="$RUNNER_TEMP/empty.json"; }
+          python3 head/scripts/security-delta.py \
+            --format npm-audit --label "npm audit" \
+            --base "$base" --head "$RUNNER_TEMP/head.json"
+
+  # The counterweight. Without it, "already on the base branch" is just a nicer
+  # way of saying nobody is looking: the scheduled run is the only thing that
+  # fails on a pre-existing vulnerability, and a scheduled failure is an email
+  # that went unread for two days the last time this mattered.
+  report:
+    name: Report a finding on main
+    needs: [govulncheck, npm-audit]
+    if: failure() && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Open or update the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          title="The security scan is failing on main"
+          # One issue, reopened and updated, rather than one per night.
+          existing=$(gh issue list --state open --label "type:security" \
+            --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          body=$(printf '%s\n' \
+            "The scheduled security scan found a known vulnerability on main." \
+            "" \
+            "Run: $RUN" \
+            "" \
+            "Until this is fixed, pull requests will report it as \"already on" \
+            "the base branch\" and will not fail on it - that is deliberate, and" \
+            "it is why this issue exists. See docs/workflows/security-scan.md.")
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body "$body"
+          else
+            gh issue create --title "$title" --label "type:security" --body "$body"
+          fi
