@@ -17,6 +17,7 @@ describing what it is for, when it runs, and what a failure means.
 | [edge](edge.md) | push to `main` | n/a |
 | [registry-prune](registry-prune.md) | weekly, manual | n/a |
 | [dependabot](dependabot.md) | schedule (config, not a workflow) | n/a |
+| [tend-dependency-branches](tend-dependency-branches.md) | every six hours, manual | n/a |
 
 ## Conventions
 
