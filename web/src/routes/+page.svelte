@@ -43,6 +43,15 @@
   let downloadChoice = $state<number | null>(null);
 
   let progress = $state<UploadProgress | null>(null);
+  /**
+   * How long showing the link waits for the browser's note to be written.
+   *
+   * Generous, because a slow write still lands and nobody benefits from
+   * giving up on it early; finite, because the link is what the person came
+   * for and a blocked IndexedDB transaction must not be able to withhold it.
+   */
+  const RECORD_TIMEOUT_MS = 3000;
+
   let result = $state<UploadResult | null>(null);
   let failure = $state<string | null>(null);
   let copied = $state(false);
@@ -172,7 +181,7 @@
         startedAt: Date.now(),
       };
 
-      result = await uploadFile({
+      const uploaded = await uploadFile({
         file,
         options: { password, ttlSeconds, maxDownloads },
         transport: { signal: controller.signal },
@@ -182,7 +191,7 @@
       });
 
       protection = describeUpload({
-        password: result.passwordParams,
+        password: uploaded.passwordParams,
         // What was asked for rather than what was granted: the instance
         // decides the deadline from the requested lifetime. The form now
         // starts on the instance's published default, so this is a number
@@ -199,7 +208,16 @@
         maxDownloads: applied.maxDownloads,
       });
 
-      await keep(file.name, file.size, applied);
+      // The note is written before the link is shown, and the order is the
+      // whole point. Assigning `result` is what renders the confirmation, and
+      // the first thing somebody does on seeing a link is leave with it. A
+      // browser may discard an IndexedDB transaction that has not committed
+      // when the document goes away, so writing afterwards means the upload
+      // arrives and the only record of it does not - and there is no recovery
+      // path for that list by design. See #291.
+      await keep(uploaded, file.name, file.size, applied);
+
+      result = uploaded;
       // The password is not needed again and there is no reason to keep it in
       // memory, or in a field the next upload would silently reuse.
       password = "";
@@ -222,12 +240,20 @@
    * Failing to record an upload never fails the upload: the file is sent and
    * the link is on screen, and this list is a convenience.
    */
+  /**
+   * Writes the browser's own note about an upload.
+   *
+   * Takes the upload rather than reading `result`, because it now runs before
+   * `result` is assigned - which is what keeps the note from racing the
+   * navigation that showing the link invites.
+   */
   async function keep(
+    uploaded: UploadResult,
     name: string,
     size: number,
     applied: { ttlSeconds: number; startedAt: number; password: string },
   ) {
-    if (result === null || !isSupported()) return;
+    if (!isSupported()) return;
 
     if (mustWarn()) {
       const agreed = confirm(
@@ -243,20 +269,31 @@
     }
 
     try {
-      await remember({
-        id: toBase64Url(result.fileID),
-        link,
-        ownerToken: toBase64Url(result.ownerToken),
-        name,
-        size,
-        createdAt: applied.startedAt,
-        expiresAt:
-          applied.ttlSeconds > 0 ? applied.startedAt + applied.ttlSeconds * 1000 : null,
-        deadlineIsTheInstances: applied.ttlSeconds === USE_DEFAULT,
-        // Whether, not what: the password itself is never written down. The list
-        // needs this to say truthfully whether a code to scan leaves it out.
-        hasPassword: applied.password !== "",
-      });
+      // Bounded, because this is now on the path to showing the link. The
+      // write resolves when its transaction commits, and a transaction can be
+      // blocked indefinitely - by another tab holding an upgrade, for
+      // instance. Waiting forever would trade a lost note for a lost link,
+      // which is the worse of the two: the upload succeeded either way, and
+      // only one of them is the thing the person came for. A write that is
+      // merely slow still lands; this only stops waiting on it.
+      await Promise.race([
+        remember({
+          id: toBase64Url(uploaded.fileID),
+          link: downloadLink(page.url.origin, uploaded.fileID, uploaded.linkSecret),
+          ownerToken: toBase64Url(uploaded.ownerToken),
+          name,
+          size,
+          createdAt: applied.startedAt,
+          expiresAt:
+            applied.ttlSeconds > 0 ? applied.startedAt + applied.ttlSeconds * 1000 : null,
+          deadlineIsTheInstances: applied.ttlSeconds === USE_DEFAULT,
+          // Whether, not what: the password itself is never written down. The
+          // list needs this to say truthfully whether a code to scan leaves it
+          // out.
+          hasPassword: applied.password !== "",
+        }),
+        new Promise<void>((resolve) => setTimeout(resolve, RECORD_TIMEOUT_MS)),
+      ]);
     } catch {
       // The upload succeeded; only the note about it did not, and there is
       // nothing the person can usefully do about that here.
