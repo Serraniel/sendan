@@ -236,6 +236,30 @@ GOTOOLCHAIN=go1.25.12 go test ./...
 
 The version a CI run used is printed in its "Setup Go" step.
 
+### Node versions
+
+One major, named in three places, and `scripts/check-toolchains.sh` fails the
+build if they disagree: the `node:` image in the `Dockerfile` and the
+`NODE_VERSION` of every workflow that builds the client.
+
+Unlike Go, the Node major is not a free choice. The release builds the client
+twice — once on a runner to produce the signed asset manifest, once inside the
+`Dockerfile` to produce the image — and a bundler on two different majors emits
+two different sets of content-hashed filenames. v0.2.0 shipped exactly that, and
+`sendan verify` reported the project's own image as not serving the published
+client, because it was not. See #260.
+
+**The line has to be LTS on the day it is adopted**, not Current and not
+scheduled to become LTS. A toolchain that produces released artefacts is the
+wrong place to be early. Node's own
+[release schedule](https://github.com/nodejs/Release) is the authority, and
+odd-numbered majors never become LTS at all.
+
+Dependabot does not know any of this, so `node` major updates are ignored in
+`.github/dependabot.yml` and digest updates are not — security patches for the
+pinned line keep arriving on their own. Moving a major is a deliberate change
+that edits all three references together.
+
 ### Coverage floors
 
 Go coverage is held to a per-package floor in `.coverage-floors`; TypeScript

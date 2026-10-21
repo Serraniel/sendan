@@ -94,3 +94,18 @@ updates:
     commit-message:
       prefix: "build"
     labels: ["area:infra", "type:chore"]
+
+    ignore:
+      # The Node major decides the bundler's output, and the release builds the
+      # client twice - on a runner for the signed asset manifest, and in the
+      # Dockerfile for the image. Two majors emit two sets of content-hashed
+      # filenames, which shipped in v0.2.0 and made `sendan verify` call the
+      # project's own image compromised. See #260.
+      #
+      # So the line has to be LTS on the day it is adopted, and Dependabot
+      # cannot tell: it proposed Current in #165 and #278, and in #323 it
+      # proposed 25, which reached end of life in June 2026. Digest updates are
+      # not ignored, so security patches for the pinned line still arrive; only
+      # the major is a deliberate choice. CONTRIBUTING.md has the rule.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
