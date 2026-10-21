@@ -36,6 +36,26 @@ cryptographic dependency change must be reviewed on its own, with the diff
 actually read. This is the policy deferred during the workflow discussion:
 **automate the noise, never automate the cryptography.**
 
+## Peer-coupled dependencies are forced into one pull request
+
+The opposite case to the one above. Some packages declare each other as peers
+with major ranges, so a bump that arrives alone cannot install: `npm ci` fails
+on the peer conflict before a single test runs, and the pull request shows
+several red checks that are all the same failure. Such a set is grouped across
+*every* update type, majors included, so the halves arrive together.
+
+| Group | Members | The edge |
+|---|---|---|
+| `vitest` | `vitest`, `@vitest/*` | `@vitest/coverage-v8` declares `vitest` as a peer (#99) |
+| `sveltekit` | `@sveltejs/*`, `svelte`, `svelte-check`, `vite` | `adapter-static` requires `kit`; `kit` requires `svelte`, `vite` and `vite-plugin-svelte`; `svelte-check` requires `svelte` (#316, #317) |
+
+These groups are ordered before `npm-minor-patch` in the configuration, because
+a dependency joins the first group whose patterns it matches.
+
+A red Dependabot pull request whose failures all begin with `npm error ERESOLVE`
+is this, not a breaking change in the dependency. Look for the peer that was
+left behind before reading any changelog.
+
 ## Overrides
 
 `web/package.json` carries no `overrides` entry, and the one it used to carry is
