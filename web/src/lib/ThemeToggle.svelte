@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { applyChoice, labelFor, opposite, rememberChoice, resolve, storedChoice } from "$lib/theme";
+  import { applyChoice, labelFor, opposite, rememberChoice, resolve, storedChoice } from "#lib/theme.ts";
 
   // "system" until a choice is stored, which is where every browser starts and
   // is not a state the control offers. Reading it after mount keeps the

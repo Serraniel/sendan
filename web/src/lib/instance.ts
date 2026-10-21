@@ -25,7 +25,7 @@
  * exactly the claim this module exists to avoid.
  */
 
-import type { Transport } from "$lib/tus";
+import type { Transport } from "#lib/tus.ts";
 
 /** A notice the operator set. */
 export interface Banner {

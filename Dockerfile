@@ -31,7 +31,7 @@ COPY web/ ./
 # inside its own release pull request.
 COPY CHANGELOG.md /src/CHANGELOG.md
 COPY scripts/copy-changelog.mjs /src/scripts/copy-changelog.mjs
-# svelte.config.js writes to ../internal/webui/dist, which is where the Go build
+# vite.config.ts writes to ../internal/webui/dist, which is where the Go build
 # below expects to find it - one definition of that path, in the app's config.
 # The same identity the binary is stamped with, because the client's build is
 # named after it: without this the bundle carries a timestamp and two builds of

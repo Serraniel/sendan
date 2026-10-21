@@ -9,7 +9,7 @@ Sendan itself is AGPL-3.0-or-later. Its own source is linked in the footer,
 which is a separate obligation and is not discharged by this file.
 
 ------------------------------------------------------------------------
-@sveltejs/kit 2.70.3
+@sveltejs/kit 3.1.0
 ------------------------------------------------------------------------
 
 Copyright (c) 2020 [these people](https://github.com/sveltejs/kit/graphs/contributors)

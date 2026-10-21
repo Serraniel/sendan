@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { encode, toPath, TooMuchData } from "$lib/qr";
+  import { encode, toPath, TooMuchData } from "#lib/qr.ts";
 
   // Null is a third state, not a false. A record kept before this browser
   // started noting it cannot say whether a password was set, and claiming

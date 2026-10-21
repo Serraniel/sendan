@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { markSeen, unseen } from "$lib/banner";
-  import type { Banner } from "$lib/instance";
+  import { markSeen, unseen } from "#lib/banner.ts";
+  import type { Banner } from "#lib/instance.ts";
 
   let { banner }: { banner: Banner | null } = $props();
 

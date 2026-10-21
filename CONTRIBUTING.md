@@ -154,6 +154,29 @@ why.
 > success. This has happened. The script exists so that checking is one command
 > whose answer is a single word.
 
+## Client imports
+
+The client reaches its own modules through the `#lib` subpath imports declared
+in `web/package.json`, not through SvelteKit's old `$lib` alias, which SvelteKit
+3 removed.
+
+The mapping is exact, so **the specifier carries the file extension**:
+
+```ts
+import { describeUpload } from "#lib/protection.ts";
+import LinkBlock from "#lib/LinkBlock.svelte";
+```
+
+Writing `#lib/protection` resolves to a file that does not exist. The reason it
+is spelled out rather than inferred is that the tools disagree about inferring
+it: a fallback list of candidate extensions satisfies TypeScript, while Rolldown
+takes only the first entry and fails the build. One exact path is read the same
+way by both.
+
+`src/service-worker.ts` is the exception and imports relatively. It has to stay
+loadable by a test runner, which has neither a Service Worker scope nor
+SvelteKit's resolution.
+
 ## Testing requirements
 
 Sendan is a security product, and test coverage is treated as a correctness

@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { BackupError, exportUploads, explainBackup, importUploads } from "$lib/backup";
-  import { explainRevoke, RevokeError, revokeUpload } from "$lib/revoke";
-  import LinkBlock from "$lib/LinkBlock.svelte";
-  import LinkCode from "$lib/LinkCode.svelte";
-  import { canShare, share } from "$lib/share";
+  import { BackupError, exportUploads, explainBackup, importUploads } from "#lib/backup.ts";
+  import { explainRevoke, RevokeError, revokeUpload } from "#lib/revoke.ts";
+  import LinkBlock from "#lib/LinkBlock.svelte";
+  import LinkCode from "#lib/LinkCode.svelte";
+  import { canShare, share } from "#lib/share.ts";
   import {
     forget,
     forgetAll,
@@ -12,7 +12,7 @@
     list,
     remember,
     type StoredUpload,
-  } from "$lib/vault";
+  } from "#lib/vault.ts";
 
   let uploads = $state<StoredUpload[]>([]);
   // Which entry was last copied, so the confirmation belongs to one row

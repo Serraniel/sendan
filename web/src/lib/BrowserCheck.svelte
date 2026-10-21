@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { isFatal, type MissingCapability, missingCapabilities } from "$lib/capabilities";
+  import { isFatal, type MissingCapability, missingCapabilities } from "#lib/capabilities.ts";
 
   let { children } = $props();
 

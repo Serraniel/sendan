@@ -19,14 +19,18 @@
     "test:e2e:ui": "playwright test --ui",
     "prebuild": "node ../scripts/copy-changelog.mjs"
   },
+  "imports": {
+    "#lib": "./src/lib",
+    "#lib/*": "./src/lib/*"
+  },
   "dependencies": {
     "hash-wasm": "4.12.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@playwright/test": "^1.64.1",
-    "@sveltejs/adapter-static": "^3.0.10",
-    "@sveltejs/kit": "^2.70.3",
+    "@sveltejs/adapter-static": "^4.0.0",
+    "@sveltejs/kit": "^3.1.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/node": "^26.6.5",
     "@vitest/coverage-v8": "^5.0.5",
@@ -35,8 +39,5 @@
     "typescript": "6.0.3",
     "vite": "^8.3.4",
     "vitest": "^5.0.0"
-  },
-  "overrides": {
-    "cookie": "^0.7.0"
   }
 }

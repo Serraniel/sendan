@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { type Block, render } from "$lib/changelog";
+  import { type Block, render } from "#lib/changelog.ts";
 
   let blocks = $state<Block[]>([]);
   let loaded = $state(false);

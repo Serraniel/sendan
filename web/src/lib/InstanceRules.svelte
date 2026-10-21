@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { formatSize } from "$lib/limits";
-  import { formatDuration, type InstancePolicy } from "$lib/instance";
+  import { formatSize } from "#lib/limits.ts";
+  import { formatDuration, type InstancePolicy } from "#lib/instance.ts";
 
   let { policy, secure }: { policy: InstancePolicy; secure: boolean } = $props();
 
