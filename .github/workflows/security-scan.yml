@@ -43,7 +43,7 @@ permissions:
 # different question and a different value.
 env:
   GO_VERSION: "1.27.2"
-  NODE_VERSION: "24"
+  NODE_VERSION: "26"
 
 concurrency:
   group: security-scan-${{ github.ref }}
