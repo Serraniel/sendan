@@ -7,7 +7,7 @@
 #
 # Base images are pinned by digest for the same reason the workflows pin actions
 # by commit: a tag is a name somebody else can repoint, and "we built it from
-# node:24-alpine" then describes nothing in particular.
+# node:26-alpine" then describes nothing in particular.
 #
 # The builder stages run on the machine doing the building and cross-compile to
 # the target. Emulating an arm64 toolchain under QEMU to produce a binary that
@@ -15,7 +15,7 @@
 # and change nothing about the output.
 
 # ---- the web client -------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS web
+FROM --platform=$BUILDPLATFORM node:26-alpine@sha256:9bd229b644e391df00fb989efa732335aefc6170a05d8c163c5c8ca9870da401 AS web
 
 WORKDIR /src/web
 
