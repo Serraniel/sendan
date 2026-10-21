@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/Serraniel/sendan/compare/v0.3.2...v0.3.3) (2026-10-21)
+
+
+### Bug Fixes
+
+* **deps:** move the client to SvelteKit 3 and adapter-static 4 ([7af487f](https://github.com/Serraniel/sendan/commit/7af487f782d64407354a63a6faa31cd74a2c5380))
+
 ## [0.3.2](https://github.com/Serraniel/sendan/compare/v0.3.1...v0.3.2) (2026-10-17)
 
 
