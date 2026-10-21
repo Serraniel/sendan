@@ -15,7 +15,7 @@
  * `Service.ResolveExpiry` refuses unless the instance permits it.
  */
 
-// Relative rather than through the $lib alias: the alias is resolved by the
+// Relative rather than through the #lib alias: the alias is resolved by the
 // bundler and not by the test runner, so a value imported through it is a
 // module that cannot be found the moment anything imports this outside a build.
 // A type import survives only because it is erased.

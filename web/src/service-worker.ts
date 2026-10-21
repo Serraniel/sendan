@@ -19,7 +19,7 @@
 
 import { buildSaveResponse, type Handover, HandoverStore, tokenOf } from "./lib/saveworker.js";
 
-// Relative rather than the $lib alias, and self read through globalThis: both
+// Relative rather than the #lib alias, and self read through globalThis: both
 // so this file can be imported by a test runner, which has no Service Worker
 // scope and no SvelteKit resolution. The wiring below is small but it is where
 // a mistake would be invisible - a message handler that accepted the wrong

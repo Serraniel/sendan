@@ -14,7 +14,7 @@
  * deleting something.
  */
 
-import type { Transport } from "$lib/tus";
+import type { Transport } from "#lib/tus.ts";
 
 /** Why a revocation did not happen. */
 export type RevokeFault =

@@ -18,7 +18,7 @@
  * page loading and an upload finishing, so the refusal path stays.
  */
 
-import type { Transport } from "$lib/tus";
+import type { Transport } from "#lib/tus.ts";
 
 /** Bytes, or null when the instance does not say. */
 export type MaxUploadSize = number | null;

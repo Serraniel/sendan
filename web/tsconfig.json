@@ -3,7 +3,22 @@
   // framework needs. It does not enable strict checking, so every option this
   // project relies on is restated below rather than inherited - inheriting a
   // base that changes between releases is how a guarantee quietly disappears.
-  "extends": "./.svelte-kit/tsconfig.json",
+  //
+  // SvelteKit 3 serves that base as a virtual module rather than writing it into
+  // .svelte-kit, and it no longer supplies include/exclude, so the file sets are
+  // stated here where they used to be inherited.
+  "extends": "$app/tsconfig",
+  "include": ["src", "test", "*"],
+  // Dropped as an entry point, which is what the generated base used to do. It
+  // is still type-checked, because src/service-worker.test.ts imports it and
+  // exclude only limits the root set, not what an included file pulls in.
+  //
+  // SvelteKit warns about that - it expects a worker to be checked under a
+  // worker scope rather than this one. Keeping it here is deliberate: the file
+  // declares `/// <reference lib="webworker" />` itself, svelte-check passes,
+  // and the alternative is a file that answers download requests and nothing
+  // type-checks. The warning does not fail any gate. See #320.
+  "exclude": ["src/service-worker.ts"],
   "compilerOptions": {
     "strict": true,
     "noUncheckedIndexedAccess": true,
@@ -13,6 +28,8 @@
     "isolatedModules": true,
     "skipLibCheck": true,
     "lib": ["ES2022", "DOM"],
-    "types": ["vitest/globals", "node"]
+    // $app/types carries the generated route types. This list replaces the
+    // base's rather than extending it, so it has to be named here.
+    "types": ["$app/types", "vitest/globals", "node"]
   }
 }

@@ -12,17 +12,17 @@
     fetchMetadata,
     openUpload,
     saveContent,
-  } from "$lib/download";
+  } from "#lib/download.ts";
   import {
     chooseDestination,
     offerAsBlob,
     offerViaWorker,
     readySaveWorker,
-  } from "$lib/save";
-  import { fragmentIsPresent, parseLink } from "$lib/link";
-  import { describeDownload, type Protection } from "$lib/protection";
-  import { fetchBuild } from "$lib/source";
-  import TransparencyCard from "$lib/TransparencyCard.svelte";
+  } from "#lib/save.ts";
+  import { fragmentIsPresent, parseLink } from "#lib/link.ts";
+  import { describeDownload, type Protection } from "#lib/protection.ts";
+  import { fetchBuild } from "#lib/source.ts";
+  import TransparencyCard from "#lib/TransparencyCard.svelte";
 
   type Phase = "reading" | "password" | "ready" | "downloading" | "saved" | "compatibility";
 

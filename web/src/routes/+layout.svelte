@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import BrowserCheck from "$lib/BrowserCheck.svelte";
-  import { type Build, fetchBuild, shortCommit, sourceIsExact } from "$lib/source";
-  import { fetchInstancePolicy, nothingKnown } from "$lib/instance";
-  import OperatorBanner from "$lib/OperatorBanner.svelte";
-  import ThemeToggle from "$lib/ThemeToggle.svelte";
+  import BrowserCheck from "#lib/BrowserCheck.svelte";
+  import { type Build, fetchBuild, shortCommit, sourceIsExact } from "#lib/source.ts";
+  import { fetchInstancePolicy, nothingKnown } from "#lib/instance.ts";
+  import OperatorBanner from "#lib/OperatorBanner.svelte";
+  import ThemeToggle from "#lib/ThemeToggle.svelte";
   import "../app.css";
 
   let { children } = $props();

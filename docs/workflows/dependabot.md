@@ -36,31 +36,49 @@ cryptographic dependency change must be reviewed on its own, with the diff
 actually read. This is the policy deferred during the workflow discussion:
 **automate the noise, never automate the cryptography.**
 
+## Peer-coupled dependencies are forced into one pull request
+
+The opposite case to the one above. Some packages declare each other as peers
+with major ranges, so a bump that arrives alone cannot install: `npm ci` fails
+on the peer conflict before a single test runs, and the pull request shows
+several red checks that are all the same failure. Such a set is grouped across
+*every* update type, majors included, so the halves arrive together.
+
+| Group | Members | The edge |
+|---|---|---|
+| `vitest` | `vitest`, `@vitest/*` | `@vitest/coverage-v8` declares `vitest` as a peer (#99) |
+| `sveltekit` | `@sveltejs/*`, `svelte`, `svelte-check`, `vite` | `adapter-static` requires `kit`; `kit` requires `svelte`, `vite` and `vite-plugin-svelte`; `svelte-check` requires `svelte` (#316, #317) |
+
+These groups are ordered before `npm-minor-patch` in the configuration, because
+a dependency joins the first group whose patterns it matches.
+
+A red Dependabot pull request whose failures all begin with `npm error ERESOLVE`
+is this, not a breaking change in the dependency. Look for the peer that was
+left behind before reading any changelog.
+
 ## Overrides
 
-`web/package.json` carries one `overrides` entry:
-
-```json
-"overrides": { "cookie": "^0.7.0" }
-```
+`web/package.json` carries no `overrides` entry, and the one it used to carry is
+worth recording so that it is not reintroduced.
 
 `cookie` below 0.7.0 accepts out-of-bounds characters in a cookie's name, path
-and domain, so a name can set the other fields (GHSA, alert 1). It arrives
-through `@sveltejs/kit`, which asks for `^0.6.0` and so cannot receive the fix;
-Dependabot could only offer a path that downgraded `@sveltejs/adapter-static`
-from 3.0.10 to 0.0.17.
+and domain, so a name can set the other fields (GHSA, alert 1). It arrived
+through `@sveltejs/kit`, which asked for `^0.6.0` and so could not receive the
+fix, and Dependabot could only offer a path that downgraded
+`@sveltejs/adapter-static` from 3.0.10 to 0.0.17. An `overrides` entry of
+`^0.7.0` removed the vulnerable version instead of arguing that it was
+unreachable.
 
-Nothing here was exposed to it. The interface sets `ssr = false` and
-`prerender = false` and is served by the Go binary as static files, so SvelteKit
-runs no server code, which is the only place `cookie` is used - no file under
-`internal/webui/dist` contains the string, and the server sets no cookies of its
-own.
+SvelteKit 3 asks for `cookie@^2.0.1`, which is far above the version that
+carried the flaw, so the entry had nothing left to do - and it had become
+actively harmful, because it pinned `cookie` back to 0.7.2, a CommonJS build
+without the named exports SvelteKit 3 imports. The build failed on
+`parseCookie` until the entry was removed. `npm ls cookie` now resolves to 2.0.1
+on its own and `npm audit` reports nothing.
 
-The override is still the better answer than dismissing the alert: an
-unreachable vulnerable version is a claim that has to be re-checked every time
-the interface grows, and this removes the version instead. Drop it once
-`@sveltejs/kit` widens its range - `npm ls cookie` should then already resolve
-to 0.7 or later on its own.
+The condition this document set for dropping it - that `@sveltejs/kit` widen its
+range so the version resolves correctly without help - is the condition that was
+met.
 
 ## What a failure means
 

@@ -56,6 +56,19 @@ updates:
         patterns: ["vitest", "@vitest/*"]
         update-types: ["major", "minor", "patch"]
 
+      # Same reason, and this is how #316 and #317 were found. The peer edges
+      # run in a ring: @sveltejs/adapter-static requires @sveltejs/kit, kit
+      # requires svelte, vite and @sveltejs/vite-plugin-svelte, the plugin
+      # requires vite and svelte, and svelte-check requires svelte. Dependabot
+      # split the kit 3 bump from the adapter-static 4 bump, and each half
+      # failed npm ci on the other's peer range before a test ran.
+      #
+      # vite is here because kit declares it as a peer with a major range, so a
+      # vite major on its own fails the same way.
+      sveltekit:
+        patterns: ["@sveltejs/*", "svelte", "svelte-check", "vite"]
+        update-types: ["major", "minor", "patch"]
+
       npm-minor-patch:
         patterns: ["*"]
         exclude-patterns:

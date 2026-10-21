@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { assurances, CAVEAT, type Protection, protectionLines } from "$lib/protection";
+  import { assurances, CAVEAT, type Protection, protectionLines } from "#lib/protection.ts";
 
   interface Props {
     protection: Protection;

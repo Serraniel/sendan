@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { downloadLink, toBase64Url } from "$lib/link";
+  import { downloadLink, toBase64Url } from "#lib/link.ts";
   import {
     fetchMaxUploadSize,
     formatSize,
     type MaxUploadSize,
     tooLargeMessage,
-  } from "$lib/limits";
-  import { fetchInstancePolicy, type InstancePolicy, nothingKnown } from "$lib/instance";
-  import { describeStyle, generateStyle, type Style } from "$lib/passphrase";
+  } from "#lib/limits.ts";
+  import { fetchInstancePolicy, type InstancePolicy, nothingKnown } from "#lib/instance.ts";
+  import { describeStyle, generateStyle, type Style } from "#lib/passphrase.ts";
   import {
     defaultDownloads,
     defaultExpiry,
@@ -17,17 +17,17 @@
     downloadChoices as downloadChoices2,
     expiryChoices,
     USE_DEFAULT,
-  } from "$lib/retention";
-  import InstanceRules from "$lib/InstanceRules.svelte";
-  import LinkBlock from "$lib/LinkBlock.svelte";
-  import { acknowledge, isSupported, mustWarn, remember } from "$lib/vault";
-  import { TusError } from "$lib/tus";
-  import { type UploadProgress, type UploadResult, uploadFile } from "$lib/upload";
-  import TransparencyCard from "$lib/TransparencyCard.svelte";
-  import LinkCode from "$lib/LinkCode.svelte";
-  import { canShare, share } from "$lib/share";
-  import { describeUpload, type Protection } from "$lib/protection";
-  import { fetchBuild } from "$lib/source";
+  } from "#lib/retention.ts";
+  import InstanceRules from "#lib/InstanceRules.svelte";
+  import LinkBlock from "#lib/LinkBlock.svelte";
+  import { acknowledge, isSupported, mustWarn, remember } from "#lib/vault.ts";
+  import { TusError } from "#lib/tus.ts";
+  import { type UploadProgress, type UploadResult, uploadFile } from "#lib/upload.ts";
+  import TransparencyCard from "#lib/TransparencyCard.svelte";
+  import LinkCode from "#lib/LinkCode.svelte";
+  import { canShare, share } from "#lib/share.ts";
+  import { describeUpload, type Protection } from "#lib/protection.ts";
+  import { fetchBuild } from "#lib/source.ts";
 
   let file = $state<File | null>(null);
   let password = $state("");
