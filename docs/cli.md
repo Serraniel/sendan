@@ -8,16 +8,9 @@ asked to obtain and trust — see [`docs/design.md`](design.md) §7.1 — so it 
 none of the server's dependencies: no database drivers, no object storage
 client, no embedded web client.
 
-> [!IMPORTANT]
-> **No release has been published yet.** The release pipeline is in place and
-> produces binaries and checksums for every platform below, but no tag has been
-> cut, so today the only way to get `sendan` is to build it. The download
-> instructions describe what a release will provide; the build instructions
-> describe what works now.
-
 ## Building it
 
-Needs [Go](https://go.dev/dl/) 1.25 or later, and nothing else.
+Needs [Go](https://go.dev/dl/) 1.26 or later, and nothing else.
 
 ```sh
 git clone https://github.com/Serraniel/sendan
@@ -37,8 +30,8 @@ They land in `dist/`, with a `SHA256SUMS` beside them.
 
 ## Installing a release
 
-Once a release exists, each one carries a static binary per platform. There is
-nothing to install: the binary has no runtime dependency.
+Each release carries a static binary per platform. There is nothing to install:
+the binary has no runtime dependency.
 
 | Platform | File |
 |---|---|
@@ -218,20 +211,16 @@ Ed25519  RWQt826yhqM+nKsvcrv1lu/eePUVXmE2haeCmGUBpgzwu7CWVZxyRUVk
 SLH-DSA  U/vAc3e81vHgYeqfxDWYGHjGAtTZm4bz5Tz4lM42TJs=
 ```
 
-> [!IMPORTANT]
-> **Nothing is signed with them yet.** `v0.1.0` is tagged but carries no
-> artefacts, so `sendan verify` against that release finds nothing to check.
-> Until it is rebuilt, verify with `--manifest` pointing at a manifest you
-> produced yourself:
+> [!TIP]
+> **`--manifest` against a manifest you built yourself is the stronger check**,
+> because it compares the instance to a client you produced rather than to a
+> statement somebody else signed:
 >
 > ```sh
 > (cd web && npm ci && npm run build)
 > ./scripts/asset-manifest.sh /tmp/manifest.json
 > sendan verify https://files.example.org --manifest /tmp/manifest.json
 > ```
->
-> That is the stronger check anyway: it compares the instance against a client
-> you built, rather than against a statement somebody else signed.
 
 The first signature is in [minisign](https://jedisct1.github.io/minisign/)
 format, so `minisign -Vm manifest.json -P RWQt826yhqM+nKsvcrv1lu/eePUVXmE2haeCmGUBpgzwu7CWVZxyRUVk`

@@ -14,9 +14,9 @@ name: sendan
 services:
   sendan:
     # Both keys on purpose: `docker compose up` uses the published image, and
-    # `docker compose up --build` builds this checkout instead. Until a release
-    # is tagged there is no published image, so the second is the one that
-    # works.
+    # `docker compose up --build` builds this checkout instead. The tag follows
+    # the releases and carries no `v`, so pin `:0.3.3` rather than `:v0.3.3`
+    # for a deployment that should not move on its own.
     image: ghcr.io/serraniel/sendan:latest
     build: .
     restart: unless-stopped

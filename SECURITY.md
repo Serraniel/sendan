@@ -177,13 +177,6 @@ assume. Each release publishes a binary for every supported platform and a
 [github.com/Serraniel/sendan/releases](https://github.com/Serraniel/sendan/releases).
 [`docs/cli.md`](docs/cli.md) has the per-platform download and install steps.
 
-> [!NOTE]
-> **Nothing published carries these signatures yet.** `v0.1.0` is tagged, but
-> the workflow that builds and signs its artefacts was never started, and the
-> release keys do not exist. This describes what the pipeline publishes once
-> both are in place. Until then, build from source — which is the stronger
-> check anyway, and is the second procedure below.
-
 **Check what you downloaded:**
 
 ```sh
@@ -196,9 +189,11 @@ the release was built from the source in this repository — for that, build it
 yourself and compare:
 
 ```sh
-git checkout v0.5.0        # the tag the release names
+VERSION=v0.3.3             # the tag the release names
 
-SENDAN_VERSION=v0.5.0 \
+git checkout "$VERSION"
+
+SENDAN_VERSION="$VERSION" \
 SENDAN_COMMIT=<the commit the release names> \
   ./scripts/release-build.sh
 
@@ -255,8 +250,8 @@ sendan verify https://files.example.org
 
 ```
   instance   https://files.example.org
-  claims     v0.5.0, commit 1a2b3c4, unmodified
-  manifest   v0.5.0
+  claims     v0.3.3, commit 1a2b3c4, unmodified
+  manifest   v0.3.3
              signed by this build's release key
 
   ✓ 41 of 41 assets match the published client
@@ -315,7 +310,7 @@ The first is [minisign](https://jedisct1.github.io/minisign/) format, so the
 command line client is not the only thing that can check it:
 
 ```sh
-gh release download v0.5.0 -p 'manifest.json*'
+gh release download v0.3.3 -p 'manifest.json*'
 minisign -Vm manifest.json -P '<the release public key>'
 ```
 

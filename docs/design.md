@@ -1,9 +1,9 @@
 # Sendan — Design
 
 > [!NOTE]
-> This document describes software that has not yet been implemented. It records
-> decisions and their reasoning so that they need not be re-argued, and so that
-> the cryptographic scheme can be reviewed before it is built.
+> This document records design decisions and their reasoning, so that they need
+> not be re-argued. It was written ahead of the implementation, which is why it
+> reads as a plan in places; the scheme it describes is the one that is built.
 
 ## 1. Stack
 

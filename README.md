@@ -97,10 +97,11 @@ from, including this one.
   must be enabled explicitly.
 - **Single-container deployment.** One static binary serving an embedded web
   client, on an image with no distribution, no package manager and no shell.
-  *(Builds and runs; not yet published — see the status above.)*
+  *(Published at `ghcr.io/serraniel/sendan` for `linux/amd64` and
+  `linux/arm64`, signed, with provenance and an SBOM.)*
 - **Cross-platform command line client**, sharing one cryptographic
-  implementation with the server. *(Sends and receives; no binary published
-  yet — see the status above.)*
+  implementation with the server. *(Signed static binaries for six
+  platforms; [`docs/cli.md`](docs/cli.md) has the install steps.)*
 - **Light and dark themes**, following the system by default with a control to
   override it, on one layout that holds from a small phone to a desktop
   display. No web font is loaded and no request leaves the instance: the whole
