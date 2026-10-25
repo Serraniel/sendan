@@ -86,11 +86,12 @@ filesystem storage, so this is a working instance on
 ```sh
 docker run -d --name sendan -p 8080:8080 \
   -v sendan:/var/lib/sendan \
-  ghcr.io/serraniel/sendan:0.3.3
+  ghcr.io/serraniel/sendan:latest
 ```
 
-Image tags follow the releases and carry **no `v`**, so pin `:0.3.3` rather
-than `:latest` for a deployment that should not move on its own.
+`:latest` is right for trying it. For a deployment that should not move on its
+own, pin the release you tested — and note the tags follow the releases
+**without a `v`**, so it is `:0.3.3`, never `:v0.3.3`.
 
 That is enough to try it locally. It is deliberately not enough to deploy:
 download links are built from `SENDAN_BASE_URL`, which defaults to
