@@ -327,10 +327,30 @@ binary of the same version are the same program.
 
 ## Checking what you pulled
 
+Everything below checks **the image you are running**, which is not necessarily
+the newest release. A version copied from this page would check somebody else's
+image and would happily succeed, because every published image is signed — so
+read the tag off the deployment instead:
+
+```sh
+# started with compose.yaml, where the container is sendan-sendan-1
+IMAGE=$(docker inspect --format '{{ .Config.Image }}' "$(docker compose ps -q sendan)")
+
+# started with a bare `docker run --name sendan`
+IMAGE=$(docker inspect --format '{{ .Config.Image }}' sendan)
+
+echo "$IMAGE"      # ghcr.io/serraniel/sendan:0.3.3
+```
+
+Under an orchestrator, take it from the pod or service definition. Either way it
+is the tag that is deployed, not one you retyped. A running instance will also
+tell you at `/api/source`, though that is a claim rather than a fact — which is
+the distinction the rest of this section exists to settle.
+
 Each image is signed at release time:
 
 ```sh
-cosign verify ghcr.io/serraniel/sendan:0.3.3 \
+cosign verify "$IMAGE" \
   --certificate-identity-regexp '^https://github\.com/Serraniel/sendan/\.github/workflows/release\.yml@' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
@@ -346,7 +366,7 @@ architecture. The provenance is what ties an image to this repository and to the
 workflow run that produced it:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/serraniel/sendan:0.3.3 \
+docker buildx imagetools inspect "$IMAGE" \
   --format '{{ json .Provenance }}'
 ```
 
@@ -358,7 +378,7 @@ base images the build used.
 The bill of materials, for asking what is in the image without running it:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/serraniel/sendan:0.3.3 \
+docker buildx imagetools inspect "$IMAGE" \
   --format '{{ json .SBOM }}'
 ```
 

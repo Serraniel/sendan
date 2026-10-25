@@ -14,9 +14,10 @@ name: sendan
 services:
   sendan:
     # Both keys on purpose: `docker compose up` uses the published image, and
-    # `docker compose up --build` builds this checkout instead. The tag follows
-    # the releases and carries no `v`, so pin `:0.3.3` rather than `:v0.3.3`
-    # for a deployment that should not move on its own.
+    # `docker compose up --build` builds this checkout instead. Tags follow the
+    # releases and carry no `v` - a pinned deployment reads `:0.3.3`, never
+    # `:v0.3.3` - and pinning one is worth doing so an instance does not move
+    # under you on the next `docker compose pull`.
     image: ghcr.io/serraniel/sendan:latest
     build: .
     restart: unless-stopped
