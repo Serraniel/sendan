@@ -4,11 +4,6 @@ Sendan is one static binary. The container image is that binary on an empty
 base — no distribution, no package manager, no shell. Around 17 MB, of which
 about 16 is the program.
 
-> [!NOTE]
-> **No image has been published yet**, because no release has been tagged. The
-> pipeline that builds and signs it is in place. Until a tag exists, build the
-> image yourself from a checkout — the instructions below work either way.
-
 ## The short way
 
 [`compose.yaml`](../compose.yaml) in the repository root runs Sendan behind a
@@ -22,8 +17,8 @@ That is the whole deployment. The domain must already resolve to the host, and
 ports 80 and 443 must reach it, because the proxy proves control of the name to
 get a certificate.
 
-Until a release is tagged there is no published image, so build this checkout
-instead:
+That pulls the published image. To build this checkout instead — which is what
+you want when running a modified tree, or to reproduce an image yourself:
 
 ```sh
 SENDAN_DOMAIN=files.example.org docker compose up -d --build
@@ -335,7 +330,7 @@ binary of the same version are the same program.
 Each image is signed at release time:
 
 ```sh
-cosign verify ghcr.io/serraniel/sendan:v0.5.0 \
+cosign verify ghcr.io/serraniel/sendan:0.3.3 \
   --certificate-identity-regexp '^https://github\.com/Serraniel/sendan/\.github/workflows/release\.yml@' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
@@ -351,7 +346,7 @@ architecture. The provenance is what ties an image to this repository and to the
 workflow run that produced it:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/serraniel/sendan:v0.5.0 \
+docker buildx imagetools inspect ghcr.io/serraniel/sendan:0.3.3 \
   --format '{{ json .Provenance }}'
 ```
 
@@ -363,7 +358,7 @@ base images the build used.
 The bill of materials, for asking what is in the image without running it:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/serraniel/sendan:v0.5.0 \
+docker buildx imagetools inspect ghcr.io/serraniel/sendan:0.3.3 \
   --format '{{ json .SBOM }}'
 ```
 

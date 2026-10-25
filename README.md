@@ -65,17 +65,71 @@ that was published:
 ```console
 $ sendan verify https://demo.sendan.app
   instance   https://demo.sendan.app
-  claims     v0.3.0, commit 7d7904e, unmodified
-  manifest   v0.3.0
+  claims     v0.3.3, commit a5fbc01, unmodified
+  manifest   v0.3.3
              signed by this build's release keys, classical and post-quantum
 
-  ✓ 31 of 31 assets match the published client
+  ✓ 33 of 33 assets match the published client
 ```
 
 That compares what the instance serves against a manifest taken from the
 release rather than from the instance, so the answer does not depend on the
 instance being honest. Run it against any instance somebody sends you a link
 from, including this one.
+
+## Run it
+
+One container, no runtime dependency. The image defaults to SQLite and
+filesystem storage, so this is a working instance on
+<http://localhost:8080>:
+
+```sh
+docker run -d --name sendan -p 8080:8080 \
+  -v sendan:/var/lib/sendan \
+  ghcr.io/serraniel/sendan:0.3.3
+```
+
+Image tags follow the releases and carry **no `v`**, so pin `:0.3.3` rather
+than `:latest` for a deployment that should not move on its own.
+
+That is enough to try it locally. It is deliberately not enough to deploy:
+download links are built from `SENDAN_BASE_URL`, which defaults to
+`http://localhost:8080`, and the browser client needs TLS for more than
+confidentiality — streaming an upload requires HTTP/2, which browsers only
+offer over a secure origin.
+
+So for anything reachable by other people, [`compose.yaml`](compose.yaml) runs
+Sendan behind a reverse proxy that obtains its own certificate:
+
+```sh
+SENDAN_DOMAIN=files.example.org docker compose up -d
+```
+
+The domain must already resolve to the host and ports 80 and 443 must reach it,
+because the proxy proves control of the name to get a certificate. That is the
+whole deployment.
+
+| Going further | |
+|---|---|
+| PostgreSQL, S3-compatible storage, backups, the at-rest master key | [`docs/deployment.md`](docs/deployment.md) |
+| Every variable and its default | [`docs/configuration.md`](docs/configuration.md) |
+
+### The command line client
+
+A single static binary, for Linux, macOS and Windows on both architectures.
+Using it means never executing an instance's code, which is the one thing a
+browser cannot avoid:
+
+```sh
+curl -LO https://github.com/Serraniel/sendan/releases/latest/download/sendan-linux-amd64
+curl -LO https://github.com/Serraniel/sendan/releases/latest/download/SHA256SUMS
+
+sha256sum -c SHA256SUMS --ignore-missing
+chmod +x sendan-linux-amd64 && sudo mv sendan-linux-amd64 /usr/local/bin/sendan
+```
+
+[`docs/cli.md`](docs/cli.md) has the other five platforms, every command and
+option, and how to check the release signatures by hand.
 
 ## Features
 
@@ -97,10 +151,11 @@ from, including this one.
   must be enabled explicitly.
 - **Single-container deployment.** One static binary serving an embedded web
   client, on an image with no distribution, no package manager and no shell.
-  *(Builds and runs; not yet published — see the status above.)*
+  *(Published at `ghcr.io/serraniel/sendan` for `linux/amd64` and
+  `linux/arm64`, signed, with provenance and an SBOM.)*
 - **Cross-platform command line client**, sharing one cryptographic
-  implementation with the server. *(Sends and receives; no binary published
-  yet — see the status above.)*
+  implementation with the server. *(Signed static binaries for six
+  platforms; [`docs/cli.md`](docs/cli.md) has the install steps.)*
 - **Light and dark themes**, following the system by default with a control to
   override it, on one layout that holds from a small phone to a desktop
   display. No web font is loaded and no request leaves the instance: the whole
