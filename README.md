@@ -261,6 +261,7 @@ fail. The first two are bounded by the disk.
 | [`docs/deployment.md`](docs/deployment.md) | Running the container image, the reverse proxy in front of it, backups, and what you can and cannot do when a user asks for help |
 | [`docs/compatibility.md`](docs/compatibility.md) | Third-party client support: what it covers, and why those uploads are less protected |
 | [`SECURITY.md`](SECURITY.md) | Threat model and vulnerability disclosure policy |
+| [`docs/compliance.md`](docs/compliance.md) | What Sendan provides as compliance evidence, and which obligations fall on the operator |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Contribution process, DCO, and testing requirements |
 
 ## Roadmap
