@@ -51,6 +51,35 @@ otherwise.
 > has taken place. That is the limit on what Sendan is ready for, and it is a
 > statement about review rather than about how much is built.
 
+### There is no declared support period
+
+Deliberately, and stated rather than left to be inferred.
+
+Sendan is maintained by one person outside working hours. A date here would be
+a number chosen to look reassuring, and a support commitment that is not kept
+is worse than an absent one — it is the difference between an organisation
+knowing it carries a risk and believing somebody else carries it.
+
+So, plainly: **no end-of-support date is promised, and none should be relied
+upon.** If you need a guaranteed window, it has to come from a commercial
+arrangement or from your own organisation taking the maintenance on. The
+licence permits the second without asking anyone, which is most of the point of
+the licence.
+
+What is true instead, and durable:
+
+| | |
+|---|---|
+| Published releases stay published | every release, its checksums and its signatures remain on the releases page. Nothing is withdrawn to force an upgrade |
+| Security fixes go to the newest release | within the limits above, and are disclosed as advisories once an update exists |
+| The source cannot be taken away | AGPL-3.0-or-later. A fork is always available to you, and the build is reproducible, so a fork can verify what it inherited |
+| Abandonment will be announced | if this project stops being maintained, the repository will be **archived** and say so in the README and here. It will not be left looking active |
+
+An organisation assessing Sendan against the EU Cyber Resilience Act or a
+similar regime should read [`docs/compliance.md`](docs/compliance.md), which
+sets out what this project provides as evidence, which obligations fall on the
+operator rather than on this project, and where the gaps are.
+
 ## Threat model
 
 Understanding what Sendan does and does not defend against matters more than any
