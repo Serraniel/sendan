@@ -189,7 +189,7 @@ the release was built from the source in this repository — for that, build it
 yourself and compare:
 
 ```sh
-VERSION=v0.3.3             # the tag the release names
+VERSION=<the release you are checking>      # e.g. v0.3.3
 
 git checkout "$VERSION"
 
@@ -310,7 +310,8 @@ The first is [minisign](https://jedisct1.github.io/minisign/) format, so the
 command line client is not the only thing that can check it:
 
 ```sh
-gh release download v0.3.3 -p 'manifest.json*'
+VERSION=<the release you are checking>
+gh release download "$VERSION" -p 'manifest.json*'
 minisign -Vm manifest.json -P '<the release public key>'
 ```
 
