@@ -92,7 +92,7 @@ function abortable(transport: Transport): { signal?: AbortSignal } {
   return transport.signal ? { signal: transport.signal } : {};
 }
 
-async function describe(response: Response): Promise<string> {
+async function errorMessage(response: Response): Promise<string> {
   let body = "";
   try {
     body = (await response.text()).trim();
@@ -159,7 +159,7 @@ export async function createUpload(req: CreateRequest, transport: Transport = {}
   });
 
   if (response.status !== 201) {
-    throw new TusError(response.status, await describe(response));
+    throw new TusError(response.status, await errorMessage(response));
   }
 
   const location = response.headers.get("Location");
@@ -200,7 +200,7 @@ export async function patchChunk(
   });
 
   if (response.status !== 204) {
-    throw new TusError(response.status, await describe(response));
+    throw new TusError(response.status, await errorMessage(response));
   }
 
   const reported = response.headers.get("Upload-Offset");
@@ -297,7 +297,7 @@ export async function patchStream(
   }
 
   if (response.status !== 204) {
-    throw new TusError(response.status, await describe(response));
+    throw new TusError(response.status, await errorMessage(response));
   }
 
   const reported = response.headers.get("Upload-Offset");
@@ -327,7 +327,7 @@ export async function currentOffset(
 
   if (response.status === 404) return null;
   if (!response.ok) {
-    throw new TusError(response.status, await describe(response));
+    throw new TusError(response.status, await errorMessage(response));
   }
 
   const reported = response.headers.get("Upload-Offset");
