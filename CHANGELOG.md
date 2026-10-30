@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/Serraniel/sendan/compare/v0.3.3...v0.3.4) (2026-10-30)
+
+
+### Bug Fixes
+
+* **deps:** build with Go 1.27.3 for the x509 certificate denylist ([1fa7353](https://github.com/Serraniel/sendan/commit/1fa7353de79a835f87d1ddfb33942cae2aba6ce4))
+
 ## [0.3.3](https://github.com/Serraniel/sendan/compare/v0.3.2...v0.3.3) (2026-10-21)
 
 
