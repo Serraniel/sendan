@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/Serraniel/sendan/compare/v0.3.4...v0.3.5) (2026-11-03)
+
+
+### Bug Fixes
+
+* **deps:** regenerate the notices for the shipped packages ([9637723](https://github.com/Serraniel/sendan/commit/9637723382dad709b32de6cfa9c18a5b5f2d671b))
+
 ## [0.3.4](https://github.com/Serraniel/sendan/compare/v0.3.3...v0.3.4) (2026-10-30)
 
 
