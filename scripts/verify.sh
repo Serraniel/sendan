@@ -75,6 +75,10 @@ dir=web check "vitest"            npm run --silent test:coverage
 dir=web check "vite build"        npm run --silent build
 dir=. check "asset audit"         ./scripts/audit-assets.sh
 dir=. check "third-party notices" ./scripts/check-notices.sh
+# The same obligation for the Go binaries, which link modules under MIT, BSD,
+# Apache-2.0 and ISC. It runs after the web one because it is the slower of the
+# two: it shells out to `go list` once per shipped binary.
+dir=. check "go notices"          ./scripts/check-go-notices.sh
 dir=. check "toolchains"          ./scripts/check-toolchains.sh
 dir=. check "workflows"           ./scripts/check-workflows.py
 # The comparison the security scan decides a pull request with. Its two

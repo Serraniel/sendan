@@ -78,10 +78,22 @@ for target in "${targets[@]}"; do
   echo "  $name"
 done
 
+# The licences of the modules linked into these binaries. MIT, BSD, Apache-2.0
+# and ISC all require the notice to travel with the code, and a release is how
+# the code travels - so it ships beside the binaries. Generated rather than
+# copied by hand; check-go-notices.sh fails if the committed copy is stale.
+# See #313.
+cp notices/sendan-cli.txt "$out/THIRD-PARTY-NOTICES.txt"
+echo "  THIRD-PARTY-NOTICES.txt"
+
 echo
 # One file, sorted, so two runs produce identical text and a diff between them
 # means something. The format is what sha256sum -c reads.
-(cd "$out" && sha256sum sendan-* | sort -k2 > SHA256SUMS)
+#
+# The notices are checksummed with the binaries: a notice file is part of what
+# the release distributes, and a reader checking what they downloaded should not
+# have to treat it as the one unverifiable piece.
+(cd "$out" && sha256sum sendan-* THIRD-PARTY-NOTICES.txt | sort -k2 > SHA256SUMS)
 
 cat "$out/SHA256SUMS"
 echo

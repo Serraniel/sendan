@@ -65,6 +65,7 @@ table is a promise about future work.
 | Artefact | Where | Supports |
 |---|---|---|
 | SBOM, SPDX-JSON, per architecture | BuildKit attestation on the image | Annex I Pt II(1) |
+| Licence notices for the linked Go modules | `/THIRD-PARTY-NOTICES.txt` in the image, `THIRD-PARTY-NOTICES.txt` in the release assets | the MIT, BSD, Apache-2.0 and ISC notice obligations |
 | SLSA build provenance | attestation on the image | supply-chain evidence, Art. 13(12) technical documentation |
 | Signed asset manifest, three schemes | release assets | integrity of the client actually served |
 | `SHA256SUMS` plus a Sigstore bundle | release assets | Annex I Pt II(7) |
@@ -123,7 +124,7 @@ Honest about the gaps. A table of ticks would be useless to you.
 
 | | Requirement | State |
 |---|---|---|
-| 1 | identify and document vulnerabilities and components, with a machine-readable SBOM of at least top-level dependencies | ⚠️ **the one real gap.** The image carries an SPDX-JSON SBOM; the **released binaries do not**. Tracked in [#313](https://github.com/Serraniel/sendan/issues/313), which will also produce the licence notices the linked Go modules require |
+| 1 | identify and document vulnerabilities and components, with a machine-readable SBOM of at least top-level dependencies | ⚠️ **the one real gap.** The image carries an SPDX-JSON SBOM; the **released binaries do not**. Tracked in [#355](https://github.com/Serraniel/sendan/issues/355). The components themselves are enumerated and shipped — `tools/go-notices` resolves exactly which modules each binary links, and the notices travel with both — so what is missing is the machine-readable format, not the knowledge |
 | 2 | remediate without delay; separate security from functionality updates where feasible | fixes go into the next release from the current line. ⚠️ On a 0.x line with no backports, a security fix can arrive alongside other change — see the support statement in [`SECURITY.md`](../SECURITY.md) |
 | 3 | regular, effective security testing and review | 498 Go tests, cross-language cryptographic test vectors holding the Go and TypeScript implementations to each other, fuzzing, coverage floors, CodeQL, end-to-end flows, and a third-party client interoperability test per pull request |
 | 4 | publicly disclose fixed vulnerabilities after an update | GitHub Security Advisories, plus the changelog each release carries |
@@ -139,7 +140,7 @@ Honest about the gaps. A table of ticks would be useless to you.
 | EU declaration of conformity, CE marking | not applicable — these attach to a product placed on the market. If you place it on the market, they are yours to produce |
 | Independent security audit | **has not happened and has not been commissioned.** This is the single largest limit on what Sendan is ready for, and it is stated in the README and `SECURITY.md` rather than buried here |
 | Declared support period with an end date | none — see [`SECURITY.md`](../SECURITY.md). An honest absence rather than a number that would not be kept |
-| SBOM for the released binaries | [#313](https://github.com/Serraniel/sendan/issues/313) |
+| SBOM for the released binaries | [#355](https://github.com/Serraniel/sendan/issues/355) |
 
 ## What we will do if you ask
 

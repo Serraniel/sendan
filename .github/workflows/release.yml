@@ -114,7 +114,11 @@ jobs:
             echo "::error::Build is not reproducible - users cannot verify the released binary"
             exit 1
           fi
-          echo "Reproducible across $(wc -l < /tmp/dist-a/SHA256SUMS) targets:"
+          # Counted from the binary names rather than from the line count:
+          # SHA256SUMS also covers THIRD-PARTY-NOTICES.txt, which is a file the
+          # release distributes but not a target anything was built for.
+          targets=$(awk '$2 ~ /^sendan-/ {n++} END {print n+0}' /tmp/dist-a/SHA256SUMS)
+          echo "Reproducible across ${targets} targets:"
           cat /tmp/dist-a/SHA256SUMS
 
   # The command line client's binaries, built by the same script as above and
