@@ -1,0 +1,41 @@
+{
+  // The Service Worker's own type-check program.
+  //
+  // A worker has no DOM. It has its own global scope, its own `self`, and a
+  // different set of globals from the page - so checking it against
+  // lib.dom.d.ts, as the app program does, types `self` as a Window and admits
+  // globals the worker will not have at run time. SvelteKit says as much on
+  // every `svelte-kit sync`; see #320.
+  //
+  // This does not extend $app/tsconfig. That base is for the app: it carries
+  // SvelteKit's path aliases and the generated route types, none of which a
+  // worker should reach for. service-worker.ts imports relatively for the same
+  // reason, so there is nothing here to inherit.
+  //
+  // The test is in this program rather than the app's because it imports the
+  // worker, and `exclude` only limits the root file set - an excluded file that
+  // an included one imports is still checked, under the including program's
+  // libs. That is the mechanism that kept the worker in the DOM program before,
+  // and leaving the test behind would simply recreate it.
+  "include": ["src/service-worker.ts", "src/service-worker.test.ts"],
+  "compilerOptions": {
+    // The app's settings, restated: a worker is not the place to be checked
+    // more loosely than the code it shares modules with.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "noEmit": true,
+    // The whole point of the second program.
+    "lib": ["ESNext", "WebWorker"],
+    // Nothing is injected. @types/node would put Node's globals in a worker
+    // scope, and the test imports what it needs from vitest by name.
+    "types": []
+  }
+}
