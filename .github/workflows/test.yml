@@ -166,6 +166,20 @@ jobs:
       - name: Enforce coverage floors
         run: ./scripts/coverage.sh
 
+      # The same licence obligation as the npm notices checked in the web job,
+      # for the modules linked into the two released binaries, and here for the
+      # same reason that one is here: it shipped in scripts/verify.sh alone,
+      # which means it holds only for whoever remembers to run it.
+      #
+      # That was already a mistake twice in this file - see the note on
+      # check-notices.sh below, and on check-toolchains.sh in the build job -
+      # and it was about to be one a third time. #359 bumps golang.org/x/crypto
+      # from 0.58.0 to 0.59.0, which both binaries link; rebased onto a main
+      # that has the notices, it leaves them naming 0.58.0 and there was nothing
+      # in continuous integration to say so.
+      - name: Assert the Go notices name what is linked
+        run: ./scripts/check-go-notices.sh
+
       - name: Upload coverage
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
