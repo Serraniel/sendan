@@ -1558,7 +1558,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ------------------------------------------------------------------------
-golang.org/x/sys v0.49.0
+golang.org/x/sys v0.50.0
 ------------------------------------------------------------------------
 
 Copyright 2009 The Go Authors.
@@ -1818,7 +1818,7 @@ third-party archives.
    limitations under the License.
 
 ------------------------------------------------------------------------
-modernc.org/libc v1.79.0
+modernc.org/libc v1.80.1
 ------------------------------------------------------------------------
 
 Copyright (c) 2017 The Libc Authors. All rights reserved.
@@ -1914,7 +1914,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ------------------------------------------------------------------------
-modernc.org/sqlite v1.61.1
+modernc.org/sqlite v1.62.0
 ------------------------------------------------------------------------
 
 Copyright (c) 2017 The Sqlite Authors. All rights reserved.
