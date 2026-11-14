@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.4.0](https://github.com/Serraniel/sendan/compare/v0.3.5...v0.4.0) (2026-11-14)
+
+
+### Features
+
+* ship an SBOM with the released binaries ([95c0b49](https://github.com/Serraniel/sendan/commit/95c0b492066fbc2f7f97cedb5f45bacc2b089334)), closes [#355](https://github.com/Serraniel/sendan/issues/355)
+* ship the licence notices the Go binaries require ([66989c8](https://github.com/Serraniel/sendan/commit/66989c8bbb6716686a471e07e53bb46f9a21ef46)), closes [#313](https://github.com/Serraniel/sendan/issues/313)
+
+
+### Bug Fixes
+
+* **ci:** name the packages in the tending commit subject ([6fca626](https://github.com/Serraniel/sendan/commit/6fca626f99ab448acde0077c100bd5b1886c8140))
+* **deps:** build with Go 1.27.4 for the net/http MaxBytesReader race ([26a3ede](https://github.com/Serraniel/sendan/commit/26a3ede62f500708dfeaf2607679aaec8c0db99d)), closes [#350](https://github.com/Serraniel/sendan/issues/350)
+* **deps:** clear every advisory govulncheck reports ([6a07812](https://github.com/Serraniel/sendan/commit/6a07812a3965edc9a98ceb292adf1a3e6f1dceff)), closes [#359](https://github.com/Serraniel/sendan/issues/359)
+* **deps:** regenerate the notices for what ships ([06a9a91](https://github.com/Serraniel/sendan/commit/06a9a911b9d78a605a00f550b99e7b8c4559a91f))
+* **deps:** regenerate the notices for what ships ([eff6747](https://github.com/Serraniel/sendan/commit/eff67477b0f73c3831ddb288ce379b9abe4440b8))
+* **deps:** regenerate the notices for what ships ([fb5ded1](https://github.com/Serraniel/sendan/commit/fb5ded170af694a5cc9cd82ab5ebbfea1e389bee))
+
 ## [0.3.5](https://github.com/Serraniel/sendan/compare/v0.3.4...v0.3.5) (2026-11-03)
 
 
