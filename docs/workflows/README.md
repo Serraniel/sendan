@@ -18,6 +18,7 @@ describing what it is for, when it runs, and what a failure means.
 | [registry-prune](registry-prune.md) | weekly, manual | n/a |
 | [dependabot](dependabot.md) | schedule (config, not a workflow) | n/a |
 | [tend-dependency-branches](tend-dependency-branches.md) | every six hours, manual | n/a |
+| [bump-go-toolchain](bump-go-toolchain.md) | daily, manual | n/a |
 
 ## Conventions
 
