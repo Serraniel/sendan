@@ -102,6 +102,16 @@ while read -r number branch; do
     node scripts/third-party-notices.mjs >/dev/null
     expected+=("$web_notices")
   fi
+  if [ "$go_moved" -eq 1 ] && [ ! -d tools/go-notices ]; then
+    # A branch cut before the Go notices existed has no generator to run. Say
+    # so and move on rather than failing the whole run: the branch needs a
+    # rebase, which is not something this job should decide to do on somebody's
+    # behalf, and the other branches in the list have done nothing wrong.
+    echo "  the Go dependency tree moved, but this branch predates"
+    echo "  tools/go-notices - rebase it and this will pick it up."
+    go_moved=0
+  fi
+
   if [ "$go_moved" -eq 1 ]; then
     # Go has no equivalent of a lifecycle script, and `go list` does not run
     # the code it reports on, so there is no --ignore-scripts to reach for
@@ -109,6 +119,11 @@ while read -r number branch; do
     go mod download
     go run ./tools/go-notices >/dev/null
     expected+=("${go_notices[@]}")
+  fi
+
+  # Both generators were skipped, so there is nothing to compare or commit.
+  if [ "${#expected[@]}" -eq 0 ]; then
+    continue
   fi
 
   # Loud rather than clever: the generators are expected to touch those paths

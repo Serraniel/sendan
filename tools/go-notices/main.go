@@ -23,25 +23,20 @@
 // makes that checkable. Giving the client the server's notices would name 28
 // projects whose code is not in it, which is not what a notice file is for.
 //
-// # Why `go list` runs without the embedui build tag
+// # Where the module set comes from
 //
-// The image builds the server with -tags embedui, and that tag selects between
-// two files in internal/webui, neither of which imports anything external: the
-// tagged and untagged module sets are identical, and that equality is asserted
-// by scripts/check-go-notices.sh. Running without it matters because the tag
-// embeds internal/webui/dist, which is generated and git-ignored - with the tag
-// this would not run on a fresh checkout, which is exactly where CI runs it.
+// internal/gomodules, which tools/go-sbom also uses - so the notices and the
+// bill of materials in one release archive cannot name different sets.
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Serraniel/sendan/internal/gomodules"
 )
 
 // A shipped binary, and the notices file that has to travel with it.
@@ -65,20 +60,6 @@ var targets = []struct {
 	},
 }
 
-// The main module, which is AGPL-3.0-or-later and is not a third party to
-// itself.
-const self = "github.com/Serraniel/sendan"
-
-type module struct {
-	Path    string
-	Version string
-	Dir     string
-}
-
-type pkg struct {
-	Module *module
-}
-
 // Names a licence or notice file carries, lowercased. Both spellings of
 // "licence", because modules use both.
 var licenceNames = []string{
@@ -98,49 +79,12 @@ func isLicence(name string) bool {
 	return false
 }
 
-// The modules linked into pkg, with the main module and the standard library
-// removed. The standard library has no Module, which is how it is excluded.
-func modulesFor(pkgPath string) ([]module, error) {
-	// The package path is one of the constants in the targets table above -
-	// this takes no input from anywhere else, and the command it builds is
-	// fixed apart from that path.
-	//nolint:gosec // G204: a package path from a literal table in this file.
-	command := exec.Command("go", "list", "-deps", "-json", pkgPath)
-	command.Stderr = os.Stderr
-	out, err := command.Output()
-	if err != nil {
-		return nil, fmt.Errorf("go list %s: %w", pkgPath, err)
-	}
-
-	seen := map[string]module{}
-	decoder := json.NewDecoder(bytes.NewReader(out))
-	for decoder.More() {
-		var listed pkg
-		if err := decoder.Decode(&listed); err != nil {
-			return nil, fmt.Errorf("reading go list output: %w", err)
-		}
-		if listed.Module == nil || listed.Module.Path == self {
-			continue
-		}
-		seen[listed.Module.Path] = *listed.Module
-	}
-
-	modules := make([]module, 0, len(seen))
-	for _, found := range seen {
-		modules = append(modules, found)
-	}
-	// Sorted by path so that two runs produce identical bytes and a diff
-	// between them means a dependency moved.
-	sort.Slice(modules, func(i, j int) bool { return modules[i].Path < modules[j].Path })
-	return modules, nil
-}
-
 // Every licence and notice file at the module's root, verbatim.
 //
 // A module with none is an error rather than an omission: a missing notice is
 // the precise failure this file exists to prevent, and silently leaving one out
 // would make the generator the cause of it.
-func noticesIn(found module) ([]string, error) {
+func noticesIn(found gomodules.Module) ([]string, error) {
 	if found.Dir == "" {
 		return nil, fmt.Errorf("%s %s is not in the module cache; run `go mod download`",
 			found.Path, found.Version)
@@ -185,7 +129,7 @@ func noticesIn(found module) ([]string, error) {
 
 const rule = "------------------------------------------------------------------------"
 
-func render(binary, travels string, modules []module) (string, error) {
+func render(binary, travels string, modules []gomodules.Module) (string, error) {
 	var out strings.Builder
 
 	out.WriteString("Third-party notices\n")
@@ -228,7 +172,7 @@ func run() error {
 	}
 
 	for _, target := range targets {
-		modules, err := modulesFor(target.pkg)
+		modules, err := gomodules.Linked(target.pkg)
 		if err != nil {
 			return err
 		}

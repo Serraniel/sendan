@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Serraniel/sendan/internal/gomodules"
 )
 
 func TestIsLicence(t *testing.T) {
@@ -39,7 +41,7 @@ func TestIsLicence(t *testing.T) {
 // A module that is not in the cache must be an error naming the remedy, not an
 // entry with an empty licence.
 func TestNoticesInRejectsAbsentModule(t *testing.T) {
-	_, err := noticesIn(module{Path: "example.com/absent", Version: "v1.0.0", Dir: ""})
+	_, err := noticesIn(gomodules.Module{Path: "example.com/absent", Version: "v1.0.0", Dir: ""})
 	if err == nil {
 		t.Fatal("noticesIn with no Dir returned no error")
 	}
@@ -56,7 +58,7 @@ func TestNoticesInRejectsModuleWithoutLicence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := noticesIn(module{Path: "example.com/bare", Version: "v1.0.0", Dir: dir})
+	_, err := noticesIn(gomodules.Module{Path: "example.com/bare", Version: "v1.0.0", Dir: dir})
 	if err == nil {
 		t.Fatal("noticesIn on a module with no licence file returned no error")
 	}
@@ -79,7 +81,7 @@ func TestNoticesInReadsEveryNoticeVerbatim(t *testing.T) {
 	write("NOTICE", "Product (C) 2026 Somebody\n")
 	write("README.md", "should not appear")
 
-	texts, err := noticesIn(module{Path: "example.com/both", Version: "v1.0.0", Dir: dir})
+	texts, err := noticesIn(gomodules.Module{Path: "example.com/both", Version: "v1.0.0", Dir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +108,7 @@ func TestNoticesInNormalisesLineEndings(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	texts, err := noticesIn(module{Path: "example.com/crlf", Version: "v1.0.0", Dir: dir})
+	texts, err := noticesIn(gomodules.Module{Path: "example.com/crlf", Version: "v1.0.0", Dir: dir})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +129,7 @@ func TestRenderNamesEveryModuleAndIsDeterministic(t *testing.T) {
 		}
 	}
 
-	modules := []module{
+	modules := []gomodules.Module{
 		{Path: "example.com/a", Version: "v1.2.3", Dir: first},
 		{Path: "example.com/b", Version: "v0.1.0", Dir: second},
 	}
