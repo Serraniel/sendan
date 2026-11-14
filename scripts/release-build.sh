@@ -86,6 +86,25 @@ done
 cp notices/sendan-cli.txt "$out/THIRD-PARTY-NOTICES.txt"
 echo "  THIRD-PARTY-NOTICES.txt"
 
+# The machine-readable counterpart, which the notices are not: an SBOM is what
+# an organisation adopting this has to feed into its own vulnerability tracking,
+# and until now only the container image carried one. See #355.
+#
+# All six targets link the same four modules - measured, not assumed - so one
+# document covers the release rather than one per platform.
+#
+# Deterministic, because it is checksummed with the binaries and the release
+# builds twice and compares: the timestamp comes from SOURCE_DATE_EPOCH, set
+# above, and the document namespace from the version and commit rather than a
+# random identifier.
+go run ./tools/go-sbom \
+  -pkg ./cmd/sendan-cli \
+  -binary sendan \
+  -version "$version" \
+  -commit "$commit" \
+  -out "$out/sendan.spdx.json" >/dev/null
+echo "  sendan.spdx.json"
+
 echo
 # One file, sorted, so two runs produce identical text and a diff between them
 # means something. The format is what sha256sum -c reads.
@@ -93,7 +112,7 @@ echo
 # The notices are checksummed with the binaries: a notice file is part of what
 # the release distributes, and a reader checking what they downloaded should not
 # have to treat it as the one unverifiable piece.
-(cd "$out" && sha256sum sendan-* THIRD-PARTY-NOTICES.txt | sort -k2 > SHA256SUMS)
+(cd "$out" && sha256sum sendan-* THIRD-PARTY-NOTICES.txt sendan.spdx.json | sort -k2 > SHA256SUMS)
 
 cat "$out/SHA256SUMS"
 echo
