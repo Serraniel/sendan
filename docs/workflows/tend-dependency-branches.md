@@ -25,7 +25,11 @@ For each open Dependabot pull request:
    `scripts/third-party-notices.mjs`.
 3. Where the Go tree moved: `go mod download` and `go run ./tools/go-notices`.
 4. Commits and pushes the result if anything differs, as
-   `fix(deps): regenerate the notices for what ships`.
+   `fix(deps): regenerate the notices for <the packages that moved>` — up to
+   three by name, then "and N more". The subject becomes a changelog line, so
+   it says which packages rather than repeating one sentence: 0.4.0 collected
+   three commits reading "regenerate the notices for what ships", which told a
+   reader nothing. The full list is in the commit body.
 
 Running it twice changes nothing the second time.
 

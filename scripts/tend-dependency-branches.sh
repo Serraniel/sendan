@@ -143,14 +143,45 @@ while read -r number branch; do
     continue
   fi
 
+  # A package heading in either notices format is a line of exactly two
+  # fields, the second a version: "@sveltejs/kit 3.2.0", "golang.org/x/crypto
+  # v0.59.0". Matching that rather than "a changed line starting with a letter"
+  # matters because licence texts start with letters too - a package that
+  # updates its copyright year would otherwise contribute "Copyright" to the
+  # subject of a commit that becomes a changelog line.
+  moved=$(git --no-pager diff --no-color -- "${expected[@]}" \
+    | grep -E '^[+-][a-zA-Z@]' | sed 's/^.//' \
+    | awk 'NF == 2 && $2 ~ /^v?[0-9]/ { print $1 }' | sort -u)
+
   printf '  what ships moved:\n'
-  git --no-pager diff --no-color -- "${expected[@]}" | grep -E '^[+-][a-zA-Z@]' | sed 's/^/    /' | head -40
+  printf '%s\n' "$moved" | sed 's/^/    /'
+
+  # The subject names the packages, because it becomes a changelog line.
+  #
+  # It used to read "regenerate the notices for what ships" every time, and
+  # 0.4.0 collected three of them: three identical entries telling a reader
+  # nothing about what had moved. Naming the packages makes each line say
+  # something and makes them distinct from each other, which is the whole
+  # reason this commit is `fix(deps):` and visible at all.
+  #
+  # Three names at most. A grouped bump can move a dozen, and a subject that
+  # wraps is worse than one that says "and 9 more".
+  count=$(printf '%s\n' "$moved" | grep -c .)
+  listed=$(printf '%s\n' "$moved" | head -3 | paste -sd, - | sed 's/,/, /g')
+  if [ "$count" -gt 3 ]; then
+    # "a, b, c and 9 more" - the last comma stays a comma here, because the
+    # "and" belongs to the count.
+    subject="regenerate the notices for $listed and $((count - 3)) more"
+  else
+    # "a", "a and b", "a, b and c" - the last comma becomes the "and".
+    subject="regenerate the notices for $(printf '%s' "$listed" | sed 's/\(.*\), /\1 and /')"
+  fi
 
   git add "${expected[@]}"
   git -c user.name="github-actions[bot]" \
       -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-      commit --quiet -F - <<'MSG'
-fix(deps): regenerate the notices for what ships
+      commit --quiet -F - <<MSG
+fix(deps): $subject
 
 The notices name the third-party code compiled into what users run: the web
 client a browser receives, and the modules linked into the released binaries.
@@ -162,6 +193,10 @@ release is how that reaches anybody running the published image or binary.
 
 A bump that moves only a test-only or tool-only dependency changes nothing
 here and stays a build change. Telling those two apart is the point.
+
+What moved:
+
+$(printf '%s\n' "$moved" | sed 's/^/  /')
 
 Signed-off-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
 MSG
