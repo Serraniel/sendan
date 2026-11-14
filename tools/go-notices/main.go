@@ -101,6 +101,10 @@ func isLicence(name string) bool {
 // The modules linked into pkg, with the main module and the standard library
 // removed. The standard library has no Module, which is how it is excluded.
 func modulesFor(pkgPath string) ([]module, error) {
+	// The package path is one of the constants in the targets table above -
+	// this takes no input from anywhere else, and the command it builds is
+	// fixed apart from that path.
+	//nolint:gosec // G204: a package path from a literal table in this file.
 	command := exec.Command("go", "list", "-deps", "-json", pkgPath)
 	command.Stderr = os.Stderr
 	out, err := command.Output()
@@ -162,6 +166,11 @@ func noticesIn(found module) ([]string, error) {
 
 	texts := make([]string, 0, len(names))
 	for _, name := range names {
+		// Both halves come from the toolchain: Dir is where `go list` says the
+		// module is, and name was returned by ReadDir on that directory and
+		// matched against the list above. Reading licence files out of the
+		// module cache is the whole job.
+		//nolint:gosec // G304: a module cache path, from `go list` and ReadDir.
 		body, err := os.ReadFile(filepath.Join(found.Dir, name))
 		if err != nil {
 			return nil, fmt.Errorf("reading %s/%s: %w", found.Path, name, err)
@@ -211,7 +220,10 @@ func main() {
 }
 
 func run() error {
-	if err := os.MkdirAll("notices", 0o755); err != nil {
+	// Git records no directory mode, so this only affects the machine that
+	// runs the generator; there is no reason for it to be group-writable or
+	// world-readable there.
+	if err := os.MkdirAll("notices", 0o750); err != nil {
 		return err
 	}
 
@@ -224,6 +236,10 @@ func run() error {
 		if err != nil {
 			return err
 		}
+		// Readable by anyone: these are committed source files, and they are
+		// copied into the image and the release archives. A generator that
+		// produced files the build then had to widen is a step to forget.
+		//nolint:gosec // G306: a published licence notice, deliberately not private.
 		if err := os.WriteFile(target.file, []byte(text), 0o644); err != nil {
 			return err
 		}
