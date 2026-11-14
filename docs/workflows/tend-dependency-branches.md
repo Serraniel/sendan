@@ -2,8 +2,13 @@
 
 ## Purpose
 
-Keeps `web/static/third-party-notices.txt` current on open dependency
-branches, and makes a bump that changes the shipped client produce a release.
+Keeps the generated third-party notices current on open dependency branches,
+and makes a bump that changes what ships produce a release.
+
+Two sets of notices: `web/static/third-party-notices.txt` for the npm packages
+compiled into the web client, and `notices/sendan.txt` and
+`notices/sendan-cli.txt` for the Go modules linked into the two released
+binaries.
 
 ## Triggers
 
@@ -14,14 +19,32 @@ request number to tend a single branch.
 
 For each open Dependabot pull request:
 
-1. Skips it outright if the branch does not touch `web/package.json` or
-   `web/package-lock.json`.
-2. Installs with `npm ci --ignore-scripts` and runs
+1. Skips it outright if the branch touches neither dependency tree —
+   `web/package.json` / `web/package-lock.json`, nor `go.mod` / `go.sum`.
+2. Where the npm tree moved: installs with `npm ci --ignore-scripts` and runs
    `scripts/third-party-notices.mjs`.
-3. Commits and pushes the result if it differs, as
-   `fix(deps): regenerate the notices for the shipped packages`.
+3. Where the Go tree moved: `go mod download` and `go run ./tools/go-notices`.
+4. Commits and pushes the result if anything differs, as
+   `fix(deps): regenerate the notices for what ships`.
 
 Running it twice changes nothing the second time.
+
+There is no `--ignore-scripts` equivalent on the Go side and none is needed:
+Go has no lifecycle scripts, and `go list` does not run the code it reports on,
+so the only thing executed is this repository's own generator.
+
+### Which Go bumps produce a release
+
+This is the part the Go side adds. Most of the module graph is not shipped —
+344 modules in the graph, 34 linked into a released binary — so most Go bumps
+move `go.mod` and nothing a user runs.
+
+| The bump moves | Notices change | Prefix |
+|---|---|---|
+| a module linked into a binary, e.g. `tus/tusd` or `golang.org/x/crypto` | yes | `fix(deps):`, releases |
+| a test-only or tool-only module, e.g. `mattn/go-isatty` | no | stays `build:`, releases nothing |
+
+Before the Go notices existed, every Go bump looked like the second row.
 
 ## Why the notices cannot come from Dependabot
 
