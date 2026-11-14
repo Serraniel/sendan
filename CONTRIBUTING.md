@@ -177,6 +177,13 @@ way by both.
 loadable by a test runner, which has neither a Service Worker scope nor
 SvelteKit's resolution.
 
+It and its test are also type-checked by their own program,
+`web/tsconfig.worker.json`, under `lib: ["ESNext", "WebWorker"]` rather than the
+app's DOM libs — so a DOM global the worker will not have at run time is a type
+error there rather than silently accepted. `npm run check` runs both programs. A
+module the worker imports is checked under those libs too, which is the
+constraint to keep in mind when adding one.
+
 ## Testing requirements
 
 Sendan is a security product, and test coverage is treated as a correctness

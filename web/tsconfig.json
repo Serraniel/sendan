@@ -9,16 +9,15 @@
   // stated here where they used to be inherited.
   "extends": "$app/tsconfig",
   "include": ["src", "test", "*"],
-  // Dropped as an entry point, which is what the generated base used to do. It
-  // is still type-checked, because src/service-worker.test.ts imports it and
-  // exclude only limits the root set, not what an included file pulls in.
+  // The Service Worker and its test belong to tsconfig.worker.json, which
+  // checks them under a worker scope instead of this DOM one - that is what
+  // SvelteKit asks for, and it is better typing besides.
   //
-  // SvelteKit warns about that - it expects a worker to be checked under a
-  // worker scope rather than this one. Keeping it here is deliberate: the file
-  // declares `/// <reference lib="webworker" />` itself, svelte-check passes,
-  // and the alternative is a file that answers download requests and nothing
-  // type-checks. The warning does not fail any gate. See #320.
-  "exclude": ["src/service-worker.ts"],
+  // Both files have to leave together. `exclude` only limits the root file set,
+  // so excluding the worker while the test that imports it stays here pulls the
+  // worker straight back into this program, under these libs. That is what used
+  // to happen. See #320 and tsconfig.worker.json.
+  "exclude": ["src/service-worker.ts", "src/service-worker.test.ts"],
   "compilerOptions": {
     "strict": true,
     "noUncheckedIndexedAccess": true,
