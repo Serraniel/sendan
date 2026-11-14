@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Proposes the newest patch of the pinned Go release line.
+# See docs/workflows/bump-go-toolchain.md
+#
+# # Why this is scheduled
+#
+# Nothing else proposes a Go toolchain patch. Dependabot's gomod ecosystem
+# updates `require` entries and does not touch the `toolchain` directive, so a
+# standard library advisory arrived as a red scheduled scan days later rather
+# than as a pull request: GO-2026-6809 waited four days (#319) and GO-2026-6859
+# three (#350). See #330.
+#
+# Daily rather than every six hours like the notices job, because Go patches
+# arrive on a release schedule rather than whenever a bot wakes up, and a day's
+# latency on a toolchain bump is already far better than the alternative. It
+# runs an hour after the security scan on purpose: if the scan has just gone
+# red for a standard library finding, the remedy is proposed the same morning.
+name: Bump the Go toolchain
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bump-go-toolchain
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    name: Propose the newest Go patch
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      # To push the branch, and to open the pull request on it.
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # No setup-go step. This reads go.mod as text and resolves a version from
+      # go.dev/dl - installing the toolchain it is proposing would be circular,
+      # and the gate it runs afterwards compares strings in files.
+      - name: Resolve and propose
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/bump-go-toolchain.sh

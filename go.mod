@@ -2,15 +2,21 @@ module github.com/Serraniel/sendan
 
 // The minimum Go this module requires.
 //
-// This is not what continuous integration builds with, and should not be: CI
-// resolves the newest patch of a release line so that standard library fixes
-// arrive without anyone editing a file. Pinning CI to this exact version was
-// tried in #117 and reverted, because it built against a version with known
-// vulnerabilities - govulncheck reported them within minutes.
+// This is not what continuous integration builds with. CI builds with the
+// `toolchain` directive below, pinned exactly: GO_VERSION in every workflow
+// and the golang: tag in the Dockerfile are held equal to it by
+// scripts/check-toolchains.sh. Nothing resolves anything, and moving the
+// toolchain means editing nine places.
 //
-// A contributor's Go may therefore differ from both. GOTOOLCHAIN only ever
-// moves forward, so a newer local installation is used in preference; see
-// CONTRIBUTING.md for how to reproduce a CI run when that matters.
+// That pin is deliberate - the released binary's bytes depend on the exact
+// compiler - but it means standard library fixes do not arrive on their own.
+// Dependabot does not propose `toolchain` patches, so
+// scripts/bump-go-toolchain.sh does, daily, on a schedule. See #330 and
+// docs/workflows/bump-go-toolchain.md.
+//
+// A contributor's Go may differ from both. GOTOOLCHAIN only ever moves forward,
+// so a newer local installation is used in preference; see CONTRIBUTING.md for
+// how to reproduce a CI run when that matters.
 go 1.26.0
 
 // The toolchain this project is built and checked with. It is a minimum rather
