@@ -15,12 +15,23 @@
 # what they need. An image on a different version makes that promise unkeepable
 # quietly: everything still builds, and the bytes no longer match.
 #
-# Node is here for that second reason alone, and it is not hypothetical. The
-# release builds the client twice - once on a runner to produce the signed asset
-# manifest, once inside the Dockerfile to produce the image - and a bundler on
-# two different majors emits two different sets of content-hashed filenames. In
-# v0.2.0 that shipped: `sendan verify` reported the project's own image as not
-# serving the published client, because it was not. See #260.
+# Node is here for that second reason alone. The release builds the client twice
+# - once on a runner to produce the signed asset manifest, once inside the
+# Dockerfile to produce the image - and the two have to emit the same
+# content-hashed filenames, or `sendan verify` reports the project's own image as
+# not serving the published client.
+#
+# That the Node major is what would break that is an assumption, not something
+# measured here. One tree built in node:24-alpine and node:26-alpine with
+# SENDAN_COMMIT held equal produced 33 files with identical names and identical
+# bytes under both. The v0.2.0 failure is explained by the cause recorded in
+# web/vite.config.ts: SvelteKit named the build with Date.now(), so two builds of
+# one source disagreed by construction. 2e038e1 fixed it. See #260 and #327.
+#
+# The equality is still enforced, because it costs nothing, because one
+# measurement on one commit is not a guarantee, and because a bundler that did
+# key its output to the runtime would stay invisible until a published release
+# failed verification.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -57,8 +68,9 @@ done < <(sed -n 's/^FROM .*golang:\([0-9][0-9.]*\)-.*/\1/p' Dockerfile)
 #
 # There is no go.mod here to be the authority, so the workflows are: they build
 # the client whose hashes the release publishes. Compared by major, because that
-# is what the workflows name and what decides the bundler's output; a patch
-# difference within a major has never moved a filename.
+# is what the workflows name and the granularity at which a runtime difference is
+# assumed to matter; no difference within a major has been seen to move a
+# filename either.
 
 node_want=""
 for file in .github/workflows/*.yml; do

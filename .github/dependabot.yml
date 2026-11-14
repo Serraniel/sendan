@@ -96,11 +96,12 @@ updates:
     labels: ["area:infra", "type:chore"]
 
     ignore:
-      # The Node major decides the bundler's output, and the release builds the
-      # client twice - on a runner for the signed asset manifest, and in the
-      # Dockerfile for the image. Two majors emit two sets of content-hashed
-      # filenames, which shipped in v0.2.0 and made `sendan verify` call the
-      # project's own image compromised. See #260.
+      # The release builds the client twice - on a runner for the signed asset
+      # manifest, and in the Dockerfile for the image - and both have to emit the
+      # same content-hashed filenames, or `sendan verify` calls the project's own
+      # image compromised. Whether the Node major can break that is unproven:
+      # node:24 and node:26 produced byte-identical output here, and v0.2.0 is
+      # explained by a timestamped build name instead. See #260 and #327.
       #
       # So the line has to be LTS on the day it is adopted, and Dependabot
       # cannot tell: it proposed Current in #165 and #278, and in #323 it
