@@ -244,10 +244,22 @@ build if they disagree: the `node:` image in the `Dockerfile` and the
 
 Unlike Go, the Node major is not a free choice. The release builds the client
 twice — once on a runner to produce the signed asset manifest, once inside the
-`Dockerfile` to produce the image — and a bundler on two different majors emits
-two different sets of content-hashed filenames. v0.2.0 shipped exactly that, and
-`sendan verify` reported the project's own image as not serving the published
-client, because it was not. See #260.
+`Dockerfile` to produce the image — and the two have to emit the same
+content-hashed filenames, or `sendan verify` reports the project's own image as
+not serving the published client.
+
+That the Node major is what would break that is an assumption rather than
+something observed here. One tree built in `node:24-alpine` and `node:26-alpine`
+with `SENDAN_COMMIT` held equal produced 33 files with identical names and
+identical bytes under both majors. The v0.2.0 failure that #260 records has a
+different explanation: SvelteKit named the build with `Date.now()`, so two builds
+of one source disagreed by construction, and `2e038e1` fixed it by naming the
+build after the commit.
+
+The majors are pinned together regardless, because the check costs nothing,
+because one measurement on one commit is not a guarantee, and because a bundler
+that did key its output to the runtime would stay invisible until a published
+release failed verification. See #327.
 
 **The line has to be LTS on the day it is adopted**, not Current and not
 scheduled to become LTS. A toolchain that produces released artefacts is the

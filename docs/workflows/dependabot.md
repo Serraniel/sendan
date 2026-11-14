@@ -88,13 +88,20 @@ see the constraint that decides the answer.
 | Dependency | Ignored | The constraint |
 |---|---|---|
 | `typescript` | majors | `svelte-check` refuses TypeScript 7 unless 6 is installed beside it under an alias and it is run behind an experimental flag (#93) |
-| `node` | majors | the major has to be LTS on the day it is adopted, because it decides the bundler's output (#260) |
+| `node` | majors | the major has to be LTS on the day it is adopted, because a toolchain that produces released artefacts is the wrong place to be early (#260, #327) |
 
 Node is the one that costs something to get wrong. The release builds the client
 twice - on a runner for the signed asset manifest, and inside the `Dockerfile`
-for the image - and two majors emit two sets of content-hashed filenames. That
-shipped in v0.2.0, and `sendan verify` reported the project's own image as not
-serving the published client, because it was not.
+for the image - and both have to emit the same content-hashed filenames, or
+`sendan verify` reports the project's own image as not serving the published
+client.
+
+Whether the Node major is what would break that is unproven. `node:24-alpine`
+and `node:26-alpine` built one tree into 33 byte-identical files, and the v0.2.0
+failure is explained by SvelteKit naming the build with `Date.now()` instead.
+The pin is kept because a bundler that did key its output to the runtime would
+only surface on a published release, not because this one has been seen to do it
+(#327).
 
 Dependabot proposed Current in #165 and #278, and in #323 it proposed Node 25,
 which had been end of life since June 2026 - a tag newer than the pinned one and
