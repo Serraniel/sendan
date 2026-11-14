@@ -60,3 +60,9 @@ internal/compat      72.0
 # read while being digested. The format itself, and that it covers every file in
 # a build, are covered.
 internal/manifest    80.0
+
+# internal/gomodules shells out to `go list` and reads go.mod. The parsing of
+# both is covered, including the shapes that must be excluded - the standard
+# library, the main module, a module listed twice. What is not covered is the
+# exec itself, which has nothing in it to get wrong that a test could see.
+internal/gomodules   75.0
