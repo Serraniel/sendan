@@ -29,7 +29,7 @@ toolchain go1.27.4
 require (
 	github.com/cloudflare/circl v1.6.5
 	github.com/coder/websocket v1.8.15
-	github.com/jackc/pgx/v5 v5.12.0
+	github.com/jackc/pgx/v5 v5.13.0
 	github.com/minio/minio-go/v7 v7.4.1
 	github.com/tus/tusd/v2 v2.10.1
 	golang.org/x/crypto v0.59.0
