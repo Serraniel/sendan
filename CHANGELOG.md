@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.1](https://github.com/Serraniel/sendan/compare/v0.4.0...v0.4.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **deps:** regenerate the notices for github.com/jackc/pgx/v5 ([5f78101](https://github.com/Serraniel/sendan/commit/5f781018cb95ba4c5e194fd6b3fb1d31a19125c5))
+
 ## [0.4.0](https://github.com/Serraniel/sendan/compare/v0.3.5...v0.4.0) (2026-11-14)
 
 
