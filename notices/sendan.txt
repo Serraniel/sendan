@@ -1304,7 +1304,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ------------------------------------------------------------------------
-github.com/tus/tusd/v2 v2.10.1
+github.com/tus/tusd/v2 v2.10.2
 ------------------------------------------------------------------------
 
 Copyright (c) 2013-2017 Transloadit Ltd and Contributors
@@ -1462,7 +1462,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ------------------------------------------------------------------------
-golang.org/x/exp v0.0.0-20260727155853-b88d891fe743
+golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297
 ------------------------------------------------------------------------
 
 Copyright 2009 The Go Authors.
