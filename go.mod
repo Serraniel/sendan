@@ -17,7 +17,7 @@ module github.com/Serraniel/sendan
 // A contributor's Go may differ from both. GOTOOLCHAIN only ever moves forward,
 // so a newer local installation is used in preference; see CONTRIBUTING.md for
 // how to reproduce a CI run when that matters.
-go 1.26.0
+go 1.26.11
 
 // The toolchain this project is built and checked with. It is a minimum rather
 // than a pin - a newer local Go is used in preference to it - so the scripts
@@ -31,9 +31,9 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/jackc/pgx/v5 v5.13.0
 	github.com/minio/minio-go/v7 v7.4.1
-	github.com/tus/tusd/v2 v2.10.1
+	github.com/tus/tusd/v2 v2.10.2
 	golang.org/x/crypto v0.59.0
-	golang.org/x/exp v0.0.0-20260727155853-b88d891fe743
+	golang.org/x/exp v0.0.0-20260813180055-c1d0aacb2297
 	golang.org/x/term v0.48.0
 	modernc.org/sqlite v1.62.0
 )
