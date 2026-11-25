@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.2](https://github.com/Serraniel/sendan/compare/v0.4.1...v0.4.2) (2026-11-25)
+
+
+### Bug Fixes
+
+* **deps:** regenerate the notices for @sveltejs/kit and svelte ([0a3bea2](https://github.com/Serraniel/sendan/commit/0a3bea21ec10fc58f4aa3e4253318a1147112cde))
+* **deps:** regenerate the notices for github.com/tus/tusd/v2 and golang.org/x/exp ([da5846a](https://github.com/Serraniel/sendan/commit/da5846a3088631c3d5db9686ce8bfe31cad689fb))
+* **docs:** name the Go patch release the module now requires ([a5f2b92](https://github.com/Serraniel/sendan/commit/a5f2b92dde57fcafed4a3db64a54bc660bd68dad))
+
 ## [0.4.1](https://github.com/Serraniel/sendan/compare/v0.4.0...v0.4.1) (2026-11-19)
 
 
