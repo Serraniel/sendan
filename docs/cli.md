@@ -10,7 +10,11 @@ client, no embedded web client.
 
 ## Building it
 
-Needs [Go](https://go.dev/dl/) 1.26 or later, and nothing else.
+Needs [Go](https://go.dev/dl/) 1.26.11 or later, and nothing else. The patch
+release is named because `go.mod` names it: a dependency raised the `go`
+directive to 1.26.11, and an older toolchain declines the build rather than
+guessing - `GOTOOLCHAIN` fetches a newer one for you unless you have set it to
+`local`.
 
 ```sh
 git clone https://github.com/Serraniel/sendan
